@@ -60,12 +60,21 @@ public enum DropEngineError: LocalizedError {
         didSet { core?.setMasterVolume(min(max(masterVolume, 0), 1)) }
     }
 
+    /// The iOS audio-session setup `start()` applies. Set it before `start()`; ignored on macOS.
+    public var sessionMode: SessionMode = .playback
+
     public private(set) var isRecording = false
     public private(set) var gains: [MixerChannel: Float] = [.drums: 1, .bass: 1, .fx: 1]
     public private(set) var mutes: Set<MixerChannel> = []
 
-    /// How far ahead of the render position notes are scheduled.
-    public static let lookaheadSeconds = 0.1
+    #if os(macOS)
+        /// How far ahead of the render position notes are scheduled.
+        public static let lookaheadSeconds = 0.1
+    #else
+        /// How far ahead of the render position notes are scheduled. Raised off macOS: the pump rides the main run
+        /// loop, which a busy SwiftUI frame, a sheet or a scroll can hold up for longer than 100 ms.
+        public static let lookaheadSeconds = 0.25
+    #endif
     /// The timer period of the note pump and analysis frames.
     public static let frameInterval = 1.0 / 60
 
@@ -79,6 +88,8 @@ public enum DropEngineError: LocalizedError {
     @ObservationIgnored private var stopTask: Task<Void, Never>?
     @ObservationIgnored private var recorder: DropRecorder?
     @ObservationIgnored private var configurationObserver: NSObjectProtocol?
+    @ObservationIgnored private var sessionObservers: [NSObjectProtocol] = []
+    @ObservationIgnored private var pausedByInterruption = false
 
     public init(settings: SongSettings = SongSettings()) {
         self.settings = settings
@@ -109,6 +120,7 @@ public enum DropEngineError: LocalizedError {
         stopTask?.cancel()
         stopTask = nil
         if engine.isRunning { engine.stop() }
+        try activateAudioSession()
         if let node = sourceNode {
             engine.disconnectNodeOutput(node)
             engine.detach(node)
@@ -297,6 +309,72 @@ public enum DropEngineError: LocalizedError {
             let right = buffers.count > 1 ? buffers[1].mData?.assumingMemoryBound(to: Float.self) ?? left : left
             synth.render(frames: Int(frameCount), left: left, right: right)
             return noErr
+        }
+    }
+}
+
+// MARK: iOS audio session
+
+extension DropEngine {
+    /// Sets the category, activates the session (before the hardware format is read) and listens for interruptions
+    /// and unplugged outputs. A no-op on macOS.
+    fileprivate func activateAudioSession() throws {
+        #if !os(macOS)
+            let session = AVAudioSession.sharedInstance()
+            switch sessionMode {
+            case .playback:
+                try session.setCategory(.playback, mode: .default)
+            case .playAndRecord:
+                try session.setCategory(
+                    .playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
+            }
+            try session.setActive(true)
+            observeAudioSession(session)
+        #endif
+    }
+
+    #if !os(macOS)
+        private func observeAudioSession(_ session: AVAudioSession) {
+            guard sessionObservers.isEmpty else { return }
+            let center = NotificationCenter.default
+            sessionObservers.append(
+                center.addObserver(
+                    forName: AVAudioSession.interruptionNotification, object: session, queue: .main
+                ) { [weak self] note in
+                    let began =
+                        (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
+                        == AVAudioSession.InterruptionType.began.rawValue
+                    let options = AVAudioSession.InterruptionOptions(
+                        rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
+                    MainActor.assumeIsolated {
+                        self?.handleInterruption(began: began, shouldResume: options.contains(.shouldResume))
+                    }
+                })
+            sessionObservers.append(
+                center.addObserver(
+                    forName: AVAudioSession.routeChangeNotification, object: session, queue: .main
+                ) { [weak self] note in
+                    let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+                    // Headphones pulled out: stop rather than blast the speaker.
+                    guard reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue else { return }
+                    MainActor.assumeIsolated { self?.stop() }
+                })
+        }
+    #endif
+
+    fileprivate func handleInterruption(began: Bool, shouldResume: Bool) {
+        switch InterruptionResponse.response(
+            began: began, shouldResume: shouldResume, wasRunning: isRunning,
+            pausedByInterruption: pausedByInterruption)
+        {
+        case .pause:
+            pausedByInterruption = true
+            stop()
+        case .resume:
+            pausedByInterruption = false
+            try? start()
+        case .none:
+            if !began { pausedByInterruption = false }
         }
     }
 }
