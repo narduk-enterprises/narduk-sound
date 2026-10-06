@@ -12,6 +12,7 @@ import Foundation
 /// The scale a track is written in. Every pitch the conductor emits is a scale degree of the track's mode.
 enum Mode: Int, Sendable, Hashable, CaseIterable {
     case aeolian, dorian, phrygian, harmonicMinor
+    case ionian, lydian, mixolydian
 
     var scale: [Int] {
         switch self {
@@ -19,6 +20,9 @@ enum Mode: Int, Sendable, Hashable, CaseIterable {
         case .dorian: [0, 2, 3, 5, 7, 9, 10]
         case .phrygian: [0, 1, 3, 5, 7, 8, 10]
         case .harmonicMinor: [0, 2, 3, 5, 7, 8, 11]
+        case .ionian: [0, 2, 4, 5, 7, 9, 11]
+        case .lydian: [0, 2, 4, 6, 7, 9, 11]
+        case .mixolydian: [0, 2, 4, 5, 7, 9, 10]
         }
     }
 
@@ -28,6 +32,9 @@ enum Mode: Int, Sendable, Hashable, CaseIterable {
         case .dorian: "dorian"
         case .phrygian: "phrygian"
         case .harmonicMinor: "harmonic minor"
+        case .ionian: "major"
+        case .lydian: "lydian"
+        case .mixolydian: "mixolydian"
         }
     }
 
@@ -36,6 +43,9 @@ enum Mode: Int, Sendable, Hashable, CaseIterable {
         let octave = Int((Double(degree) / 7).rounded(.down))
         return scale[degree - 7 * octave] + 12 * octave
     }
+
+    /// Whether the tonic triad has a major third.
+    var isMajorQuality: Bool { scale[2] == 4 }
 
     /// Whether a semitone offset from the tonic is in the scale.
     func contains(semitones offset: Int) -> Bool { scale.contains(((offset % 12) + 12) % 12) }
@@ -209,7 +219,7 @@ enum TrackGenerator {
     /// the session seed, the track number, the genre and the input character, steered away from `previous`.
     static func make(
         number: Int, genre: Genre, character: MusicCharacter, sessionSeed: UInt64, bpm: Double,
-        topApp: String?, previous: Track?
+        topApp: String?, previous: Track?, mode pinned: Mode? = nil
     ) -> Track {
         let seed =
             sessionSeed ^ (UInt64(truncatingIfNeeded: number) &* 0x9E37_79B9_7F4A_7C15)
@@ -231,9 +241,11 @@ enum TrackGenerator {
         t.keyRoot = 60 + tonic
         let modes = Self.modes(genre, character)
         t.mode = modes[pick(modes.count)]
+        // A pinned mode replaces the pick after it is drawn, so every other choice of the track stays the same.
+        if let pinned { t.mode = pinned }
 
         // Progression: two-bar chords suit a two-bar hook, so the hook lands whole on each chord.
-        let progressions = Banks.progressions(genre)
+        let progressions = t.mode.isMajorQuality ? Banks.majorProgressions : Banks.progressions(genre)
         var progression = pick(progressions.count)
         if let previous, progressions[progression] == previous.progression {
             progression = (progression + 1) % progressions.count

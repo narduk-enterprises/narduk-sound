@@ -267,6 +267,8 @@ public struct DropConductor: Sendable {
     }
     public private(set) var snapshot: ConductorSnapshot
 
+    /// The chord layer of the step being written (see `structure`).
+    private var compNotes: [ScheduledNote] = []
     private var energy = EnergyModel()
     private var characterizer = FlowCharacterizer()
     private var sections = SectionMachine()
@@ -479,6 +481,8 @@ public struct DropConductor: Sendable {
         leadIn(step: step, bar: bar, barStep: barStep, perBar: perBar, dropComing: dropComing, into: &stepNotes)
         if let velocity = rollSteps.removeValue(forKey: step) { merge(hat: velocity, step: step, into: &stepNotes) }
         place(into: &stepNotes, step: step, bar: bar, barStep: barStep, perBar: perBar)
+        stepNotes += compNotes
+        compNotes = []
         notes.append(contentsOf: stepNotes)
         sectionJustStarted = false
     }
@@ -519,7 +523,7 @@ public struct DropConductor: Sendable {
         let previous: Track? = reason == .next || reason == .genre ? track : nil
         track = TrackGenerator.make(
             number: number, genre: activeGenre, character: live, sessionSeed: settings.seed, bpm: bpm,
-            topApp: topApp, previous: previous)
+            topApp: topApp, previous: previous, mode: settings.mode?.internalMode)
         tracksStarted = number
         if bpm != settings.bpm {
             setTempo(bpm)
@@ -702,8 +706,14 @@ public struct DropConductor: Sendable {
             barsPerPhrase: max(1, settings.barsPerPhrase), section: section, level: level,
             inboundShare: energy.inboundShare, track: track, plan: plan, wobbleRate: wobbleRate, voice: voice,
             dropComing: dropComing, outro: outro,
-            introHook: section == .intro && trackPhrases >= 2)
+            introHook: section == .intro && trackPhrases >= 2,
+            voicing: settings.effectiveVoicing, comping: settings.effectiveComping)
         out += section.isDrop ? GenreArrangement.drop(genre, context) : GenreArrangement.bed(genre, context)
+        if let comping = context.comping {
+            // Held back until the event cues have taken their places, so the chord layer never moves a cue.
+            compNotes = GenreArrangement.comp(context, pattern: comping)
+            if barStep == 0, barInPhrase == 0 { note(legend: "chords ← \(comping.label)", replacingPrefix: "chords") }
+        }
         for lead in GenreArrangement.lead(context)
         where quantizer.canSpend(.lead, bar: bar)
             && quantizer.canSpend(.instrument(.vox), bar: bar)

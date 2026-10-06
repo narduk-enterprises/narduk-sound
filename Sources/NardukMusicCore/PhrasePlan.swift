@@ -90,6 +90,12 @@ enum Banks {
         [0, 0, 6, 6, 5, 5, 6, 6],
     ]
 
+    // Chord roots per bar in a major mode: 0 I, 1 ii, 2 iii, 3 IV, 4 V, 5 vi.
+    static let majorProgressions: [[Int]] = [
+        [0, 0, 4, 4, 5, 5, 3, 3], [0, 0, 5, 5, 3, 3, 4, 4], [0, 0, 3, 3, 0, 0, 4, 4], [0, 0, 1, 1, 4, 4, 0, 0],
+        [0, 4, 5, 3, 0, 4, 3, 4], [3, 3, 0, 0, 4, 4, 5, 5],
+    ]
+
     static func progressions(_ genre: Genre) -> [[Int]] {
         switch genre {
         case .dubstep, .trap, .drumAndBass: darkProgressions

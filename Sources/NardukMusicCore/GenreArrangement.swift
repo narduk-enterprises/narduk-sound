@@ -84,6 +84,9 @@ struct StepContext {
     var outro: Outro?
     /// The intro states the hook once the track has idled a phrase.
     var introHook: Bool
+    /// How the chords are voiced, and the chord layer played over the arrangement; nil is the arrangement's own.
+    var voicing: ChordVoicing?
+    var comping: CompingPattern?
 
     /// Position on a 16-step bar grid, or nil when this step is between grid positions (odd bar sizes).
     var pos: Int? { (barStep * 16) % perBar == 0 ? barStep * 16 / perBar : nil }
@@ -154,7 +157,34 @@ enum GenreArrangement {
 
     /// A triad (or seventh) on a scale degree, as MIDI pitches from `base`.
     static func chord(_ c: StepContext, degree: Int, base: Int, seventh: Bool = false) -> [Int] {
-        (seventh ? [0, 2, 4, 6] : [0, 2, 4]).map { c.track.pitch(base, degree: degree + $0) }
+        guard let voicing = c.voicing else {
+            return (seventh ? [0, 2, 4, 6] : [0, 2, 4]).map { c.track.pitch(base, degree: degree + $0) }
+        }
+        return Harmony.pitches(mode: c.track.mode, tonic: base, degree: degree, voicing: voicing, seventh: seventh)
+    }
+
+    /// The chord layer: the bar's chord, voiced, played in the pattern's strokes on electric piano keys (pad keys for
+    /// held chords). Quieter in the intro and breakdown, full in the drops.
+    static func comp(_ c: StepContext, pattern: CompingPattern) -> [ScheduledNote] {
+        guard let pos = c.pos, c.outro != .drumBridge else { return [] }
+        let gain: Double =
+            switch c.section {
+            case .intro: 0.5
+            case .breakdown: 0.65
+            case .build: 0.8
+            case .drop, .drop2: 1
+            }
+        let chord = Self.chord(c, degree: c.chord, base: c.keyRoot, seventh: c.track.genre == .chill)
+        let voice = pattern == .sustain ? 3 : 2
+        return pattern.hits(pos: pos, barInPhrase: c.barInPhrase).flatMap { hit in
+            hit.notes(on: chord).map { note in
+                ScheduledNote(
+                    step: c.step, instrument: .keys, velocity: min(1, max(0, 0.42 * gain * note.velocity)),
+                    params: NoteParams(
+                        pitch: note.pitch, lengthSteps: c.scaled(hit.length), voice: voice,
+                        delay: note.delay > 0 ? note.delay : nil))
+            }
+        }
     }
 
     // MARK: Sections before the drop
