@@ -49,6 +49,31 @@ import Testing
         #expect(audio.fingerprint == golden, "\(Self.platform) fingerprint \(actual)")
     }
 
+    /// One golden per genre: the build-session scenario rendered in each genre at its own tempo, so a change to Core
+    /// that moves any existing genre's song fails here.
+    static let genreGoldens: [Genre: [String: UInt64]] = [
+        .dubstep: ["darwin-arm64": 0x518a_6bbb_58e6_4717, "linux-x86_64": 0x7368_e9c5_3c8f_61c8],
+        .riddim: ["darwin-arm64": 0x4bf2_aafe_24da_7278, "linux-x86_64": 0x9abc_266a_eb45_dbc8],
+        .drumAndBass: ["darwin-arm64": 0x3f73_a3a6_8d18_65af, "linux-x86_64": 0x8bb6_79b2_cc40_a854],
+        .trap: ["darwin-arm64": 0xb2fc_0671_4bd4_fd74, "linux-x86_64": 0xe1d6_8c8b_40ca_efba],
+        .house: ["darwin-arm64": 0x59ad_e41b_a08b_5787, "linux-x86_64": 0x7099_67bc_7023_1612],
+        .chill: ["darwin-arm64": 0xed54_7d07_5f21_f47c, "linux-x86_64": 0xabc9_9c4e_23c7_d2cf],
+    ]
+
+    @Test(arguments: Genre.allCases)
+    func everyGenreMatchesItsGoldenFingerprint(genre: Genre) throws {
+        var scenario = try Self.scenario()
+        scenario.genre = genre
+        scenario.bpm = genre.defaultBPM
+        let audio = OfflineRenderer.render(scenario, seconds: 20)
+        #expect(audio.left.allSatisfy(\.isFinite) && audio.right.allSatisfy(\.isFinite))
+        #expect(audio.peak > 0.1 && audio.peak <= DSP.ceiling, "\(genre) peak \(audio.peak)")
+        let actual = String(format: "0x%016llx", audio.fingerprint)
+        let golden = try #require(
+            Self.genreGoldens[genre]?[Self.platform], "no \(genre) golden for \(Self.platform); actual \(actual)")
+        #expect(audio.fingerprint == golden, "\(genre) \(Self.platform) fingerprint \(actual)")
+    }
+
     @Test func aDifferentSeedWritesADifferentSong() throws {
         var scenario = try Self.scenario()
         let first = OfflineRenderer.render(scenario, seconds: 8)
