@@ -1,5 +1,6 @@
 import Foundation
 import NardukMusicCore
+import NardukSoundAnalysis
 
 // Real-time-safe DSP building blocks for the Network Dubstep synth (#45).
 // Everything here is a plain value type with trivially copyable state: no
@@ -52,8 +53,9 @@ public enum DSP {
         expf(-1 / max(seconds * sampleRate, 1))
     }
 
+    /// Forwards to `Loudness.decibels` (NardukSoundAnalysis owns it).
     @inline(__always) public static func decibels(_ amplitude: Float) -> Float {
-        amplitude > 1e-6 ? 20 * log10f(amplitude) : -120
+        Loudness.decibels(amplitude)
     }
 
     /// Equal-power pan gains for -1 (left) ... 1 (right).

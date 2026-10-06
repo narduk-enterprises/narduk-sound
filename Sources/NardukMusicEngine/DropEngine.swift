@@ -2,6 +2,7 @@ import AVFoundation
 import Foundation
 import NardukMusicCore
 import NardukMusicDSP
+import NardukSoundAnalysis
 import Observation
 
 /// The engine's mixer channels.
@@ -190,6 +191,15 @@ public enum DropEngineError: LocalizedError {
         self.recorder = nil
         isRecording = false
         return await Task.detached { recorder.finish() }.value
+    }
+
+    // MARK: Sound source
+
+    /// A `SoundFrameSource` over the running synth's output, for any NardukSoundAnalysis consumer; poll it on the
+    /// visualizer's clock. It reads this `start()`'s synth, so ask again after a restart. Nil while stopped.
+    public func makeSoundSource() -> (any SoundFrameSource)? {
+        guard isRunning, let core else { return nil }
+        return RecentSamplesSource(sampleRate: core.sampleRate) { core.copyRecentSamples(into: $0) }
     }
 
     // MARK: Timer: note pump + analysis

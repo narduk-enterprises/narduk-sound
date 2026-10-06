@@ -1,5 +1,4 @@
 import Foundation
-import NardukMusicCore
 
 #if canImport(Accelerate)
     import Accelerate
@@ -142,11 +141,16 @@ public final class SpectrumAnalyzer {
                 let frac = x - Float(k)
                 amplitude = magnitudes[k] + (magnitudes[k + 1] - magnitudes[k]) * frac
             }
-            let level = min(max((DSP.decibels(amplitude) - floor) / -floor, 0), 1)
+            let level = min(max((Loudness.decibels(amplitude) - floor) / -floor, 0), 1)
             let previous = bands[b]
             bands[b] = previous + (level - previous) * (level > previous ? attack : release)
         }
         return bands
+    }
+
+    /// Forgets the smoothing history: the next `process` starts from silence.
+    public func reset() {
+        for b in 0..<bands.count { bands[b] = 0 }
     }
 
     public func process(_ samples: [Float]) -> [Float] {

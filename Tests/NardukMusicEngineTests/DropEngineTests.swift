@@ -32,6 +32,10 @@ import Testing
         }
     }
 
+    @Test func aStoppedEngineHasNoSoundSource() {
+        #expect(DropEngine().makeSoundSource() == nil)
+    }
+
     @Test func stoppingAStoppedEngineIsHarmless() {
         let engine = DropEngine()
         engine.stop()

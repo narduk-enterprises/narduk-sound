@@ -7,13 +7,14 @@ is doing, and a synth that plays it. Extracted from
 turns a build into one. Your app sends **signals** (a level, some flow, short
 cues), and the conductor builds, drops and changes tracks to match.
 
-| Product             | Platforms         | What it is                                                                        |
-| ------------------- | ----------------- | --------------------------------------------------------------------------------- |
-| `NardukMusicCore`   | macOS, iOS, Linux | `DropConductor`, the song model and the `MusicSignal` input. Pure and clock-free. |
-| `NardukMusicDSP`    | macOS, iOS, Linux | `DropSynthCore`, the instruments, the limiter and `SpectrumAnalyzer`.             |
-| `NardukMusicRender` | macOS, iOS, Linux | `OfflineRenderer`, JSON scenarios and WAV / M4A writing.                          |
-| `NardukMusicEngine` | macOS, iOS        | `DropEngine`: the real-time AVAudioEngine host and the recorder.                  |
-| `narduk-music`      | macOS, Linux      | A CLI that renders a scenario to a WAV.                                           |
+| Product               | Platforms         | What it is                                                                                                                                                                                                                        |
+| --------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NardukMusicCore`     | macOS, iOS, Linux | `DropConductor`, the song model and the `MusicSignal` input. Pure and clock-free.                                                                                                                                                 |
+| `NardukMusicDSP`      | macOS, iOS, Linux | `DropSynthCore`, the instruments and the limiter (`SpectrumAnalyzer` and `SPSCRing` forward to NardukSoundAnalysis).                                                                                                              |
+| `NardukSoundAnalysis` | macOS, iOS, Linux | Any audio to a `SoundFrame` (spectrum, waveform, loudness): `SoundAnalyzer`, `SPSCRing`, `SampleRing`, ring and recent-sample sources, and (Apple only) `AudioTapSource` for a mic, mixer or file through `AVAudioEngine`. No UI. |
+| `NardukMusicRender`   | macOS, iOS, Linux | `OfflineRenderer`, JSON scenarios and WAV / M4A writing.                                                                                                                                                                          |
+| `NardukMusicEngine`   | macOS, iOS        | `DropEngine`: the real-time AVAudioEngine host and the recorder; `makeSoundSource()` adapts its output for analysis.                                                                                                              |
+| `narduk-music`        | macOS, Linux      | A CLI that renders a scenario to a WAV.                                                                                                                                                                                           |
 
 ```swift
 .package(url: "https://github.com/narduk-enterprises/narduk-libs", exact: "0.3.0")
