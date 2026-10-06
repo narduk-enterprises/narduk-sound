@@ -1,0 +1,46 @@
+{
+  "name": "electric-strum",
+  "seed": 1574,
+  "genre": "chill",
+  "bpm": 120,
+  "seconds": 6,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "electricStrum",
+      "pitch": 45,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.4,
+      "drive": 0.65
+    },
+    {
+      "time": 1.5,
+      "instrument": "electricStrum",
+      "pitch": 41,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.4,
+      "drive": 0.65
+    },
+    {
+      "time": 3.0,
+      "instrument": "electricStrum",
+      "pitch": 48,
+      "chord": "minor7",
+      "direction": "down",
+      "length": 1.0,
+      "drive": 0.3
+    },
+    {
+      "time": 4.5,
+      "instrument": "electricStrum",
+      "pitch": 43,
+      "chord": "sus2",
+      "direction": "up",
+      "length": 1.4,
+      "drive": 0.3
+    }
+  ]
+}

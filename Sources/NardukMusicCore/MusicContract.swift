@@ -19,6 +19,12 @@ public enum Instrument: String, Sendable, Hashable, Codable, CaseIterable {
     case kick, snare, hat, openHat, wobble, sub, glitch, scratch, laser, vox, riser, tapeStop, impact
     /// Pitched keys for hooks and harmony: `voice` picks the timbre (0 bell pluck, 1 house stab, 2 electric piano, 3 pad).
     case keys
+    /// Karplus-Strong plucked strings (narduk-libs#1574). `pitch` is the note; `drive` (electric guitar) is 0 ... 1.
+    case acousticGuitar, electricGuitar, bassGuitar
+    /// Six strings struck in a staggered sweep on a chord from a fixed set. `pitch` is the chord root (folded into the
+    /// guitar's low range), `voice` picks the chord (`voice % 6`: major, minor, dominant 7, minor 7, power, sus2), and
+    /// `formant` of 0.5 or more strums up instead of down. `strum` is acoustic; `electricStrum` takes `drive`.
+    case strum, electricStrum
 }
 
 /// Musical LFO rate for the wobble, as a note division.

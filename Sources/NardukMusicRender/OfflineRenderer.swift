@@ -26,7 +26,11 @@ public final class OfflineRenderer {
     /// Ticks rendered so far.
     public private(set) var tick = 0
 
+    /// False stops the conductor's notes reaching the synth, so only `schedule`d notes sound.
+    public let playsConductor: Bool
+
     private let core: DropSynthCore
+    private var directNotes: [ScheduledNote] = []
     private var scheduledThrough = -1
     private var appliedSwitchStep: Int?
     private var left: [Float]
@@ -36,8 +40,13 @@ public final class OfflineRenderer {
     ///   - settings: tempo, genre, key and seed of the song.
     ///   - sampleRate: output rate; it must divide evenly into ticks (48 kHz gives 800 frames a tick).
     ///   - masterVolume: 0 ... 1, the live engine's default is 0.8.
-    public init(settings: SongSettings = SongSettings(), sampleRate: Double = 48_000, masterVolume: Float = 0.8) {
+    ///   - playsConductor: false keeps the conductor's notes out of the synth, so only `schedule`d notes sound.
+    public init(
+        settings: SongSettings = SongSettings(), sampleRate: Double = 48_000, masterVolume: Float = 0.8,
+        playsConductor: Bool = true
+    ) {
         self.settings = settings
+        self.playsConductor = playsConductor
         self.sampleRate = sampleRate
         framesPerTick = Int(sampleRate / Self.tickRate)
         core = DropSynthCore(sampleRate: sampleRate, bpm: settings.bpm, stepsPerBar: settings.stepsPerBar)
@@ -67,6 +76,14 @@ public final class OfflineRenderer {
     public func setThresholds(build: Double, drop: Double) { conductor.setThresholds(build: build, drop: drop) }
 
     /// Gives direct access to the conductor (for example to clear a character hint).
+    /// Queues notes to play beside the conductor's (a scenario's `notes`). Each goes to the synth as its step comes
+    /// within the look-ahead, as the conductor's notes do.
+    public func schedule(_ notes: [ScheduledNote]) {
+        directNotes = (directNotes + notes).enumerated()
+            .sorted { ($0.element.step, $0.offset) < ($1.element.step, $1.offset) }.map(\.element)
+        pumpDirectNotes()
+    }
+
     public func withConductor<T>(_ body: (inout DropConductor) -> T) -> T { body(&conductor) }
 
     // MARK: Rendering
@@ -97,10 +114,21 @@ public final class OfflineRenderer {
     /// Instruments that sounded since the previous call.
     public func takeHits() -> Set<Instrument> { core.takeHits() }
 
+    private func pumpDirectNotes() {
+        let through = Int(core.renderedStepPosition + Self.lookaheadSeconds / settings.secondsPerStep)
+        var due = 0
+        while due < directNotes.count, directNotes[due].step <= through { due += 1 }
+        guard due > 0 else { return }
+        for note in directNotes[..<due] { core.schedule(note) }
+        directNotes.removeFirst(due)
+    }
+
     private func pumpNotes() {
         let through = Int(core.renderedStepPosition + Self.lookaheadSeconds / settings.secondsPerStep)
+        pumpDirectNotes()
         guard through > scheduledThrough else { return }
-        for note in conductor.advance(throughStep: through) { core.schedule(note) }
+        let written = conductor.advance(throughStep: through)
+        if playsConductor { for note in written { core.schedule(note) } }
         scheduledThrough = through
     }
 

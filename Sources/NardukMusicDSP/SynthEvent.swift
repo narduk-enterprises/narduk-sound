@@ -16,6 +16,18 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
     public var pan: Float
     public var glide: Float  // < 0 when absent
     public var delay: Float  // 0 ... 0.5 of a step late
+    public var flags: UInt8  // `StrumFlags`; 0 for every note the conductor writes
+    public var offset: Int32  // samples late, on top of the step and `delay`; 0 for every note the conductor writes
+
+    /// Bits of `flags`: what a strum's expansion into six string events carries.
+    enum StrumFlags {
+        /// The first string of a strum: it reports the strum as a hit.
+        static let lead: UInt8 = 1
+        /// One of a strum's six strings (the strum, not the guitar, is what sounded).
+        static let string: UInt8 = 2
+        /// A string of an electric strum rather than an acoustic one.
+        static let electric: UInt8 = 4
+    }
 
     public init(_ note: ScheduledNote) {
         step = note.step
@@ -30,6 +42,8 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
         pan = Float(min(max(note.params.pan.isFinite ? note.params.pan : 0, -1), 1))
         glide = note.params.glide.map { Float(min(max($0.isFinite ? $0 : 0, 0), 1)) } ?? -1
         delay = note.params.delay.map { Float(min(max($0.isFinite ? $0 : 0, 0), 0.5)) } ?? 0
+        flags = 0
+        offset = 0
     }
 }
 
@@ -51,6 +65,11 @@ extension Instrument {
         case .tapeStop: 11
         case .impact: 12
         case .keys: 13
+        case .acousticGuitar: 14
+        case .electricGuitar: 15
+        case .bassGuitar: 16
+        case .strum: 17
+        case .electricStrum: 18
         }
     }
 

@@ -20,6 +20,11 @@ extension Instrument {
         case .tapeStop: 11
         case .impact: 12
         case .keys: 13
+        case .acousticGuitar: 14
+        case .electricGuitar: 15
+        case .bassGuitar: 16
+        case .strum: 17
+        case .electricStrum: 18
         }
     }
 }

@@ -104,5 +104,38 @@
             }
             #expect(count == 0, "the render thread allocated \(count) times, first at:\n\(Self.firstAllocationStack)")
         }
+
+        /// The guitars: strings from a pooled voice, a strum expanded into six, voice stealing past 24 strings, and
+        /// a tempo change, none of it allocating.
+        @Test(.enabled(if: optimized, "allocation counts need an optimized build: swift test -c release"))
+        func playingTheGuitarsNeverAllocates() throws {
+            let core = DropSynthCore(sampleRate: 48_000, bpm: 120)
+            let frames = 512
+            let left = UnsafeMutablePointer<Float>.allocate(capacity: frames)
+            let right = UnsafeMutablePointer<Float>.allocate(capacity: frames)
+            defer {
+                left.deallocate()
+                right.deallocate()
+            }
+            let guitars: [Instrument] = [.acousticGuitar, .electricGuitar, .bassGuitar, .strum, .electricStrum]
+            for step in 0..<128 {
+                for (index, instrument) in guitars.enumerated() where (step + index) % 2 == 0 {
+                    core.schedule(
+                        ScheduledNote(
+                            step: step, instrument: instrument, velocity: 0.4 + 0.6 * Double(step % 5) / 4,
+                            params: NoteParams(
+                                pitch: 28 + (step * 3 + index) % 50, lengthSteps: 1 + step % 9,
+                                formant: Double(step % 2),
+                                drive: Double(step % 4) / 3, voice: step, pan: Double(index) / 2 - 1, delay: 0.25)))
+                }
+            }
+            core.render(frames: frames, left: left, right: right)  // first-touch work happens before arming
+            core.setTempo(100)
+            let count = try Self.countAllocations {
+                for _ in 0..<1_000 { core.render(frames: frames, left: left, right: right) }
+            }
+            #expect(count == 0, "the render thread allocated \(count) times, first at:\n\(Self.firstAllocationStack)")
+            #expect(core.takeHits().isSuperset(of: Set(guitars)))
+        }
     }
 #endif

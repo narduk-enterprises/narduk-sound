@@ -1,5 +1,6 @@
 import Foundation
 import NardukMusicCore
+import NardukMusicDSP
 import NardukMusicRender
 
 // narduk-music render --scenario <file.json> [--seconds 30] [--genre dubstep] [--seed 24301] [--bpm 140]
@@ -20,6 +21,9 @@ let usage = """
     usage: narduk-music render --scenario <file.json> --out <file.wav|file.m4a>
                                [--seconds N] [--genre NAME] [--seed N] [--bpm N] [--json]
     genres: \(Genre.allCases.map(\.rawValue).joined(separator: ", "))
+    scenario "notes" play an instrument directly: {"time": 1.5, "instrument": "strum", "pitch": 45, "chord": "minor"}
+    note instruments: \(Instrument.allCases.filter { $0.synthCode >= 14 }.map(\.rawValue).joined(separator: ", "))
+    strum chords: \(StrumChord.allCases.map(\.rawValue).joined(separator: ", ")); direction: down, up
     """
 
 func value(_ name: String, in arguments: [String]) -> String? {

@@ -1,0 +1,655 @@
+{
+  "name": "guitar-demo",
+  "seed": 1574,
+  "genre": "chill",
+  "bpm": 120,
+  "seconds": 32,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "strum",
+      "pitch": 45,
+      "chord": "minor",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.8
+    },
+    {
+      "time": 0.0,
+      "instrument": "bassGuitar",
+      "pitch": 33,
+      "length": 1.5,
+      "velocity": 0.9
+    },
+    {
+      "time": 1.5,
+      "instrument": "strum",
+      "pitch": 45,
+      "chord": "minor",
+      "direction": "up",
+      "length": 0.5,
+      "velocity": 0.55
+    },
+    {
+      "time": 2.0,
+      "instrument": "strum",
+      "pitch": 45,
+      "chord": "minor",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.7
+    },
+    {
+      "time": 2.0,
+      "instrument": "bassGuitar",
+      "pitch": 40,
+      "length": 1.5,
+      "velocity": 0.8
+    },
+    {
+      "time": 2.0,
+      "instrument": "acousticGuitar",
+      "pitch": 57,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 2.25,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 2.5,
+      "instrument": "acousticGuitar",
+      "pitch": 64,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 2.75,
+      "instrument": "acousticGuitar",
+      "pitch": 69,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 3.0,
+      "instrument": "acousticGuitar",
+      "pitch": 64,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 3.25,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 4.0,
+      "instrument": "strum",
+      "pitch": 41,
+      "chord": "major",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.8
+    },
+    {
+      "time": 4.0,
+      "instrument": "bassGuitar",
+      "pitch": 29,
+      "length": 1.5,
+      "velocity": 0.9
+    },
+    {
+      "time": 5.5,
+      "instrument": "strum",
+      "pitch": 41,
+      "chord": "major",
+      "direction": "up",
+      "length": 0.5,
+      "velocity": 0.55
+    },
+    {
+      "time": 6.0,
+      "instrument": "strum",
+      "pitch": 41,
+      "chord": "major",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.7
+    },
+    {
+      "time": 6.0,
+      "instrument": "bassGuitar",
+      "pitch": 36,
+      "length": 1.5,
+      "velocity": 0.8
+    },
+    {
+      "time": 6.0,
+      "instrument": "acousticGuitar",
+      "pitch": 53,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 6.25,
+      "instrument": "acousticGuitar",
+      "pitch": 57,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 6.5,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 6.75,
+      "instrument": "acousticGuitar",
+      "pitch": 65,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 7.0,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 7.25,
+      "instrument": "acousticGuitar",
+      "pitch": 57,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 8.0,
+      "instrument": "strum",
+      "pitch": 48,
+      "chord": "major",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.8
+    },
+    {
+      "time": 8.0,
+      "instrument": "bassGuitar",
+      "pitch": 36,
+      "length": 1.5,
+      "velocity": 0.9
+    },
+    {
+      "time": 9.5,
+      "instrument": "strum",
+      "pitch": 48,
+      "chord": "major",
+      "direction": "up",
+      "length": 0.5,
+      "velocity": 0.55
+    },
+    {
+      "time": 10.0,
+      "instrument": "strum",
+      "pitch": 48,
+      "chord": "major",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.7
+    },
+    {
+      "time": 10.0,
+      "instrument": "bassGuitar",
+      "pitch": 43,
+      "length": 1.5,
+      "velocity": 0.8
+    },
+    {
+      "time": 10.0,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 10.25,
+      "instrument": "acousticGuitar",
+      "pitch": 64,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 10.5,
+      "instrument": "acousticGuitar",
+      "pitch": 67,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 10.75,
+      "instrument": "acousticGuitar",
+      "pitch": 72,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 11.0,
+      "instrument": "acousticGuitar",
+      "pitch": 67,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 11.25,
+      "instrument": "acousticGuitar",
+      "pitch": 64,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 12.0,
+      "instrument": "strum",
+      "pitch": 43,
+      "chord": "dominant7",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.8
+    },
+    {
+      "time": 12.0,
+      "instrument": "bassGuitar",
+      "pitch": 31,
+      "length": 1.5,
+      "velocity": 0.9
+    },
+    {
+      "time": 13.5,
+      "instrument": "strum",
+      "pitch": 43,
+      "chord": "dominant7",
+      "direction": "up",
+      "length": 0.5,
+      "velocity": 0.55
+    },
+    {
+      "time": 14.0,
+      "instrument": "strum",
+      "pitch": 43,
+      "chord": "dominant7",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.7
+    },
+    {
+      "time": 14.0,
+      "instrument": "bassGuitar",
+      "pitch": 38,
+      "length": 1.5,
+      "velocity": 0.8
+    },
+    {
+      "time": 14.0,
+      "instrument": "acousticGuitar",
+      "pitch": 55,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 14.25,
+      "instrument": "acousticGuitar",
+      "pitch": 59,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 14.5,
+      "instrument": "acousticGuitar",
+      "pitch": 62,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 14.75,
+      "instrument": "acousticGuitar",
+      "pitch": 67,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 15.0,
+      "instrument": "acousticGuitar",
+      "pitch": 62,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 15.25,
+      "instrument": "acousticGuitar",
+      "pitch": 59,
+      "length": 0.6,
+      "velocity": 0.5,
+      "pan": 0.25
+    },
+    {
+      "time": 16.0,
+      "instrument": "electricStrum",
+      "pitch": 45,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.85,
+      "drive": 0.6
+    },
+    {
+      "time": 16.0,
+      "instrument": "bassGuitar",
+      "pitch": 33,
+      "length": 1.8,
+      "velocity": 0.95
+    },
+    {
+      "time": 16.0,
+      "instrument": "electricGuitar",
+      "pitch": 57,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 16.5,
+      "instrument": "electricGuitar",
+      "pitch": 60,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 17.0,
+      "instrument": "electricGuitar",
+      "pitch": 64,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 17.5,
+      "instrument": "electricGuitar",
+      "pitch": 69,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 18.0,
+      "instrument": "electricStrum",
+      "pitch": 45,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.8,
+      "drive": 0.6
+    },
+    {
+      "time": 18.0,
+      "instrument": "bassGuitar",
+      "pitch": 33,
+      "length": 1.8,
+      "velocity": 0.9
+    },
+    {
+      "time": 20.0,
+      "instrument": "electricStrum",
+      "pitch": 41,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.85,
+      "drive": 0.6
+    },
+    {
+      "time": 20.0,
+      "instrument": "bassGuitar",
+      "pitch": 29,
+      "length": 1.8,
+      "velocity": 0.95
+    },
+    {
+      "time": 20.0,
+      "instrument": "electricGuitar",
+      "pitch": 53,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 20.5,
+      "instrument": "electricGuitar",
+      "pitch": 57,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 21.0,
+      "instrument": "electricGuitar",
+      "pitch": 60,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 21.5,
+      "instrument": "electricGuitar",
+      "pitch": 65,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 22.0,
+      "instrument": "electricStrum",
+      "pitch": 41,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.8,
+      "drive": 0.6
+    },
+    {
+      "time": 22.0,
+      "instrument": "bassGuitar",
+      "pitch": 29,
+      "length": 1.8,
+      "velocity": 0.9
+    },
+    {
+      "time": 24.0,
+      "instrument": "electricStrum",
+      "pitch": 48,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.85,
+      "drive": 0.6
+    },
+    {
+      "time": 24.0,
+      "instrument": "bassGuitar",
+      "pitch": 36,
+      "length": 1.8,
+      "velocity": 0.95
+    },
+    {
+      "time": 24.0,
+      "instrument": "electricGuitar",
+      "pitch": 60,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 24.5,
+      "instrument": "electricGuitar",
+      "pitch": 64,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 25.0,
+      "instrument": "electricGuitar",
+      "pitch": 67,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 25.5,
+      "instrument": "electricGuitar",
+      "pitch": 72,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 26.0,
+      "instrument": "electricStrum",
+      "pitch": 48,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.8,
+      "drive": 0.6
+    },
+    {
+      "time": 26.0,
+      "instrument": "bassGuitar",
+      "pitch": 36,
+      "length": 1.8,
+      "velocity": 0.9
+    },
+    {
+      "time": 28.0,
+      "instrument": "electricStrum",
+      "pitch": 43,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.0,
+      "velocity": 0.85,
+      "drive": 0.6
+    },
+    {
+      "time": 28.0,
+      "instrument": "bassGuitar",
+      "pitch": 31,
+      "length": 1.8,
+      "velocity": 0.95
+    },
+    {
+      "time": 28.0,
+      "instrument": "electricGuitar",
+      "pitch": 55,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 28.5,
+      "instrument": "electricGuitar",
+      "pitch": 59,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 29.0,
+      "instrument": "electricGuitar",
+      "pitch": 62,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 29.5,
+      "instrument": "electricGuitar",
+      "pitch": 67,
+      "length": 0.45,
+      "velocity": 0.7,
+      "drive": 0.55,
+      "pan": -0.25
+    },
+    {
+      "time": 30.0,
+      "instrument": "electricStrum",
+      "pitch": 43,
+      "chord": "power",
+      "direction": "down",
+      "length": 1.5,
+      "velocity": 0.8,
+      "drive": 0.6
+    },
+    {
+      "time": 30.0,
+      "instrument": "bassGuitar",
+      "pitch": 31,
+      "length": 1.8,
+      "velocity": 0.9
+    }
+  ],
+  "segments": [
+    {
+      "from": 0,
+      "to": 32,
+      "every": 0.5,
+      "level": [0.2, 0.6],
+      "levelLabel": "CPU",
+      "character": "steady"
+    }
+  ]
+}

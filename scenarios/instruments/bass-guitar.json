@@ -1,0 +1,73 @@
+{
+  "name": "bass-guitar",
+  "seed": 1574,
+  "genre": "chill",
+  "bpm": 120,
+  "seconds": 5,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "bassGuitar",
+      "pitch": 33,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 0.25,
+      "instrument": "bassGuitar",
+      "pitch": 33,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 0.5,
+      "instrument": "bassGuitar",
+      "pitch": 40,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 0.75,
+      "instrument": "bassGuitar",
+      "pitch": 33,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 1.0,
+      "instrument": "bassGuitar",
+      "pitch": 36,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 1.25,
+      "instrument": "bassGuitar",
+      "pitch": 36,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 1.5,
+      "instrument": "bassGuitar",
+      "pitch": 38,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 1.75,
+      "instrument": "bassGuitar",
+      "pitch": 31,
+      "length": 0.22,
+      "velocity": 0.85
+    },
+    {
+      "time": 2.5,
+      "instrument": "bassGuitar",
+      "pitch": 28,
+      "length": 2.0,
+      "velocity": 0.95
+    }
+  ]
+}

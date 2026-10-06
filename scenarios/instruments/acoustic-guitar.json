@@ -1,0 +1,82 @@
+{
+  "name": "acoustic-guitar",
+  "seed": 1574,
+  "genre": "chill",
+  "bpm": 120,
+  "seconds": 5,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "acousticGuitar",
+      "pitch": 45,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 0.25,
+      "instrument": "acousticGuitar",
+      "pitch": 52,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 0.5,
+      "instrument": "acousticGuitar",
+      "pitch": 57,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 0.75,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 1.0,
+      "instrument": "acousticGuitar",
+      "pitch": 64,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 1.25,
+      "instrument": "acousticGuitar",
+      "pitch": 60,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 1.5,
+      "instrument": "acousticGuitar",
+      "pitch": 57,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 1.75,
+      "instrument": "acousticGuitar",
+      "pitch": 52,
+      "length": 0.8,
+      "velocity": 0.75
+    },
+    {
+      "time": 2.5,
+      "instrument": "acousticGuitar",
+      "pitch": 45,
+      "length": 2.0,
+      "velocity": 0.9,
+      "pan": -0.15
+    },
+    {
+      "time": 2.5,
+      "instrument": "acousticGuitar",
+      "pitch": 57,
+      "length": 2.0,
+      "velocity": 0.7,
+      "pan": 0.15
+    }
+  ]
+}

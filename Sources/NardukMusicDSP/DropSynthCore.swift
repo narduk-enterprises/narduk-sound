@@ -24,6 +24,7 @@ struct SynthState {
     static let snareCount = 3
     static let hatCount = 4
     static let fxCount = 16
+    static let stringCount = 24  // guitar strings; a strum takes six
     static let pendingCapacity = 2_048
     static let historySize = 1 << 18  // master history for stutter / tape stop (~5.4 s at 48 kHz)
     static let analysisSize = 1 << 13  // mono analysis ring
@@ -48,6 +49,9 @@ struct SynthState {
     var nextHat = 0
     let fx: UnsafeMutablePointer<FXVoice>
     var nextFX = 0
+    let strings: UnsafeMutablePointer<StringVoice>
+    var nextString = 0
+    var stringsLive = 0
     var wobble = WobbleVoice()
     var sub = SubVoice()
     var reverb: RoomReverb
@@ -102,6 +106,10 @@ struct SynthState {
             (fx + i).initialize(to: FXVoice(seed: 0x1F12_3BB5 &+ UInt32(i) &* 15_485_863))
         }
         reverb = RoomReverb(sampleRate: sampleRate)
+        strings = .allocate(capacity: SynthState.stringCount)
+        for i in 0..<SynthState.stringCount {
+            (strings + i).initialize(to: StringVoice(seed: 0x9E37_79B9 &+ UInt32(i) &* 40_503))
+        }
         stopStep = 1 / Float(0.03 * sampleRate)
         historyLeft = .allocate(capacity: SynthState.historySize)
         historyLeft.initialize(repeating: 0, count: SynthState.historySize)
@@ -119,6 +127,8 @@ struct SynthState {
         hats.deallocate()
         fx.deallocate()
         reverb.deallocate()
+        for i in 0..<SynthState.stringCount { strings[i].deallocate() }
+        strings.deallocate()
         historyLeft.deallocate()
         historyRight.deallocate()
         limiter.deallocate()
@@ -128,6 +138,10 @@ struct SynthState {
     // MARK: Scheduling
 
     mutating func enqueue(_ event: SynthEvent) {
+        if event.instrument == Instrument.strum.synthCode || event.instrument == Instrument.electricStrum.synthCode {
+            enqueueStrum(event)
+            return
+        }
         guard pendingCount < SynthState.pendingCapacity else {
             droppedEvents += 1
             return
@@ -136,10 +150,38 @@ struct SynthState {
         pendingCount += 1
     }
 
-    /// The sample an event fires on: its step, plus any swing delay.
+    /// Expands a strum into its six strings: the chord's voicing, one string at a time, each a little after the last
+    /// (12 ms on a downstroke, 8 ms and lighter on an upstroke), the lead string reporting the hit.
+    mutating func enqueueStrum(_ event: SynthEvent) {
+        let electric = event.instrument == Instrument.electricStrum.synthCode
+        let up = event.formant >= 0.5
+        let intervals = StrumChord(voice: Int(max(event.voice, 0))).intervals
+        var root = event.pitch < 0 ? 45 : event.pitch
+        while root < 40 { root += 12 }
+        while root >= 52 { root -= 12 }
+        let stagger = Int((up ? 0.008 : 0.012) * Double(c.sampleRate))
+        for sweep in 0..<intervals.count {
+            let string = up ? intervals.count - 1 - sweep : sweep
+            let reach = Float(string) / Float(intervals.count - 1)
+            var e = event
+            e.instrument = (electric ? Instrument.electricGuitar : Instrument.acousticGuitar).synthCode
+            e.pitch = root + Float(intervals[string])
+            e.velocity = event.velocity * (up ? 0.62 + 0.38 * reach : 1 - 0.28 * reach)
+            e.pan = min(max(event.pan + (Float(string) - 2.5) * 0.06, -1), 1)
+            e.voice = -1
+            e.offset = Int32(sweep * stagger)
+            e.flags = SynthEvent.StrumFlags.string
+            if sweep == 0 { e.flags |= SynthEvent.StrumFlags.lead }
+            if electric { e.flags |= SynthEvent.StrumFlags.electric }
+            enqueue(e)
+        }
+    }
+
+    /// The sample an event fires on: its step, plus any swing delay and sample offset.
     @inline(__always) func dueSample(_ event: SynthEvent) -> Int {
         let s = clock.sample(forStep: event.step)
-        return event.delay > 0 ? s + Int(Double(event.delay) * clock.samplesPerStep) : s
+        let swung = event.delay > 0 ? s + Int(Double(event.delay) * clock.samplesPerStep) : s
+        return event.offset > 0 ? swung + Int(event.offset) : swung
     }
 
     mutating func recomputeNextDue() {
@@ -222,9 +264,37 @@ struct SynthState {
             tapeReturn = 0
         case 12: startFX(.impact, e)
         case 13: startFX(.keys, e)
-        default: return
+        case 14, 15, 16:  // acoustic, electric, bass guitar (a strum's strings arrive as the first two)
+            startString(StringKind(rawValue: e.instrument - 14) ?? .acoustic, e)
+        default: return  // 17, 18 (strums) were expanded into strings when queued
         }
-        hits |= 1 << UInt32(e.instrument)
+        if e.flags & SynthEvent.StrumFlags.string == 0 {
+            hits |= 1 << UInt32(e.instrument)
+        } else if e.flags & SynthEvent.StrumFlags.lead != 0 {
+            let strum = e.flags & SynthEvent.StrumFlags.electric != 0 ? Instrument.electricStrum : .strum
+            hits |= 1 << UInt32(strum.synthCode)
+        }
+    }
+
+    mutating func startString(_ kind: StringKind, _ e: SynthEvent) {
+        // A free string if there is one; otherwise the oldest takes the new note (a click only past 24 strings).
+        var slot = -1
+        var oldest = 0
+        var oldestAge = -1
+        for i in 0..<SynthState.stringCount {
+            if !strings[i].active {
+                slot = i
+                break
+            }
+            if strings[i].age > oldestAge {
+                oldestAge = strings[i].age
+                oldest = i
+            }
+        }
+        if slot < 0 { slot = oldest }
+        strings[slot].trigger(
+            kind, pitch: e.pitch, velocity: e.velocity, gateSamples: gateSamples(e), pan: e.pan, drive: e.drive, c)
+        stringsLive += 1
     }
 
     mutating func startFX(_ kind: FXKind, _ e: SynthEvent) {
@@ -302,8 +372,8 @@ struct SynthState {
             let w = wobble.next(c)
             let s = sub.next(c) * 0.5
             let bassDuck = 1 - 0.85 * sidechain
-            let bassL = (w.0 * 0.9 + s) * bassDuck
-            let bassR = (w.1 * 0.9 + s) * bassDuck
+            var bassL = (w.0 * 0.9 + s) * bassDuck
+            var bassR = (w.1 * 0.9 + s) * bassDuck
 
             // FX (ducked gently)
             var fxL: Float = 0
@@ -312,6 +382,31 @@ struct SynthState {
                 let f = fx[i].next(c)
                 fxL += f.0
                 fxR += f.1
+            }
+            // Guitar strings share the existing buses (the bass guitar the bass bus, every other string the FX bus), and
+            // are only touched while one is sounding, so a song without them renders bit for bit as it did before.
+            if stringsLive > 0 {
+                var guitarL: Float = 0
+                var guitarR: Float = 0
+                var bassGuitarL: Float = 0
+                var bassGuitarR: Float = 0
+                var live = 0
+                for i in 0..<SynthState.stringCount where strings[i].active {
+                    let g = strings[i].next(c)
+                    if strings[i].kind == .bass {
+                        bassGuitarL += g.0
+                        bassGuitarR += g.1
+                    } else {
+                        guitarL += g.0
+                        guitarR += g.1
+                    }
+                    if strings[i].active { live += 1 }
+                }
+                stringsLive = live
+                bassL += bassGuitarL * bassDuck
+                bassR += bassGuitarR * bassDuck
+                fxL += guitarL
+                fxR += guitarR
             }
             let fxDuck = 1 - 0.5 * sidechain
             fxL *= fxDuck

@@ -1,5 +1,6 @@
 import Foundation
 import NardukMusicCore
+import NardukMusicDSP
 
 /// A scripted signal timeline for the offline renderer and the `narduk-music` CLI, as JSON.
 ///
@@ -16,6 +17,17 @@ import NardukMusicCore
 ///   ],
 ///   "actions": [{ "time": 20, "queueDrop": true }]
 /// }
+/// ```
+///
+/// `notes` plays the guitars (`acousticGuitar`, `electricGuitar`, `bassGuitar`, `strum`, `electricStrum`) directly,
+/// beside whatever the conductor writes: each names an instrument, a time in seconds and a MIDI pitch. A time lands on
+/// the nearest half of a 16th-note step.
+///
+/// ```json
+/// { "seconds": 8, "conductor": false, "notes": [
+///   { "time": 0.5, "instrument": "acousticGuitar", "pitch": 52, "length": 1.2 },
+///   { "time": 2.0, "instrument": "electricStrum", "pitch": 45, "chord": "minor", "direction": "down" }
+/// ] }
 /// ```
 public struct MusicScenario: Sendable, Hashable, Codable {
     /// A run of repeated signals.
@@ -67,6 +79,42 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         }
     }
 
+    /// A note for one of the guitars, in seconds rather than steps.
+    public struct Note: Sendable, Hashable, Codable {
+        /// Seconds from the start of the render.
+        public var time: Double
+        public var instrument: Instrument
+        /// MIDI note number; a strum's chord root.
+        public var pitch: Int
+        /// Seconds the key is held (default 0.5).
+        public var length: Double?
+        /// 0 ... 1 (default 0.8).
+        public var velocity: Double?
+        /// -1 ... 1.
+        public var pan: Double?
+        /// Electric guitar drive, 0 ... 1.
+        public var drive: Double?
+        /// A strum's chord (default `major`).
+        public var chord: StrumChord?
+        /// A strum's direction (default `down`).
+        public var direction: StrumStroke?
+
+        public init(
+            time: Double, instrument: Instrument, pitch: Int, length: Double? = nil, velocity: Double? = nil,
+            pan: Double? = nil, drive: Double? = nil, chord: StrumChord? = nil, direction: StrumStroke? = nil
+        ) {
+            self.time = time
+            self.instrument = instrument
+            self.pitch = pitch
+            self.length = length
+            self.velocity = velocity
+            self.pan = pan
+            self.drive = drive
+            self.chord = chord
+            self.direction = direction
+        }
+    }
+
     public var name: String?
     public var seed: UInt64?
     public var genre: Genre?
@@ -79,11 +127,16 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     public var signals: [MusicSignal]?
     public var segments: [Segment]?
     public var actions: [Action]?
+    /// Notes for the guitars, played directly (see `Note`).
+    public var notes: [Note]?
+    /// False renders only `notes`: the conductor writes nothing. Nil or true leaves it playing.
+    public var conductor: Bool?
 
     public init(
         name: String? = nil, seed: UInt64? = nil, genre: Genre? = nil, bpm: Double? = nil, seconds: Double? = nil,
         buildThreshold: Double? = nil, dropThreshold: Double? = nil, signals: [MusicSignal]? = nil,
-        segments: [Segment]? = nil, actions: [Action]? = nil
+        segments: [Segment]? = nil, actions: [Action]? = nil, notes: [Note]? = nil,
+        conductor: Bool? = nil
     ) {
         self.name = name
         self.seed = seed
@@ -95,6 +148,8 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         self.signals = signals
         self.segments = segments
         self.actions = actions
+        self.notes = notes
+        self.conductor = conductor
     }
 
     /// Reads a scenario from JSON.
@@ -109,6 +164,25 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         if let genre { settings.genre = genre }
         if let bpm { settings.bpm = bpm }
         return settings
+    }
+
+    /// The notes as `ScheduledNote`s on the song's step grid, in time order. A time lands on the nearest half step
+    /// (the second half as a swing `delay`), the resolution a `ScheduledNote` has.
+    public func scheduledNotes(settings: SongSettings) -> [ScheduledNote] {
+        let secondsPerStep = settings.secondsPerStep
+        return (notes ?? []).filter { $0.time >= 0 && $0.time.isFinite }.sorted { $0.time < $1.time }.map { note in
+            let halves = Int((note.time / secondsPerStep * 2).rounded())
+            let isStrum = note.instrument == .strum || note.instrument == .electricStrum
+            var params = NoteParams(
+                pitch: note.pitch, lengthSteps: max(1, Int(((note.length ?? 0.5) / secondsPerStep).rounded(.up))),
+                drive: note.drive, pan: note.pan ?? 0, delay: halves % 2 == 1 ? 0.5 : nil)
+            if isStrum {
+                params.voice = note.chord?.voice ?? 0
+                params.formant = note.direction == .up ? 1 : 0
+            }
+            return ScheduledNote(
+                step: halves / 2, instrument: note.instrument, velocity: note.velocity ?? 0.8, params: params)
+        }
     }
 
     /// Every signal, listed and generated, in time order (stable for equal times: listed first, then segments).
@@ -150,7 +224,10 @@ extension OfflineRenderer {
         _ scenario: MusicScenario, seconds: Double? = nil, base: SongSettings = SongSettings(),
         sampleRate: Double = 48_000, progress: ((Double) -> Void)? = nil
     ) -> RenderedAudio {
-        let renderer = OfflineRenderer(settings: scenario.settings(base: base), sampleRate: sampleRate)
+        let renderer = OfflineRenderer(
+            settings: scenario.settings(base: base), sampleRate: sampleRate, playsConductor: scenario.conductor != false
+        )
+        renderer.schedule(scenario.scheduledNotes(settings: renderer.settings))
         if let build = scenario.buildThreshold {
             renderer.setThresholds(build: build, drop: scenario.dropThreshold ?? build * 0.7)
         }

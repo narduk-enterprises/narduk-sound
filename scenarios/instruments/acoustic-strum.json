@@ -1,0 +1,51 @@
+{
+  "name": "acoustic-strum",
+  "seed": 1574,
+  "genre": "chill",
+  "bpm": 120,
+  "seconds": 6,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "strum",
+      "pitch": 45,
+      "chord": "minor",
+      "direction": "down",
+      "length": 1.4
+    },
+    {
+      "time": 1.5,
+      "instrument": "strum",
+      "pitch": 41,
+      "chord": "major",
+      "direction": "down",
+      "length": 1.4
+    },
+    {
+      "time": 3.0,
+      "instrument": "strum",
+      "pitch": 48,
+      "chord": "major",
+      "direction": "down",
+      "length": 0.7
+    },
+    {
+      "time": 3.75,
+      "instrument": "strum",
+      "pitch": 48,
+      "chord": "major",
+      "direction": "up",
+      "length": 0.7,
+      "velocity": 0.6
+    },
+    {
+      "time": 4.5,
+      "instrument": "strum",
+      "pitch": 43,
+      "chord": "dominant7",
+      "direction": "down",
+      "length": 1.4
+    }
+  ]
+}
