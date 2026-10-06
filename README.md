@@ -135,6 +135,30 @@ silences the generated song so the notes play alone. See
 [scenarios/instruments](scenarios/instruments) and the mixed
 [scenarios/guitar-demo.json](scenarios/guitar-demo.json).
 
+## Sonify a stream (NardukSonify)
+
+`NardukSonify` turns a stream of numbers into the `MusicSignal`s the conductor
+plays, online, with no knowledge of what the numbers are. It depends on
+NardukMusicCore only and builds on every platform.
+
+```text
+values in schema order -> StreamSonifier.ingest -> StreamFrame -> signal(frames, time:) -> MusicSignal
+```
+
+- `StreamSchema` fixes the columns up front, so a sample is just its values in
+  that order (an unsafe buffer or an array); a value that is not finite means
+  "nothing this time". No dictionary, no sorting per sample.
+- `OnlineSeries` analyses one column causally and in bounded memory: time-based
+  EWMAs, a robust range from the 2nd/98th percentiles of a 60 s window
+  (quickselect in preallocated storage), peaks confirmed a quarter second late,
+  anomalies at |z| > 3.5.
+- `StreamSonifier` rate-limits events as they happen (2 a second, bursts of 4),
+  queues a drop on a new high, and raises open `StreamEventKind`s. A
+  `StreamColumnRanker` decides which column leads; the default ranks all alike.
+- `ingest` allocates nothing while no event fires (`StreamNoAllocTests`, release
+  builds); an event builds its label strings, and `signal(_:time:)` builds a
+  `MusicSignal`, so call it once per tick.
+
 ## Guarantees and their tests
 
 - **Golden render.** `GoldenRenderTests` renders the 30 s scenario and compares
