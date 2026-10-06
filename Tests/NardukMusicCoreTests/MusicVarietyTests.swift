@@ -142,8 +142,10 @@ import Testing
             let m = Self.metrics(r, bpm: c.settings.bpm, from: 16, bars: 64)
             #expect(m.uniqueDrumBars >= 4, "\(genre): \(m)")
             #expect(m.pitchClasses >= 4, "\(genre): \(m)")
-            // House and chill carry their hook in the keys; their bass is a groove under it.
-            #expect(m.contours >= ([.house, .chill].contains(genre) ? 2 : 3), "\(genre): \(m)")
+            // House, chill and the second electronic wave carry their hook in the keys; their bass is a groove under it.
+            #expect(
+                m.contours >= ([.house, .chill, .techno, .ukGarage, .synthwave, .lofi].contains(genre) ? 2 : 3),
+                "\(genre): \(m)")
             #expect(m.wobbleRateChangesPerMinute <= 4, "\(genre): \(m)")
             // Sustained energy still breathes: a breakdown, or the next track's build, comes round before the 10th phrase.
             #expect(m.phrases.dropFirst(3).contains { !$0.isDrop }, "\(genre): \(m)")

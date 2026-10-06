@@ -13,6 +13,8 @@ public enum SongSection: String, Sendable, Hashable, Codable, CaseIterable {
 
 public enum Genre: String, Sendable, Hashable, Codable, CaseIterable {
     case dubstep, riddim, drumAndBass, trap, house, chill
+    /// The second electronic wave (narduk-libs#1577): each its own tempo, drum grammar and bass patch.
+    case techno, ukGarage, synthwave, lofi
 }
 
 public enum Instrument: String, Sendable, Hashable, Codable, CaseIterable {

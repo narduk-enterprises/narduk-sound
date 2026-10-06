@@ -58,6 +58,10 @@ import Testing
         .trap: ["darwin-arm64": 0xb2fc_0671_4bd4_fd74, "linux-x86_64": 0xe1d6_8c8b_40ca_efba],
         .house: ["darwin-arm64": 0x59ad_e41b_a08b_5787, "linux-x86_64": 0x7099_67bc_7023_1612],
         .chill: ["darwin-arm64": 0xed54_7d07_5f21_f47c, "linux-x86_64": 0xabc9_9c4e_23c7_d2cf],
+        .techno: ["darwin-arm64": 0xdfb8_8bac_1a48_2563, "linux-x86_64": 0x5740_f242_f1ff_1b52],
+        .ukGarage: ["darwin-arm64": 0x012f_7638_eb24_7be7, "linux-x86_64": 0xe989_6941_a15a_231f],
+        .synthwave: ["darwin-arm64": 0xcf13_c802_0028_d3bd, "linux-x86_64": 0x39c1_53af_a26b_6088],
+        .lofi: ["darwin-arm64": 0x7066_a558_6ba3_d111, "linux-x86_64": 0x06d5_4551_caf9_f7dd],
     ]
 
     @Test(arguments: Genre.allCases)

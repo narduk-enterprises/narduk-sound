@@ -318,8 +318,8 @@ import Testing
             #expect(range.contains(track.bpm), "\(genre) at \(track.bpm)")
             let dropBars = (0..<(p.steps / 16)).filter { p.sections[$0 * 16].isDrop && $0 % 8 != 7 && $0 % 8 != 3 }
             #expect(!dropBars.isEmpty, "\(genre) never dropped")
-            // Chill's backbeat is soft; everyone else's lands hard.
-            let loudest = genre == .chill ? 0.5 : 0.9
+            // Chill's, lo-fi's and techno's backbeats are soft; everyone else's lands hard.
+            let loudest = [.chill, .lofi, .techno].contains(genre) ? 0.5 : 0.9
             func hits(_ instrument: Instrument, _ bar: Int, loud: Bool = true) -> [Int] {
                 p.notes.filter {
                     $0.instrument == instrument && $0.step / 16 == bar && (!loud || $0.velocity >= loudest)
@@ -329,8 +329,9 @@ import Testing
                 switch genre {
                 case .dubstep, .riddim, .trap, .chill:
                     #expect(hits(.snare, bar) == [8], "\(genre) half-time snare bar \(bar)")
-                case .drumAndBass: #expect(hits(.snare, bar) == [4, 12], "DnB backbeat bar \(bar)")
-                case .house:
+                case .drumAndBass, .ukGarage, .synthwave, .lofi:
+                    #expect(hits(.snare, bar) == [4, 12], "\(genre) backbeat bar \(bar)")
+                case .house, .techno:
                     #expect(
                         Set([0, 4, 8, 12]).isSubset(of: Set(hits(.kick, bar, loud: false))), "house four-to-the-floor")
                 }
@@ -347,8 +348,12 @@ import Testing
                         [.eighthTriplet, .sixteenthTriplet].contains($0.params.wobbleRate)
                     })
             case .house: #expect(notes.contains { $0.instrument == .keys })
-            case .chill:
+            case .chill, .ukGarage, .lofi:
                 #expect(notes.contains { $0.instrument == .keys } && notes.contains { ($0.params.delay ?? 0) > 0 })
+            case .techno:
+                #expect(notes.contains { $0.instrument == .keys } && notes.contains { $0.instrument == .sub })
+            case .synthwave:
+                #expect(notes.contains { $0.instrument == .keys } && notes.contains { $0.instrument == .wobble })
             case .dubstep, .drumAndBass: #expect(notes.contains { $0.instrument == .wobble })
             }
         }

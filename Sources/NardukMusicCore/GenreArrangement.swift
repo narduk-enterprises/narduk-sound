@@ -21,6 +21,9 @@ extension Genre {
         case .drumAndBass: 174
         case .house: 124
         case .chill: 88
+        case .techno, .ukGarage: 132
+        case .synthwave: 108
+        case .lofi: 80
         }
     }
 
@@ -33,6 +36,10 @@ extension Genre {
         case .trap: "Trap"
         case .house: "House"
         case .chill: "Chill"
+        case .techno: "Techno"
+        case .ukGarage: "UK Garage"
+        case .synthwave: "Synthwave"
+        case .lofi: "Lo-fi"
         }
     }
 }
@@ -142,8 +149,25 @@ enum GenreArrangement {
             GenreProfile(
                 gain: 0.7, introKickBarStride: 4, buildSnares: [8], riserVelocity: 0.4, chops: true,
                 formantRange: 0.2...0.6, glide: 0.4)
+        case .techno:
+            GenreProfile(
+                introKicks: [0, 4, 8, 12], introKickBarStride: 1, buildKicks: [0, 4, 8, 12], buildSnares: [4, 12],
+                formantRange: 0.15...0.5)
+        case .ukGarage:
+            GenreProfile(buildKicks: [0, 10], buildSnares: [4, 12], formantRange: 0.25...0.6, glide: 0.2)
+        case .synthwave:
+            GenreProfile(
+                introKicks: [0, 8], introKickBarStride: 1, buildKicks: [0, 8], buildSnares: [4, 12],
+                riserVelocity: 0.7, formantRange: 0.3...0.7, glide: 0.25)
+        case .lofi:
+            GenreProfile(
+                gain: 0.65, introKickBarStride: 4, buildKicks: [0, 10], buildSnares: [4, 12], riserVelocity: 0.35,
+                chops: true, formantRange: 0.15...0.5, glide: 0.3)
         }
     }
+
+    /// Genres whose chords carry sevenths.
+    static func lush(_ genre: Genre) -> Bool { genre == .chill || genre == .lofi || genre == .ukGarage }
 
     // MARK: Pitch helpers
 
@@ -174,7 +198,7 @@ enum GenreArrangement {
             case .build: 0.8
             case .drop, .drop2: 1
             }
-        let chord = Self.chord(c, degree: c.chord, base: c.keyRoot, seventh: c.track.genre == .chill)
+        let chord = Self.chord(c, degree: c.chord, base: c.keyRoot, seventh: Self.lush(c.track.genre))
         let voice = pattern == .sustain ? 3 : 2
         return pattern.hits(pos: pos, barInPhrase: c.barInPhrase).flatMap { hit in
             hit.notes(on: chord).map { note in
@@ -250,7 +274,7 @@ enum GenreArrangement {
 
     /// Soft pad chords (keys voice 3) on the bar's chord, two bars long.
     private static func pad(_ c: StepContext, velocity: Double, add: (Instrument, Double, NoteParams) -> Void) {
-        for pitch in chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: c.track.genre == .chill) {
+        for pitch in chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: Self.lush(c.track.genre)) {
             add(.keys, velocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: 3))
         }
     }
@@ -263,14 +287,15 @@ enum GenreArrangement {
         for note in c.hookNotes() {
             let accent = note.accent ? 1.0 : 0.82
             let degree = c.chord + note.degree
-            if genre == .house {
+            if genre == .house || genre == .ukGarage {
                 for pitch in chord(c, degree: degree, base: c.keyRoot) {
                     add(
                         .keys, velocity * accent, NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: 1)
                     )
                 }
             } else {
-                let base = genre == .chill || genre == .drumAndBass ? c.keyRoot : c.keyRoot + 12
+                let low: Set<Genre> = [.chill, .drumAndBass, .lofi, .synthwave]
+                let base = low.contains(genre) ? c.keyRoot : c.keyRoot + 12
                 add(
                     .keys, velocity * accent,
                     NoteParams(
@@ -333,7 +358,8 @@ enum GenreArrangement {
         let bank = Banks.drums(genre)
         let variant = bank[(c.section == .drop2 ? c.track.drums2 : c.track.drums) % bank.count]
         let level = c.level
-        let soft = genre == .chill
+        let soft = genre == .chill || genre == .lofi
+        let driving = genre == .house || genre == .techno
         let inFill = fill.map { pos >= $0.from } ?? false
         let kind = inFill ? fill?.kind : nil
         let main = c.isLastBar  // the half-phrase fill only whispers
@@ -351,11 +377,13 @@ enum GenreArrangement {
         }
         if kind == .kickDrop { kicks = [] }
         if kicks.contains(pos) {
-            let velocity = pos == 0 ? (soft ? 0.7 : 1.0) : (soft ? 0.4 : genre == .house ? 0.95 : 0.75)
+            let velocity =
+                pos == 0 ? (soft ? 0.7 : 1.0) : (soft ? 0.4 : driving ? 0.95 : genre == .synthwave ? 0.9 : 0.75)
             add(.kick, velocity, NoteParams())
         }
 
-        let snareVelocity = soft ? 0.5 : genre == .house ? 0.75 : 1.0
+        let snareVelocity =
+            soft ? 0.5 : genre == .house ? 0.75 : genre == .techno ? 0.55 : genre == .synthwave ? 0.9 : 1.0
         var snared = false
         if snares.contains(pos) {
             add(.snare, snareVelocity, NoteParams())
@@ -391,10 +419,22 @@ enum GenreArrangement {
         case .riddim:
             if level > 0.4, pos == 4 || pos == 12 { add(.hat, 0.25 + 0.3 * level, NoteParams()) }
             if level > 0.8, pos % 4 == 2 { add(.hat, 0.2 + 0.2 * level, NoteParams()) }
-        case .chill:
+        case .chill, .lofi:
             // Soft swung 16ths: the off-16ths lean late (the swing) and quiet.
             if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.22 : 0.12) + 0.12 * level, NoteParams()) }
             if pos % 4 == 3 { add(.hat, 0.1 + 0.08 * level, NoteParams()) }
+        case .techno:
+            // Closed 16ths ticking under the off-beat open hats; energy only adds the in-between ones.
+            if pos % 4 == 2 { add(.hat, 0.3 + 0.15 * level, NoteParams()) }
+            if pos % 2 == 0 && pos % 4 != 2 { add(.hat, 0.14 + 0.1 * level, NoteParams()) }
+            if level > 0.5, pos % 2 == 1 { add(.hat, 0.08 + 0.08 * level, NoteParams()) }
+        case .ukGarage:
+            // Shuffled 16ths: the swing pushes the off-16ths late; every 8th is a touch louder.
+            if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.3 : 0.2) + 0.15 * level, NoteParams()) }
+            if pos % 4 == 3 { add(.hat, 0.12 + 0.1 * level, NoteParams()) }
+        case .synthwave:
+            // Straight 8ths, the off-beat ones leaning in.
+            if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.34 : 0.22) + 0.2 * level, NoteParams()) }
         case .drumAndBass:
             // Breakbeat hats: 8ths with a swung 16th before the snare.
             if pos % 2 == 0 { add(.hat, 0.32 + 0.3 * level + accent, NoteParams()) }
@@ -405,7 +445,7 @@ enum GenreArrangement {
                 add(.hat, (stride == 1 && pos % 2 == 1 ? 0.25 : 0.35) + 0.3 * level + accent, NoteParams())
             }
         }
-        if variant.openHats.contains(pos), genre == .house || level > 0.6, kind != .kickDrop {
+        if variant.openHats.contains(pos), driving || level > 0.6, kind != .kickDrop {
             add(.openHat, 0.55 + 0.25 * level, NoteParams())
         }
     }
@@ -475,6 +515,41 @@ enum GenreArrangement {
             }
         case .trap:
             break
+        case .techno:
+            // A rolling rumble: a short sub on three of every four 16ths (the kick owns the fourth), with a muted
+            // wub on each off-beat.
+            // The last 16th of the bar leans to the fifth, so the rumble turns round at the bar line.
+            if pos % 4 != 0 {
+                let pitch = pos == 15 ? track.pitch(c.keyRoot - 36, degree: c.chord + 4) : subPitch
+                add(.sub, pos % 4 == 2 ? 0.85 : 0.5, NoteParams(pitch: pitch, lengthSteps: length(1)))
+            }
+            if pos % 4 == 2 { wobble(track.pitch(wobbleBase, degree: c.chord), 1, velocity: 0.55, accent: pos == 10) }
+        case .ukGarage:
+            // A skippy, syncopated bass: long on the one, then short answers around the 2-step kick.
+            let steps: [Int: Int] = [0: 6, 6: 3, 10: 4, 14: 2]
+            if let steps = steps[pos] {
+                let octave = pos == 14 ? 12 : 0
+                add(.sub, pos == 0 ? 0.85 : 0.7, NoteParams(pitch: subPitch + octave, lengthSteps: length(steps)))
+                if pos == 6 || pos == 14 {
+                    // The answer on the 14 climbs a third, not an octave, so the line's contour follows the chord.
+                    let degree = pos == 14 ? c.chord + 2 : c.chord
+                    wobble(track.pitch(wobbleBase, degree: degree), 2, velocity: 0.55, accent: pos == 6)
+                }
+            }
+        case .synthwave:
+            // Driving 8ths: the root, then the octave, the way an arpeggiator pulse sits under a lead.
+            if pos % 2 == 0 {
+                let octave = pos % 4 == 2 ? 12 : 0
+                wobble(track.pitch(wobbleBase, degree: c.chord) + octave, 2, velocity: 0.6, accent: pos % 8 == 0)
+            }
+            if pos == 0 || pos == 8 { add(.sub, 0.7, NoteParams(pitch: subPitch, lengthSteps: length(8))) }
+        case .lofi:
+            // A round, late sub on the boom-bap kicks.
+            if pos == 0 { add(.sub, 0.65, NoteParams(pitch: subPitch, lengthSteps: length(10))) }
+            if pos == 10 {
+                let pitch = track.pitch(c.keyRoot - 36, degree: c.chord + (c.chord % 2 == 0 ? 2 : 4))
+                add(.sub, 0.5, NoteParams(pitch: pitch, lengthSteps: length(6)))
+            }
         }
 
         let hook = c.hookNotes()
@@ -506,7 +581,7 @@ enum GenreArrangement {
                     track.pitch(wobbleBase, degree: c.chord + (pos == 8 && c.barInPhrase % 2 == 1 ? 4 : 0)), 8,
                     velocity: 0.5, accent: false)
             }
-        case .house:
+        case .house, .techno, .ukGarage, .synthwave, .lofi:
             break
         }
     }
@@ -525,6 +600,18 @@ enum GenreArrangement {
         case .chill:
             keysHook(genre, c, velocity: 0.5, add: add)
             if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.26, add: add) }
+        case .techno:
+            keysHook(genre, c, velocity: 0.5, add: add)
+        case .ukGarage:
+            keysHook(genre, c, velocity: 0.5, add: add)
+            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.22, add: add) }
+        case .synthwave:
+            // A lead over a held pad: the hook's long notes ring, the chords underneath move every two bars.
+            keysHook(genre, c, velocity: 0.52, add: add)
+            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.3, add: add) }
+        case .lofi:
+            keysHook(genre, c, velocity: 0.45, add: add)
+            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.24, add: add) }
         case .drumAndBass:
             if pos == 0, c.barInPhrase % 2 == 0 {
                 for pitch in chord(c, degree: c.chord, base: c.keyRoot, seventh: true) {
