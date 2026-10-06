@@ -1,0 +1,59 @@
+# The NardukSound gallery (narduk-libs#1570): one SwiftUI app for macOS, iPad and iPhone that plays the NardukMusic
+# demo song, the microphone or an audio file through NardukSoundAnalysis into every visualizer side by side.
+# Generate the project with `xcodegen generate` (the .xcodeproj is not committed). Simulator and locally signed
+# ("Sign to Run Locally") Mac builds only: no developer-portal identity, profile or entitlement is involved.
+name: SoundGallery
+options:
+  bundleIdPrefix: com.nardukenterprises
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_APP_SANDBOX: NO
+    ENABLE_HARDENED_RUNTIME: NO
+packages:
+  NardukLibs:
+    path: ../../../../../..
+targets:
+  SoundGallery:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources: [Sources]
+    dependencies:
+      - package: NardukLibs
+        product: NardukSoundAnalysis
+      - package: NardukLibs
+        product: NardukMusicCore
+      - package: NardukLibs
+        product: NardukMusicEngine
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Sound Gallery
+        NSMicrophoneUsageDescription: Sound Gallery listens to the microphone to draw what it hears. Nothing is recorded or sent anywhere.
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        LSApplicationCategoryType: public.app-category.music
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nardukenterprises.soundgallery
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO

@@ -24,6 +24,14 @@ Then add `.product(name: "NardukMusicEngine", package: "narduk-libs")` (or
 `NardukMusicCore`, etc.) to the target. The repository is public, so resolving
 it needs no credential.
 
+## The gallery app
+
+`Apps/SoundGallery` is a SwiftUI app for macOS, iPad and iPhone that plays the
+demo song, the microphone or an audio file through `NardukSoundAnalysis` into
+four Canvas visualizers side by side (`xcodegen generate`, then build the
+`SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch).
+It is unsigned and local only; CI builds it for macOS and the iOS simulator.
+
 ## Make your own source
 
 An adapter turns your app's events into `MusicSignal`s. This one plays a build.
