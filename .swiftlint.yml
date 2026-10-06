@@ -1,0 +1,27 @@
+included:
+  - Sources
+  - Tests
+only_rules:
+  - force_cast
+  - force_try
+  - implicitly_unwrapped_optional
+  - unused_optional_binding
+  - notification_center_detachment
+  - discarded_notification_center_observer
+  - overridden_super_call
+  - weak_delegate
+  - fatal_error_message
+  - duplicate_imports
+  - redundant_nil_coalescing
+  - unneeded_break_in_switch
+  - trailing_semicolon
+  - control_statement
+  - for_where
+  - syntactic_sugar
+  - toggle_bool
+  - first_where
+  - last_where
+  - contains_over_first_not_nil
+  - legacy_constructor
+  - legacy_random
+  - private_over_fileprivate

@@ -1,0 +1,64 @@
+{
+  "name": "build-session",
+  "seed": 24301,
+  "genre": "dubstep",
+  "seconds": 30,
+  "buildThreshold": 0.45,
+  "dropThreshold": 0.32,
+  "segments": [
+    {
+      "from": 0,
+      "to": 6,
+      "every": 0.25,
+      "level": [0.05, 0.3],
+      "levelLabel": "CPU",
+      "cues": [{ "gesture": "tick", "label": "file watcher" }],
+      "cueEvery": 8,
+      "character": "idle"
+    },
+    {
+      "from": 6,
+      "to": 16,
+      "every": 0.25,
+      "level": [0.3, 0.95],
+      "levelLabel": "CPU",
+      "cues": [
+        { "gesture": "spark", "label": "swiftc" },
+        { "gesture": "spark", "label": "clang" },
+        { "gesture": "ghost", "label": "job queued" },
+        { "gesture": "voice", "label": "xcodebuild" },
+        { "gesture": "stutter", "label": "ld" }
+      ],
+      "cueEvery": 2,
+      "pan": 0.3,
+      "character": "busy"
+    },
+    {
+      "from": 16,
+      "to": 26,
+      "every": 0.25,
+      "level": [0.95, 0.85],
+      "levelLabel": "CPU",
+      "cues": [
+        { "gesture": "spark", "label": "swiftc" },
+        { "gesture": "zap", "label": "cache hit", "height": 0.8 },
+        { "gesture": "scratch", "label": "retry" },
+        { "gesture": "impact", "label": "tests started" }
+      ],
+      "cueEvery": 3,
+      "pan": -0.3,
+      "character": "surge"
+    },
+    {
+      "from": 26,
+      "to": 30,
+      "every": 0.25,
+      "level": [0.4, 0.1],
+      "levelLabel": "CPU",
+      "cues": [{ "gesture": "tapeStop", "label": "build finished" }],
+      "cueEvery": 16,
+      "character": "steady"
+    }
+  ],
+  "actions": [{ "time": 14, "queueDrop": true }]
+}
