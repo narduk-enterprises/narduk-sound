@@ -25,6 +25,13 @@ struct GalleryView: View {
                         ForEach(Visualizer.all) { visualizer in
                             VisualizerCard(visualizer: visualizer, frame: frame)
                         }
+                        // The Canvas visualizers from NardukSoundVisuals. `tick` changes every frame so a card whose
+                        // only input is the (reference) state still redraws.
+                        ForEach(SoundVisualizerKind.allCases) { kind in
+                            SoundVisualizerCard(
+                                kind: kind, state: model.visualState, tick: timeline.date.timeIntervalSinceReferenceDate
+                            )
+                        }
                     }
                     .padding(12)
                 }
@@ -95,6 +102,27 @@ private struct VisualizerCard: View {
             Canvas { context, size in visualizer.draw(&context, size, frame) }
                 .frame(height: 160)
                 .accessibilityLabel(visualizer.id)
+        }
+        .padding(10)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct SoundVisualizerCard: View {
+    let kind: SoundVisualizerKind
+    let state: SoundVisualState
+    let tick: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(kind.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Canvas { context, size in
+                _ = tick
+                SoundVisualizers.draw(kind, &context, size, state)
+            }
+            .frame(height: kind == .pads ? 280 : 160)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel(kind.title)
         }
         .padding(10)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
