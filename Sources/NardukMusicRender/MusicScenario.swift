@@ -175,13 +175,17 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     public var notes: [Note]?
     /// False renders only `notes`: the conductor writes nothing. Nil or true leaves it playing.
     public var conductor: Bool?
+    /// Named on/off switches for a same-seed A/B (`narduk-music abtest --a '{"flags":{"sampled":false}}'`). Nothing
+    /// reads a flag until a change wires one: read it with `flag(_:)` where the render is set up, so the same scenario
+    /// renders A with the switch off and B with it on. An unknown or missing flag is off.
+    public var flags: [String: Bool]?
 
     public init(
         name: String? = nil, seed: UInt64? = nil, genre: Genre? = nil, bpm: Double? = nil, family: GenreFamily? = nil,
         variety: Double? = nil, varied: Bool? = nil, seconds: Double? = nil,
         buildThreshold: Double? = nil, dropThreshold: Double? = nil, signals: [MusicSignal]? = nil,
         segments: [Segment]? = nil, actions: [Action]? = nil, notes: [Note]? = nil,
-        conductor: Bool? = nil
+        conductor: Bool? = nil, flags: [String: Bool]? = nil
     ) {
         self.name = name
         self.seed = seed
@@ -198,7 +202,11 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         self.actions = actions
         self.notes = notes
         self.conductor = conductor
+        self.flags = flags
     }
+
+    /// Whether the switch `name` is on (see `flags`).
+    public func flag(_ name: String) -> Bool { flags?[name] ?? false }
 
     /// Reads a scenario from JSON.
     public static func load(_ data: Data) throws -> MusicScenario {
@@ -309,10 +317,12 @@ public struct MusicScenario: Sendable, Hashable, Codable {
 
 extension OfflineRenderer {
     /// Renders `seconds` of a scenario. A signal is delivered in the tick during which its time falls; actions apply
-    /// at the start of the tick that contains them.
+    /// at the start of the tick that contains them. `observe` sees the renderer after every tick (the A/B harness
+    /// records the track history and energy from it).
     public static func render(
         _ scenario: MusicScenario, seconds: Double? = nil, base: SongSettings = SongSettings(),
-        sampleRate: Double = 48_000, progress: ((Double) -> Void)? = nil
+        sampleRate: Double = 48_000, progress: ((Double) -> Void)? = nil,
+        observe: ((OfflineRenderer) -> Void)? = nil
     ) -> RenderedAudio {
         let renderer = OfflineRenderer(
             settings: scenario.settings(base: base), sampleRate: sampleRate, playsConductor: scenario.conductor != false
@@ -345,6 +355,7 @@ extension OfflineRenderer {
             let audio = renderer.advance(signals: arrived)
             left += audio.left
             right += audio.right
+            observe?(renderer)
             if let progress, tick % 60 == 59 { progress(now + 1 / tickRate) }
         }
         return RenderedAudio(sampleRate: sampleRate, left: left, right: right)
