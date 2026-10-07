@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "NardukSoundAnalysis", targets: ["NardukSoundAnalysis"]),
         .library(name: "NardukSonify", targets: ["NardukSonify"]),
         .library(name: "NardukSoundVisuals", targets: ["NardukSoundVisuals"]),
+        .library(name: "NardukMusicCritic", targets: ["NardukMusicCritic"]),
         .executable(name: "narduk-music", targets: ["narduk-music"]),
     ],
     targets: [
@@ -33,6 +34,10 @@ let package = Package(
         .target(name: "NardukSoundAnalysis"),
         .target(name: "NardukSonify", dependencies: ["NardukMusicCore"]),
         .target(name: "NardukSoundVisuals", dependencies: ["NardukSoundAnalysis", "NardukMusicCore"]),
+        .target(
+            name: "NardukMusicCritic",
+            dependencies: ["NardukMusicCore", "NardukMusicDSP", "NardukMusicRender", "NardukSoundAnalysis"]
+        ),
         .testTarget(name: "NardukMusicCoreTests", dependencies: ["NardukMusicCore", "NardukMusicDSP"]),
         .testTarget(name: "NardukMusicDSPTests", dependencies: ["NardukMusicCore", "NardukMusicDSP"]),
         .testTarget(
@@ -44,6 +49,10 @@ let package = Package(
         .testTarget(
             name: "NardukSoundVisualsTests",
             dependencies: ["NardukSoundVisuals", "NardukSoundAnalysis", "NardukMusicCore", "NardukMusicRender"]
+        ),
+        .testTarget(
+            name: "NardukMusicCriticTests",
+            dependencies: ["NardukMusicCritic", "NardukMusicCore", "NardukMusicDSP", "NardukMusicRender"]
         ),
     ],
     swiftLanguageModes: [.v6]
