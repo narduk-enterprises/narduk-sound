@@ -20,21 +20,21 @@ settings:
     ENABLE_APP_SANDBOX: NO
     ENABLE_HARDENED_RUNTIME: NO
 packages:
-  NardukLibs:
-    path: ../../../../../..
+  NardukSound:
+    path: ../..
 targets:
   SoundGallery:
     type: application
     supportedDestinations: [iOS, macOS]
     sources: [Sources]
     dependencies:
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukSoundAnalysis
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukSoundVisuals
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukMusicCore
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukMusicEngine
     info:
       path: Info.plist
@@ -74,13 +74,13 @@ targets:
       - Sources/GalleryModel.swift
       - Sources/Visualizers.swift
     dependencies:
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukMusicCore
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukMusicEngine
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukSoundAnalysis
-      - package: NardukLibs
+      - package: NardukSound
         product: NardukSoundVisuals
     settings:
       base:

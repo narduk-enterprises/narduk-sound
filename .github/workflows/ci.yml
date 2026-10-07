@@ -1,0 +1,107 @@
+name: CI
+
+# Everything but NardukMusicEngine builds on Linux; the Engine needs
+# AVFoundation, so the macOS job builds everything. Both run the golden render
+# against their own platform's fingerprint, the CLI and a version-tag consumer.
+# The repository is public, so both use GitHub-hosted runners.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  swift-linux:
+    name: NardukSound Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14.7"
+      - name: Provision and verify Swift
+        run: python scripts/install-swift-linux.py
+      - name: Check NardukMusic, its CLI and a version-tag consumer
+        run: python scripts/swift-quality.py
+      - name: Remove the job-local Swift fallback
+        if: always()
+        run: |
+          python - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "narduk-logging-swift"
+          if root.exists():
+              shutil.rmtree(root)
+          PY
+
+  swift-macos:
+    name: NardukSound macOS
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      # Xcode 26.6 / Swift 6.3.3 is the package's declared Apple toolchain.
+      # The last step repeats the consumer on the fleet Apple runner's Xcode 26.0.1.
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      SWIFTLINT_VERSION: 0.63.3
+      SWIFTLINT_SHA256: fb045e85e7cb3374f42a4840b6b85a0106302afa69035c0c6f29af4a44c810b6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned SwiftLint release
+        run: |
+          set -euo pipefail
+          directory="${RUNNER_TEMP}/swiftlint"
+          mkdir -p "${directory}"
+          curl --fail --silent --show-error --location --output "${directory}/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          echo "${SWIFTLINT_SHA256}  ${directory}/swiftlint.zip" | shasum -a 256 -c -
+          unzip -q "${directory}/swiftlint.zip" -d "${directory}"
+          "${directory}/swiftlint" version
+          echo "${directory}" >> "${GITHUB_PATH}"
+      - name: Check NardukMusic, its CLI and a version-tag consumer
+        env:
+          CI: "true"
+        run: python3 scripts/swift-quality.py
+      - name: Build every shipped product that runs on iOS for a device
+        # The package floor is iOS 18 (as for NardukAuthKit): prove each product compiles for a device.
+        run: |
+          set -euo pipefail
+          derived="$(mktemp -d "${RUNNER_TEMP}/narduk-music-ios-XXXXXX")"
+          for scheme in NardukMusicCore NardukMusicDSP NardukMusicEngine NardukSoundAnalysis NardukSonify NardukSoundVisuals; do
+            echo "::group::${scheme} (generic/platform=iOS)"
+            xcodebuild -quiet -scheme "${scheme}" -destination 'generic/platform=iOS' \
+              -derivedDataPath "${derived}" build
+            echo "::endgroup::"
+          done
+      - name: Build the SoundGallery app for macOS and the iOS simulator
+        # The gallery (narduk-libs#1570) is an XcodeGen project over this package: one multiplatform SwiftUI app.
+        # Unsigned builds only; no identity, profile or entitlement is involved.
+        working-directory: Examples/SoundGallery
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen generate
+          derived="$(mktemp -d "${RUNNER_TEMP}/soundgallery-XXXXXX")"
+          for destination in 'platform=macOS' 'generic/platform=iOS Simulator'; do
+            echo "::group::SoundGallery (${destination})"
+            xcodebuild -quiet -project SoundGallery.xcodeproj -scheme SoundGallery \
+              -destination "${destination}" -derivedDataPath "${derived}" \
+              CODE_SIGNING_ALLOWED=NO build
+            echo "::endgroup::"
+          done
+      - name: Resolve and build the consumer with the fleet Apple runner's Xcode 26.0.1 (Swift 6.2)
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+        run: python3 scripts/swift-quality.py --consumer-only

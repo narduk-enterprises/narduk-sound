@@ -1,4 +1,4 @@
-"""NardukMusic checks, the CLI, and a clean consumer resolving a real version tag in an isolated Git fixture."""
+"""NardukSound checks, the CLI, and a clean consumer resolving a real version tag in an isolated Git fixture."""
 
 import json
 import os
@@ -9,14 +9,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-SWIFT = Path(__file__).resolve().parents[1]
-ROOT = SWIFT.parents[3]
-# The next repository SwiftPM tag, the first to carry NardukMusic
-# (docs/architecture/narduk-logging.md). The fixture tags its own copy.
-VERSION = "0.3.0"
+ROOT = Path(__file__).resolve().parents[1]
+# The fixture tags its own copy with this version; it need not exist upstream.
+VERSION = "0.5.0"
 DARWIN = sys.platform == "darwin"
 BUILD_FLAGS = ["-Xswiftc", "-use-ld=lld"] if sys.platform == "linux" else []
-SCENARIO = SWIFT / "scenarios/build-session.json"
+SCENARIO = ROOT / "scenarios/build-session.json"
 
 # Renders one second offline and writes a WAV: the Linux-buildable products.
 CONSUMER = """import Foundation
@@ -38,7 +36,7 @@ def run(*args: str, cwd: Path = ROOT) -> None:
 
 def readme_example() -> str:
     """The README's adapter example, compiled by the Apple consumer so it cannot rot."""
-    readme = (SWIFT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text()
     section = readme.split("## Make your own source", 1)[1]
     match = re.search(r"```swift\n(.*?)```", section, re.S)
     assert match, "README.md has no Swift example under 'Make your own source'"
@@ -46,13 +44,10 @@ def readme_example() -> str:
 
 
 def lint() -> None:
-    # The nested .swift-format and .swiftlint.yml govern this tree; the root
-    # configuration governs Package.swift.
-    run("swift", "format", "lint", "--strict", "Package.swift")
-    run("swift", "format", "lint", "--strict", "--recursive", "Sources", "Tests", cwd=SWIFT)
+    run("swift", "format", "lint", "--strict", "--recursive", "Package.swift", "Sources", "Tests")
     swiftlint = shutil.which("swiftlint")
     if swiftlint:
-        run(swiftlint, "lint", "--strict", "--quiet", cwd=SWIFT)
+        run(swiftlint, "lint", "--strict", "--quiet")
     elif os.environ.get("CI") and DARWIN:
         raise SystemExit("SwiftLint is required in CI")
     else:
@@ -81,22 +76,11 @@ def cli() -> None:
 def consumer() -> None:
     with tempfile.TemporaryDirectory(prefix="narduk-music-swift-") as name:
         temporary = Path(name)
-        source = temporary / "narduk-libs"
+        source = temporary / "narduk-sound"
         source.mkdir()
         shutil.copy(ROOT / "Package.swift", source)
-        # The root manifest declares every Swift product, so the fixture
-        # carries every target path it names.
-        logging = ROOT / "packages/modules/narduk-logging"
-        auth = ROOT / "packages/modules/narduk-auth/swift"
-        for tree in (
-            logging / "swift",
-            logging / "examples/swift",
-            auth / "Sources",
-            auth / "Tests",
-            SWIFT / "Sources",
-            SWIFT / "Tests",
-        ):
-            shutil.copytree(tree, source / tree.relative_to(ROOT))
+        for tree in ("Sources", "Tests"):
+            shutil.copytree(ROOT / tree, source / tree)
         run("git", "init", "--quiet", cwd=source)
         run("git", "add", ".", cwd=source)
         run(
@@ -113,7 +97,7 @@ def consumer() -> None:
             products.append("NardukMusicEngine")
             (check / "Sources/Check/ReadmeExample.swift").write_text(readme_example())
         dependencies = ",\n    ".join(
-            f'.product(name: "{product}", package: "narduk-libs")' for product in products
+            f'.product(name: "{product}", package: "narduk-sound")' for product in products
         )
         # Swift 6.2 is the fleet Apple runner's toolchain (Xcode 26.0.1), so the
         # consumer and the root manifest stay at 6.2.
@@ -131,7 +115,7 @@ let package = Package(name: "Check", platforms: [.macOS(.v15)], dependencies: [
         assert out.stat().st_size == 44 + 48_000 * 4, out.stat().st_size
         pins = json.loads((check / "Package.resolved").read_text())["pins"]
         assert any(
-            pin["identity"] == "narduk-libs" and pin["state"]["version"] == VERSION
+            pin["identity"] == "narduk-sound" and pin["state"]["version"] == VERSION
             for pin in pins
         ), pins
         print(f"Verified independent SwiftPM consumer resolved v{VERSION} ({', '.join(products)})")

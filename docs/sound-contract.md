@@ -12,10 +12,9 @@ music; and "it doesn't have to be music". So a visualizer must work from a
 
 ## 1. Products
 
-Three new products of the existing package
-(`packages/modules/narduk-music/swift`), one gate and one release tag. The empty
-targets landed first (narduk-libs#1580) so no later lane edits the root
-`Package.swift`.
+Three new products of the existing package (now the narduk-sound repository),
+one gate and one release tag. The empty targets landed first (narduk-libs#1580)
+so no later lane edits `Package.swift`.
 
 | Product               | Depends on                               | Owns                                                                                                                       |
 | --------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |

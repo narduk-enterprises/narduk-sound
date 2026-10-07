@@ -1,9 +1,16 @@
 # NardukMusic changelog
 
-NardukMusic ships on the narduk-libs repository `vX.Y.Z` tags (SwiftPM), not on
-npm.
+NardukSound ships on this repository's `vX.Y.Z` tags (SwiftPM). Through v0.4.1 it
+shipped on narduk-libs tags.
 
 ## Unreleased
+
+### Changed
+
+- Moved from narduk-libs to its own repository, narduk-sound, with its history.
+  The package identity is now `narduk-sound`: depend on
+  `https://github.com/narduk-enterprises/narduk-sound` and name products with
+  `package: "narduk-sound"`. The gallery app is under `Examples/SoundGallery`.
 
 ### Removed
 

@@ -1,4 +1,10 @@
-# NardukMusic
+# NardukSound
+
+The NardukSound Swift package: the NardukMusic engine plus sound analysis,
+sonification and Metal visualizers. It moved here, with its history, from
+narduk-libs (`packages/modules/narduk-music/swift`) after v0.4.1.
+
+## NardukMusic
 
 A generative music engine: a conductor that writes a song from whatever your app
 is doing, and a synth that plays it. Extracted from
@@ -19,16 +25,16 @@ cues), and the conductor builds, drops and changes tracks to match.
 | `narduk-music`        | macOS, Linux      | A CLI that renders a scenario to a WAV.                                                                                                                                                                                           |
 
 ```swift
-.package(url: "https://github.com/narduk-enterprises/narduk-libs", exact: "0.4.0")
+.package(url: "https://github.com/narduk-enterprises/narduk-sound", exact: "0.5.0")
 ```
 
-Then add `.product(name: "NardukMusicEngine", package: "narduk-libs")` (or
+Then add `.product(name: "NardukMusicEngine", package: "narduk-sound")` (or
 `NardukMusicCore`, etc.) to the target. The repository is public, so resolving
 it needs no credential.
 
 ## The gallery app
 
-`Apps/SoundGallery` is a SwiftUI app for macOS, iPad and iPhone that plays the
+`Examples/SoundGallery` is a SwiftUI app for macOS, iPad and iPhone that plays the
 demo song, the microphone or an audio file through `NardukSoundAnalysis` into
 every Metal visualizer side by side (`xcodegen generate`, then build the
 `SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch).
@@ -150,7 +156,7 @@ plus timed `actions`. See
 [scenarios/build-session.json](scenarios/build-session.json).
 
 ```sh
-swift run -c release narduk-music render --scenario packages/modules/narduk-music/swift/scenarios/build-session.json \
+swift run -c release narduk-music render --scenario scenarios/build-session.json \
   --out /tmp/build-session.wav [--seconds 60] [--genre house] [--seed 7] [--bpm 150] [--json]
 ```
 
