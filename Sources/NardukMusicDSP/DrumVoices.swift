@@ -89,14 +89,22 @@ public struct KickVoice: Sendable, Hashable {
     private var amp: Float = 0
     private var click: Float = 0
     private var tuning: Float = 1
+    private var decay: Float = 0
+    private var gain: Float = 1.45
     private var clickFilter = OnePole()
     private var noise = NoiseSource(seed: 0x9E37_79B9)
 
     public init() {}
 
-    /// `tune` is 0 ... 1 with 0.5 the standard kick: below it the body sits lower, above it higher.
-    public mutating func trigger(velocity: Float, tune: Float = 0.5, _ c: SynthCoefficients) {
-        tuning = DrumTune.multiplier(tune)
+    /// `tune` is 0 ... 1 with 0.5 the standard kick: below it the body sits lower, above it higher. `timbre` is the
+    /// track's patch with this hit's round-robin (`TimbrePatch.vary`): the body's decay, pitch, drive and click noise.
+    public mutating func trigger(
+        velocity: Float, tune: Float = 0.5, timbre: TimbrePatch = .neutral, _ c: SynthCoefficients
+    ) {
+        tuning = DrumTune.multiplier(tune) * timbre.pitch
+        decay = TimbrePatch.scaled(c.kickDecay, by: timbre.drumDecay)
+        gain = 1.45 * (1 + timbre.drive)
+        if timbre.noiseSeed != 0 { noise = NoiseSource(seed: timbre.noiseSeed) }
         active = true
         fading = false
         fade = 1
@@ -120,12 +128,12 @@ public struct KickVoice: Sendable, Hashable {
         let frequency = (45 + 105 * pitchSlow + 320 * pitchFast) * tuning
         phase += frequency * c.invSampleRate
         if phase >= 1 { phase -= 1 }
-        if age >= c.kickHold { amp *= age >= c.kickTailStart ? c.kickTail : c.kickDecay }
+        if age >= c.kickHold { amp *= age >= c.kickTailStart ? c.kickTail : decay }
         click *= c.kickClick
         let n = noise.next()
         let clickSignal = n - clickFilter.lowpass(n)
         var y = sinf(DSP.twoPi * phase) * amp * 1.35 + clickSignal * click * 0.5
-        y = DSP.softClip(y * 1.45) * velocity
+        y = DSP.softClip(y * gain) * velocity
         age += 1
         if fading {
             fade -= c.stealFadeStep
@@ -152,6 +160,8 @@ public struct SnareVoice: Sendable, Hashable {
     private var noiseEnvelope: Float = 0
     private var snap: Float = 0
     private var tuning: Float = 1
+    private var bodyDecay: Float = 0
+    private var noiseDecay: Float = 0
     private var filter = SVF()
     private var noise: NoiseSource
 
@@ -159,9 +169,15 @@ public struct SnareVoice: Sendable, Hashable {
         noise = NoiseSource(seed: seed)
     }
 
-    /// `tune` is 0 ... 1 with 0.5 the standard snare: the body and the noise band move together.
-    public mutating func trigger(velocity: Float, tune: Float = 0.5, _ c: SynthCoefficients) {
-        tuning = DrumTune.multiplier(tune)
+    /// `tune` is 0 ... 1 with 0.5 the standard snare: the body and the noise band move together. `timbre` is the
+    /// track's patch with this hit's round-robin: decay, pitch, the noise band's brightness and the noise itself.
+    public mutating func trigger(
+        velocity: Float, tune: Float = 0.5, timbre: TimbrePatch = .neutral, _ c: SynthCoefficients
+    ) {
+        tuning = DrumTune.multiplier(tune) * timbre.pitch
+        bodyDecay = TimbrePatch.scaled(c.snareBody, by: timbre.drumDecay)
+        noiseDecay = TimbrePatch.scaled(c.snareNoise, by: timbre.drumDecay)
+        if timbre.noiseSeed != 0 { noise = NoiseSource(seed: timbre.noiseSeed) }
         active = true
         fading = false
         fade = 1
@@ -171,7 +187,7 @@ public struct SnareVoice: Sendable, Hashable {
         body = 1
         noiseEnvelope = 1
         snap = 1
-        filter.set(cutoff: 2_300 * tuning, resonance: 0.25, sampleRate: c.sampleRate)
+        filter.set(cutoff: 2_300 * tuning * timbre.drumCutoff, resonance: 0.25, sampleRate: c.sampleRate)
     }
 
     public mutating func steal() { if active { fading = true } }
@@ -179,8 +195,8 @@ public struct SnareVoice: Sendable, Hashable {
     @inline(__always) public mutating func next(_ c: SynthCoefficients) -> Float {
         guard active else { return 0 }
         pitch *= c.snarePitch
-        body *= c.snareBody
-        noiseEnvelope *= c.snareNoise
+        body *= bodyDecay
+        noiseEnvelope *= noiseDecay
         snap *= c.snareSnap
         phase += (185 + 70 * pitch) * tuning * c.invSampleRate
         if phase >= 1 { phase -= 1 }
@@ -220,19 +236,24 @@ public struct HatVoice: Sendable, Hashable {
         noise = NoiseSource(seed: seed)
     }
 
-    /// `tune` is 0 ... 1 with 0.5 the standard hat: the noise bands move up or down together.
-    public mutating func trigger(open: Bool, velocity: Float, pan: Float, tune: Float = 0.5, _ c: SynthCoefficients) {
-        let tuning = DrumTune.multiplier(tune)
+    /// `tune` is 0 ... 1 with 0.5 the standard hat: the noise bands move up or down together. `timbre` is the
+    /// track's patch with this hit's round-robin: decay, the bands' brightness, the stereo spread and the noise.
+    public mutating func trigger(
+        open: Bool, velocity: Float, pan: Float, tune: Float = 0.5, timbre: TimbrePatch = .neutral,
+        _ c: SynthCoefficients
+    ) {
+        let tuning = DrumTune.multiplier(tune) * timbre.pitch * timbre.drumCutoff
+        if timbre.noiseSeed != 0 { noise = NoiseSource(seed: timbre.noiseSeed) }
         active = true
         fading = false
         fade = 1
         isOpen = open
         self.velocity = velocity
         envelope = 1
-        multiplier = open ? c.hatOpen : c.hatClosed
+        multiplier = TimbrePatch.scaled(open ? c.hatOpen : c.hatClosed, by: timbre.drumDecay)
         high.set(cutoff: 7_200 * tuning, resonance: 0.1, sampleRate: c.sampleRate)
         band.set(cutoff: 10_500 * tuning, resonance: 0.45, sampleRate: c.sampleRate)
-        (left, right) = DSP.pan(pan)
+        (left, right) = DSP.pan(timbre.isActive ? min(max(pan * timbre.width, -1), 1) : pan)
     }
 
     public mutating func steal() { if active { fading = true } }

@@ -147,7 +147,7 @@ public struct StringVoice {
     /// Starts a note. `pitch` is MIDI, `gateSamples` how long the key is held, `drive` 0 ... 1 (< 0 for the default).
     public mutating func trigger(
         _ kind: StringKind, pitch notePitch: Float, velocity noteVelocity: Float, gateSamples: Int, pan: Float,
-        drive noteDrive: Float, _ c: SynthCoefficients
+        drive noteDrive: Float, timbre: TimbrePatch = .neutral, _ c: SynthCoefficients
     ) {
         let patch = StringPatch.patch(for: kind)
         self.kind = kind
@@ -163,6 +163,9 @@ public struct StringVoice {
         // Loop filter: a weighted two-point average. Its group delay at low frequency is (1 - weight) samples.
         let hardness = velocity
         brightness = patch.brightnessSoft + (patch.brightnessHard - patch.brightnessSoft) * hardness
+        // The track's timbre (narduk-sound#33): the string already brightens with velocity, so it takes the macro's
+        // tone alone, before the loop is tuned (the loop filter's delay depends on it).
+        if timbre.isActive { brightness = min(max(brightness * timbre.tone.squareRoot(), 0.05), 0.95) }
         let filterDelay = 1 - brightness
         // The rest of the period is whole samples plus an allpass for the fraction.
         let needed = sr / frequency - filterDelay
@@ -175,12 +178,12 @@ public struct StringVoice {
 
         // Loop gain: the string falls 60 dB in `sustain` seconds at MIDI 55, longer or shorter by pitch.
         let octaves = (pitch - 55) / 12
-        let seconds = max(patch.sustain * exp2f(patch.sustainSlope * octaves), 0.15)
+        let seconds = max(patch.sustain * exp2f(patch.sustainSlope * octaves) * timbre.decay, 0.15)
         loopGain = expf(-6.907_755 / (seconds * frequency))
         lifeEnd = Int(seconds * 1.1 * sr)
 
         // Excitation: filtered noise with the pick-position comb, centered, scaled to the note's level.
-        let cutoff = patch.excitationSoft + (patch.excitationHard - patch.excitationSoft) * hardness
+        let cutoff = (patch.excitationSoft + (patch.excitationHard - patch.excitationSoft) * hardness) * timbre.tone
         var pluckFilter = OnePole(cutoff: cutoff, sampleRate: sr)
         let span = length + 1
         var mean: Float = 0
@@ -214,8 +217,9 @@ public struct StringVoice {
         age = 0
         isFading = false
         active = true
-        (left, right) = DSP.pan(pan)
+        (left, right) = DSP.pan(timbre.isActive ? min(max(pan * timbre.width, -1), 1) : pan)
         drive = kind == .electric ? (noteDrive < 0 ? 0.45 : min(noteDrive, 1)) : (kind == .bass ? 0.15 : 0)
+        if timbre.isActive, kind != .acoustic { drive = min(max(drive + timbre.drive, 0), 1) }
 
         dc.setCutoff(28, sampleRate: sr)
         dc.z = 0

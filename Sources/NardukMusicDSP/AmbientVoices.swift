@@ -37,6 +37,8 @@ public struct PadVoice: Sendable, Hashable {
     private var level: Float = 0
     private var cutoff: Float = 900
     private var detune: Float = 1.004
+    /// Stereo width under a track's timbre (narduk-sound#33); 1 is the standard spread and skips the mid-side stage.
+    private var width: Float = 1
     private var filterLeft = SVF()
     private var filterRight = SVF()
 
@@ -54,7 +56,8 @@ public struct PadVoice: Sendable, Hashable {
     }
 
     public mutating func noteOn(
-        _ kind: AmbientKind, pitch: Float, gateSamples: Int, velocity: Float, _ c: SynthCoefficients
+        _ kind: AmbientKind, pitch: Float, gateSamples: Int, velocity: Float, timbre: TimbrePatch = .neutral,
+        _ c: SynthCoefficients
     ) {
         let sr = c.sampleRate
         self.kind = kind
@@ -68,9 +71,14 @@ public struct PadVoice: Sendable, Hashable {
         active = true
         envelope = 0
         level = velocity
-        attack = 1 - expf(-1 / ((kind == .pad ? PadVoice.padAttack : PadVoice.droneAttack) * sr / 3))
-        release = 1 - expf(-1 / ((kind == .pad ? PadVoice.padRelease : PadVoice.droneRelease) * sr / 3))
+        attack = 1 - expf(-1 / ((kind == .pad ? PadVoice.padAttack : PadVoice.droneAttack) * timbre.attack * sr / 3))
+        release = 1 - expf(-1 / ((kind == .pad ? PadVoice.padRelease : PadVoice.droneRelease) * timbre.decay * sr / 3))
         detune = kind == .pad ? 1.0045 : 1.0022
+        width = 1
+        if timbre.isActive {
+            detune = 1 + (detune - 1) * timbre.detune
+            width = timbre.width
+        }
         // The LFO's rate and start depend on the pitch, so voices on different notes drift apart; the same note always
         // drifts the same way (the render stays deterministic).
         let fraction = note * 0.37 - floorf(note * 0.37)
@@ -80,7 +88,7 @@ public struct PadVoice: Sendable, Hashable {
         phaseB = DSP.wrap(fraction * 3.1)
         phaseC = DSP.wrap(fraction * 5.7)
         phaseSub = 0
-        cutoff = kind == .pad ? 1_100 : 260
+        cutoff = (kind == .pad ? 1_100 : 260) * timbre.cutoff
         filterLeft.reset()
         filterRight.reset()
     }
@@ -127,7 +135,12 @@ public struct PadVoice: Sendable, Hashable {
         filterLeft.set(cutoff: cutoff * open * (1 + drift * lfo), resonance: 0.18, sampleRate: c.sampleRate)
         filterRight.set(cutoff: cutoff * open * (1 - drift * lfo), resonance: 0.18, sampleRate: c.sampleRate)
         let gain = envelope * level * (kind == .pad ? 0.2 : 0.28)
-        return (filterLeft.process(rawLeft).low * gain, filterRight.process(rawRight).low * gain)
+        let outLeft = filterLeft.process(rawLeft).low * gain
+        let outRight = filterRight.process(rawRight).low * gain
+        guard width != 1 else { return (outLeft, outRight) }
+        let mid = (outLeft + outRight) * 0.5
+        let side = (outLeft - outRight) * 0.5 * width
+        return (mid + side, mid - side)
     }
 }
 

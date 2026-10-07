@@ -39,6 +39,15 @@ public struct FXVoice: Sendable, Hashable {
     /// 3 dB) instead of the effects' 6 dB dip, so a melody breathes with the kick rather than pumps.
     public private(set) var ducksLightly = false
     private var gateEnd = 0
+    // Keys under a track's timbre (narduk-sound#33): the filters' cutoff multiplier, the attack ramps' speed, the
+    // detuned partners' ratios and a saturation stage (0 bypasses it). The defaults are the standard keys.
+    private var brightness: Float = 1
+    private var attackRate: Float = 1
+    private var stabUp: Float = 1.008
+    private var stabDown: Float = 0.992
+    private var padRatio: Float = 1.006
+    private var pianoRatio: Float = 1.001_5
+    private var saturation: Float = 0
     // Vox vowel: first two formants as start + sweep over the note.
     private var f1Start: Float = 450, f1Sweep: Float = 300, f2Start: Float = 800, f2Sweep: Float = 350
 
@@ -49,7 +58,7 @@ public struct FXVoice: Sendable, Hashable {
 
     public mutating func trigger(
         _ kind: FXKind, pitch: Float, lengthSamples: Int, velocity: Float, pan: Float,
-        voice: Int = -1, _ c: SynthCoefficients
+        voice: Int = -1, timbre patch: TimbrePatch = .neutral, _ c: SynthCoefficients
     ) {
         let sr = c.sampleRate
         self.kind = kind
@@ -69,7 +78,18 @@ public struct FXVoice: Sendable, Hashable {
         filterC.reset()
         held = 0
         holdCounter = 0
-        (left, right) = DSP.pan(pan)
+        (left, right) = DSP.pan(patch.isActive ? min(max(pan * patch.width, -1), 1) : pan)
+        brightness = patch.cutoff
+        attackRate = 1 / patch.attack
+        saturation = patch.isActive ? max(patch.drive, 0) * 4 : 0
+        if patch.isActive {
+            stabUp = 1 + 0.008 * patch.detune
+            stabDown = 1 - 0.008 * patch.detune
+            padRatio = 1 + 0.006 * patch.detune
+            pianoRatio = 1 + 0.001_5 * patch.detune
+        } else {
+            (stabUp, stabDown, padRatio, pianoRatio) = (1.008, 0.992, 1.006, 1.001_5)
+        }
         switch kind {
         case .laser:
             baseHz = min(max(DSP.midiToHz(pitch < 0 ? 96 : pitch), 600), 5_000)
@@ -122,7 +142,7 @@ public struct FXVoice: Sendable, Hashable {
                 }
             baseHz = DSP.midiToHz(foldPitch(pitch < 0 ? 72 : pitch, low: low, high: high))
             let gate = Float(lengthSamples)
-            let (minimum, maximum, ampDecay, toneDecay, release): (Float, Float, Float, Float, Float) =
+            var (minimum, maximum, ampDecay, toneDecay, release): (Float, Float, Float, Float, Float) =
                 switch timbre {
                 case 0: (0.2, 1.2, 0.38, 0.07, 0.09)
                 case 1: (0.06, 0.5, 0.2, 0.06, 0.05)
@@ -134,13 +154,20 @@ public struct FXVoice: Sendable, Hashable {
                 case 9: (0.3, 3.0, 1.6, 0.25, 0.3)  // soft piano: a long mellow decay
                 default: (0.4, 4.0, 60, 1, 0.45)
                 }
+            if patch.isActive {
+                // Longer or shorter rings, and on the unfiltered timbres a brighter strike lasts a little longer.
+                ampDecay *= patch.decay
+                release *= patch.decay
+                toneDecay *= patch.decay * patch.cutoff.squareRoot()
+            }
             switch timbre {
             case 4:
                 env3 = 1
                 mul3 = DSP.decay(seconds: 0.012, sampleRate: sr)  // the mallet knock
             case 6:
-                filterA.set(cutoff: min(baseHz * 2, 6_000), resonance: 0.35, sampleRate: sr)  // the breath band
-                filterB.set(cutoff: 7_000, resonance: 0.1, sampleRate: sr)  // the flute's soft top
+                // The breath band, and the flute's soft top.
+                filterA.set(cutoff: min(baseHz * 2 * brightness, 6_000), resonance: 0.35, sampleRate: sr)
+                filterB.set(cutoff: min(7_000 * brightness, 16_000), resonance: 0.1, sampleRate: sr)
             case 7:
                 env3 = 1
                 mul3 = DSP.decay(seconds: 0.06, sampleRate: sr)  // the inharmonic ring
@@ -152,7 +179,7 @@ public struct FXVoice: Sendable, Hashable {
             case 9:
                 env3 = 1
                 mul3 = DSP.decay(seconds: 0.01, sampleRate: sr)  // the felt hammer
-                filterA.set(cutoff: 900, resonance: 0.1, sampleRate: sr)
+                filterA.set(cutoff: 900 * brightness, resonance: 0.1, sampleRate: sr)
             default:
                 break
             }
@@ -270,11 +297,11 @@ public struct FXVoice: Sendable, Hashable {
                 y = sinf(DSP.twoPi * phaseA + (0.25 + 2.4 * env2) * sinf(DSP.twoPi * phaseB)) * env1 * 0.3
             case 1:
                 // House stab: detuned saws and a square through a snappy lowpass.
-                phaseB = DSP.wrap(phaseB + dt * 1.008)
-                phaseC = DSP.wrap(phaseC + dt * 0.992)
+                phaseB = DSP.wrap(phaseB + dt * stabUp)
+                phaseC = DSP.wrap(phaseC + dt * stabDown)
                 let raw =
-                    DSP.saw(phaseA, dt) + DSP.saw(phaseB, dt * 1.008) * 0.8 + DSP.square(phaseC, dt * 0.992) * 0.35
-                filterA.set(cutoff: 320 + 4_600 * env2, resonance: 0.35, sampleRate: sr)
+                    DSP.saw(phaseA, dt) + DSP.saw(phaseB, dt * stabUp) * 0.8 + DSP.square(phaseC, dt * stabDown) * 0.35
+                filterA.set(cutoff: (320 + 4_600 * env2) * brightness, resonance: 0.35, sampleRate: sr)
                 y = filterA.process(raw).low * env1 * 0.2
             case 2:
                 // Electric piano: a sine with a little second harmonic, a short tine and a slow tremolo.
@@ -290,7 +317,7 @@ public struct FXVoice: Sendable, Hashable {
                 phaseB = DSP.wrap(phaseB + dt * 4)
                 phaseC = DSP.wrap(phaseC + dt * 9.8)
                 env3 *= mul3
-                let attack = min(seconds * 1_000, 1)
+                let attack = min(seconds * attackRate * 1_000, 1)
                 y =
                     (sinf(DSP.twoPi * phaseA) + 0.45 * env2 * sinf(DSP.twoPi * phaseB) + 0.2 * env3
                         * sinf(DSP.twoPi * phaseC)) * env1 * attack * 0.3
@@ -303,7 +330,7 @@ public struct FXVoice: Sendable, Hashable {
                 phaseA = DSP.wrap(phaseA + dt * (vibrato - 1))
                 phaseB = DSP.wrap(phaseB + dt * 2 * vibrato)
                 phaseC = DSP.wrap(phaseC + dt * 3 * vibrato)
-                let attack = min(seconds * 16.7, 1)
+                let attack = min(seconds * attackRate * 16.7, 1)
                 let tone =
                     sinf(DSP.twoPi * phaseA) + 0.12 * sinf(DSP.twoPi * phaseB) + 0.05 * sinf(DSP.twoPi * phaseC)
                 let breath = filterA.process(noiseLeft.next()).band * (0.1 + 0.55 * env2)
@@ -317,7 +344,7 @@ public struct FXVoice: Sendable, Hashable {
                 phaseB = DSP.wrap(phaseB + dt * 2)
                 phaseC = DSP.wrap(phaseC + dt * 3.02)
                 phaseD = DSP.wrap(phaseD + dt * 4.27)
-                let attack = min(seconds * 667, 1)
+                let attack = min(seconds * attackRate * 667, 1)
                 let bite = 1.6 * env4 * sinf(DSP.twoPi * phaseD)
                 y =
                     (sinf(DSP.twoPi * phaseA + bite) + 0.6 * env2 * sinf(DSP.twoPi * phaseB) + 0.3 * env2 * env2
@@ -330,9 +357,9 @@ public struct FXVoice: Sendable, Hashable {
                 let vibrato = 1 + 0.007 * ease * sinf(DSP.twoPi * 5.5 * seconds)
                 let rate = dt * vibrato
                 phaseA = DSP.wrap(phaseA + rate - dt)
-                let attack = min(seconds * 33, 1)
+                let attack = min(seconds * attackRate * 33, 1)
                 let raw = DSP.saw(phaseA, rate) + 0.06 * noiseLeft.next()
-                filterA.set(cutoff: min(baseHz * (3 + 3 * env2), 9_000), resonance: 0.25, sampleRate: sr)
+                filterA.set(cutoff: min(baseHz * (3 + 3 * env2) * brightness, 9_000), resonance: 0.25, sampleRate: sr)
                 let body = filterA.process(raw).low
                 let voiced = body * 0.55 + filterB.process(body).band * 0.9 + filterC.process(body).band * 0.6
                 y = DSP.softClip(voiced * 1.2) * attack * 0.17
@@ -342,8 +369,8 @@ public struct FXVoice: Sendable, Hashable {
                 env3 *= mul3
                 phaseB = DSP.wrap(phaseB + dt * 2.001)
                 phaseC = DSP.wrap(phaseC + dt * 3.003)
-                phaseD = DSP.wrap(phaseD + dt * 1.0015)
-                let attack = min(seconds * 40, 1)
+                phaseD = DSP.wrap(phaseD + dt * pianoRatio)
+                let attack = min(seconds * attackRate * 40, 1)
                 let tone =
                     sinf(DSP.twoPi * phaseA) * 0.6 + sinf(DSP.twoPi * phaseD) * 0.4 + 0.3 * env2
                     * sinf(DSP.twoPi * phaseB) + 0.08 * env2 * sinf(DSP.twoPi * phaseC)
@@ -351,13 +378,15 @@ public struct FXVoice: Sendable, Hashable {
                 y = (tone * attack + hammer) * env1 * 0.24
             default:
                 // Pad: two detuned saws, a slow attack and a gently moving lowpass.
-                phaseB = DSP.wrap(phaseB + dt * 1.006)
-                let attack = min(seconds * 4, 1)
-                let raw = DSP.saw(phaseA, dt) + DSP.saw(phaseB, dt * 1.006)
-                filterA.set(cutoff: 900 + 450 * sinf(DSP.twoPi * 0.3 * seconds), resonance: 0.2, sampleRate: sr)
+                phaseB = DSP.wrap(phaseB + dt * padRatio)
+                let attack = min(seconds * attackRate * 4, 1)
+                let raw = DSP.saw(phaseA, dt) + DSP.saw(phaseB, dt * padRatio)
+                filterA.set(
+                    cutoff: (900 + 450 * sinf(DSP.twoPi * 0.3 * seconds)) * brightness, resonance: 0.2, sampleRate: sr)
                 y = filterA.process(raw).low * attack * 0.11
             }
             y *= env5
+            if saturation > 0 { y = DSP.softClip(y * (1 + saturation)) / (1 + saturation * 0.5) }
             outLeft = y * left
             outRight = y * right
 

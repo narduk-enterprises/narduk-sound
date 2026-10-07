@@ -51,6 +51,8 @@ struct SynthState {
     var nextSnare = 0
     let hats: UnsafeMutablePointer<HatVoice>
     var nextHat = 0
+    /// Drum hits played with a track's timbre: the round-robin index (`TimbrePatch.vary`).
+    var drumRound: UInt32 = 0
     let fx: UnsafeMutablePointer<FXVoice>
     var nextFX = 0
     let strings: UnsafeMutablePointer<StringVoice>
@@ -281,18 +283,32 @@ struct SynthState {
         clock.sample(forStep: event.step + Int(event.lengthSteps)) - clock.sample(forStep: event.step)
     }
 
+    /// The note's track timbre (narduk-sound#33), decoded once as it starts; a drum hit also takes the next
+    /// round-robin variation. `.neutral` (and no round-robin) for a note without one.
+    mutating func timbrePatch(_ e: SynthEvent, drum: Bool = false) -> TimbrePatch {
+        guard e.timbre != 0 else { return .neutral }
+        var patch = TimbrePatch(packed: e.timbre, velocity: e.velocity)
+        if drum, patch.isActive {
+            drumRound &+= 1
+            patch.vary(round: drumRound)
+        }
+        return patch
+    }
+
     mutating func trigger(_ e: SynthEvent) {
         let velocity = e.velocity
         switch e.instrument {
         case 0:  // kick
             kicks[nextKick].steal()
             nextKick = (nextKick + 1) % SynthState.kickCount
-            kicks[nextKick].trigger(velocity: velocity, tune: e.formant >= 0 ? e.formant : 0.5, c)
+            kicks[nextKick].trigger(
+                velocity: velocity, tune: e.formant >= 0 ? e.formant : 0.5, timbre: timbrePatch(e, drum: true), c)
             sidechainAttacking = true
         case 1:  // snare
             // Round-robin so roll tails overlap naturally.
             nextSnare = (nextSnare + 1) % SynthState.snareCount
-            snares[nextSnare].trigger(velocity: velocity, tune: e.formant >= 0 ? e.formant : 0.5, c)
+            snares[nextSnare].trigger(
+                velocity: velocity, tune: e.formant >= 0 ? e.formant : 0.5, timbre: timbrePatch(e, drum: true), c)
         case 2, 3:  // hat, openHat
             let open = e.instrument == 3
             if !open {
@@ -301,12 +317,12 @@ struct SynthState {
             nextHat = (nextHat + 1) % SynthState.hatCount
             hats[nextHat].trigger(
                 open: open, velocity: velocity * (open ? 0.85 : 0.7), pan: e.pan + 0.15,
-                tune: e.formant >= 0 ? e.formant : 0.5, c)
+                tune: e.formant >= 0 ? e.formant : 0.5, timbre: timbrePatch(e, drum: true), c)
         case 4:  // wobble
             wobble.noteOn(
                 pitch: e.pitch, gateSamples: gateSamples(e), cyclesPerBeat: e.cyclesPerBeat,
                 bpm: Float(clock.bpm), formant: e.formant, drive: e.drive, voice: Int(max(e.voice, 0)),
-                velocity: velocity, pan: e.pan, glide: e.glide, c)
+                velocity: velocity, pan: e.pan, glide: e.glide, timbre: timbrePatch(e), c)
         case 5:  // sub
             sub.noteOn(pitch: e.pitch, gateSamples: gateSamples(e), velocity: velocity, glide: e.glide, c)
         case 6:  // glitch: master stutter + a crushed blip
@@ -372,7 +388,8 @@ struct SynthState {
         }
         if slot < 0 { slot = oldest }
         strings[slot].trigger(
-            kind, pitch: e.pitch, velocity: e.velocity, gateSamples: gateSamples(e), pan: e.pan, drive: e.drive, c)
+            kind, pitch: e.pitch, velocity: e.velocity, gateSamples: gateSamples(e), pan: e.pan, drive: e.drive,
+            timbre: timbrePatch(e), c)
         stringsLive += 1
     }
 
@@ -503,10 +520,11 @@ struct SynthState {
             pads[slot].steal()
         }
         let gate = gateSamples(e)
-        pads[slot].noteOn(kind, pitch: e.pitch, gateSamples: gate, velocity: e.velocity, c)
+        let timbre = timbrePatch(e)
+        pads[slot].noteOn(kind, pitch: e.pitch, gateSamples: gate, velocity: e.velocity, timbre: timbre, c)
         // Keep the chain running through the note, its release and the hall's tail.
         let run =
-            gate + PadVoice.releaseSamples(kind, sampleRate: c.sampleRate)
+            gate + Int(Float(PadVoice.releaseSamples(kind, sampleRate: c.sampleRate)) * timbre.decay)
             + Int(space.reverbSeconds * 1.2 * c.sampleRate)
         ambientTail = max(ambientTail, run)
     }
@@ -524,7 +542,7 @@ struct SynthState {
         }
         fx[slot].trigger(
             kind, pitch: e.pitch, lengthSamples: gateSamples(e), velocity: e.velocity, pan: e.pan, voice: Int(e.voice),
-            c)
+            timbre: kind == .keys ? timbrePatch(e) : .neutral, c)
     }
 
     // MARK: Render

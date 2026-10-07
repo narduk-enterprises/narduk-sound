@@ -133,6 +133,8 @@ public struct WobbleVoice: Sendable {
     private var formant2 = SVF()
     private var dcBlock = OnePole()
     private var glideCoefficient: Float = 0.999
+    private var attackStep: Float = 0
+    private var release: Float = 0
     /// The current filter cutoff in Hz (for the visualizer).
     public private(set) var cutoff: Float = 20
 
@@ -140,7 +142,8 @@ public struct WobbleVoice: Sendable {
 
     public mutating func noteOn(
         pitch: Float, gateSamples: Int, cyclesPerBeat: Float, bpm: Float, formant: Float,
-        drive: Float, voice: Int, velocity: Float, pan: Float, glide: Float = -1, _ c: SynthCoefficients
+        drive: Float, voice: Int, velocity: Float, pan: Float, glide: Float = -1, timbre: TimbrePatch = .neutral,
+        _ c: SynthCoefficients
     ) {
         glideCoefficient = glide < 0 ? c.glide : DSP.decay(seconds: 0.035 + 0.215 * glide, sampleRate: c.sampleRate)
         let note = foldPitch(pitch < 0 ? 41 : pitch, low: 33, high: 56)
@@ -153,7 +156,15 @@ public struct WobbleVoice: Sendable {
             formant1.reset()
             formant2.reset()
         }
-        let patch = WobblePatch.patch(for: voice)
+        var patch = WobblePatch.patch(for: voice)
+        // The track's timbre: detune spread, filter floor, drive, attack, release and width (narduk-sound#33).
+        if timbre.isActive {
+            patch.detuneCents *= timbre.detune
+            patch.baseCutoff *= timbre.cutoff
+            patch.drive = min(max(patch.drive + timbre.drive, 0), 1)
+        }
+        attackStep = c.attackStep / timbre.attack
+        release = TimbrePatch.scaled(c.release, by: timbre.decay)
         sawMix = patch.sawMix
         detune = exp2f(patch.detuneCents / 1_200)
         squareMix = patch.squareMix
@@ -163,7 +174,7 @@ public struct WobbleVoice: Sendable {
         depthOctaves = patch.depthOctaves
         resonance = patch.resonance
         formantMix = patch.formantMix
-        self.drive = drive < 0 ? patch.drive : drive
+        self.drive = drive < 0 ? patch.drive : timbre.isActive ? min(max(drive + timbre.drive, 0), 1) : drive
         self.formant = formant < 0 ? 0.5 : formant
         self.velocity = velocity
         let rate = cyclesPerBeat > 0 ? cyclesPerBeat : 1
@@ -172,16 +183,16 @@ public struct WobbleVoice: Sendable {
         gate = max(gateSamples, 1)
         active = true
         dcBlock.setCutoff(28, sampleRate: c.sampleRate)
-        (left, right) = DSP.pan(pan * 0.5)
+        (left, right) = DSP.pan(min(max(pan * 0.5 * timbre.width, -1), 1))
     }
 
     @inline(__always) public mutating func next(_ c: SynthCoefficients) -> (Float, Float) {
         guard active else { return (0, 0) }
         if gate > 0 {
             gate -= 1
-            amp = min(1, amp + c.attackStep)
+            amp = min(1, amp + attackStep)
         } else {
-            amp *= c.release
+            amp *= release
             if amp < 0.000_1 {
                 active = false
                 return (0, 0)

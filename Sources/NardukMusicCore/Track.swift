@@ -176,6 +176,10 @@ struct Track: Sendable, Hashable {
     var vocals: VocalPlan?
     var outro: Outro = .drumBridge
     var name = "Untitled"
+    /// The track's timbre macro (narduk-sound#33): nil at variety 0, so such a song keeps its original sound.
+    var timbre: TimbreMacro?
+    /// The designed character `timbre` was drawn from; the next track of the genre takes a different one.
+    var timbreCharacter: TimbreCharacter?
 
     /// The kit the song plays in a section.
     func kit(drop2: Bool) -> DrumVariant {
@@ -356,6 +360,10 @@ enum TrackGenerator {
         }
         // Variety draws from streams of its own, after every banked draw, so variety 0 leaves the track untouched.
         Variety.apply(to: &t, variety: variety, previous: previous)
+        if variety > 0 {
+            (t.timbreCharacter, t.timbre) = TimbreMacro.draw(
+                genre: genre, seed: t.seed, variety: variety, previous: previous?.timbreCharacter)
+        }
         t.name = name(t, topApp: topApp, rng: &rng)
         return t
     }
