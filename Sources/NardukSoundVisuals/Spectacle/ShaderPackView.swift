@@ -50,7 +50,8 @@
             context.coordinator.attach(kind: kind, state: state, input: input, calm: calm)
             let fps = context.environment.soundFramesPerSecond
             let rate = SoundRenderBudget.rate(fps)
-            if rate > 0, view.preferredFramesPerSecond != rate { view.preferredFramesPerSecond = rate }
+            let governed = (view as? TunnelMTKView)?.governed(rate) ?? rate
+            if governed > 0, view.preferredFramesPerSecond != governed { view.preferredFramesPerSecond = governed }
             if view.isPaused != (fps <= 0) { view.isPaused = fps <= 0 }
         }
 
@@ -119,6 +120,7 @@
                 inFlight.withLock { $0 += 1 }
                 let inFlight = self.inFlight
                 buffer.addCompletedHandler { _ in inFlight.withLock { $0 -= 1 } }
+                (view as? TunnelMTKView)?.track(buffer, label: "\(kind)")
                 buffer.present(drawable)
                 buffer.commit()
             }

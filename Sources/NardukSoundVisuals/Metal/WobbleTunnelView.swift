@@ -52,7 +52,8 @@
             context.coordinator.attach(state: state, input: input, calm: calm)
             let fps = context.environment.soundFramesPerSecond
             let rate = SoundRenderBudget.rate(fps)
-            if rate > 0, view.preferredFramesPerSecond != rate { view.preferredFramesPerSecond = rate }
+            let governed = (view as? TunnelMTKView)?.governed(rate) ?? rate
+            if governed > 0, view.preferredFramesPerSecond != governed { view.preferredFramesPerSecond = governed }
             if view.isPaused != (fps <= 0) { view.isPaused = fps <= 0 }
         }
 
@@ -108,6 +109,7 @@
                 inFlight.withLock { $0 += 1 }
                 let inFlight = self.inFlight
                 buffer.addCompletedHandler { _ in inFlight.withLock { $0 -= 1 } }
+                (view as? TunnelMTKView)?.track(buffer, label: "tunnel")
                 buffer.present(drawable)
                 buffer.commit()
             }
@@ -116,7 +118,38 @@
 
     /// An `MTKView` that keeps its drawable at `WobbleTunnelDrawableSizer`'s size, re-sized only once a change settles.
     final class TunnelMTKView: MTKView {
-        static let renderScale: CGFloat = 0.75
+        /// Lowers the render scale and rate when this GPU cannot keep up (fed from each frame's command buffer).
+        private let governor = OSAllocatedUnfairLock(initialState: SoundRenderGovernor())
+        private var renderScale: CGFloat = SoundRenderGovernor.maxScale
+        private var halfRate = false
+
+        /// Times `buffer` for the governor (and the frame meter under `-perfLog YES`). Call before committing.
+        func track(_ buffer: MTLCommandBuffer, label: String) {
+            SoundFrameMeter.shared.track(buffer, label: label)
+            let governor = self.governor
+            buffer.addCompletedHandler { [weak self] done in
+                let (start, end) = (done.gpuStartTime, done.gpuEndTime)
+                let gpuMs = (end - start) * 1000
+                guard gpuMs > 0 else { return }
+                let changed: SoundRenderGovernor? = governor.withLock { g in
+                    g.observe(gpuMs: gpuMs, at: end) ? g : nil
+                }
+                guard let changed else { return }
+                Task { @MainActor [weak self] in self?.apply(changed) }
+            }
+        }
+
+        /// `rate` from the render budget, halved while the governor says this GPU is behind.
+        func governed(_ rate: Int) -> Int { halfRate ? min(rate, SoundRenderBudget.reduced) : rate }
+
+        private func apply(_ governor: SoundRenderGovernor) {
+            halfRate = governor.halfRate
+            if preferredFramesPerSecond > 0 { preferredFramesPerSecond = governed(SoundRenderBudget.normal) }
+            if renderScale != CGFloat(governor.scale) {
+                renderScale = CGFloat(governor.scale)
+                resizeDrawable()
+            }
+        }
 
         private var sizer = WobbleTunnelDrawableSizer()
         private var settleTask: Task<Void, Never>?
@@ -163,7 +196,7 @@
 
         private func resizeDrawable() {
             let target = WobbleTunnelDrawableSizer.target(
-                points: bounds.size, backingScale: backingScale, renderScale: Self.renderScale)
+                points: bounds.size, backingScale: backingScale, renderScale: renderScale)
             if let size = sizer.propose(target, at: CACurrentMediaTime()) {
                 if drawableSize != size { drawableSize = size }
                 return
