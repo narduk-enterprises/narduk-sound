@@ -124,8 +124,10 @@ import Testing
         let drops = Self.dropBars(r)
         #expect(drops.count >= 8)
         for bar in Self.plainBars(drops) {
-            #expect(Self.hits(r, .snare, bar: bar, minVelocity: 0.9) == [4, 12], "snares in bar \(bar)")
-            #expect(Self.hits(r, .snare, bar: bar, minVelocity: 0.5) == [4, 12])
+            // A song may play its backbeat at half time (narduk-libs#1617): the snare moves to 3.
+            let snares = r.tracks[bar * Self.bar].halfTime ? [8] : [4, 12]
+            #expect(Self.hits(r, .snare, bar: bar, minVelocity: 0.9) == snares, "snares in bar \(bar)")
+            #expect(Self.hits(r, .snare, bar: bar, minVelocity: 0.5) == snares)
         }
         for bar in drops {
             #expect(Self.hits(r, .kick, bar: bar).contains(0) && Self.hits(r, .kick, bar: bar).contains(10))

@@ -113,4 +113,15 @@ import Testing
             SongSettings.self, from: JSONEncoder().encode(SongSettings(variety: 0.4)))
         #expect(round.variety == 0.4)
     }
+
+    @Test func halfTimeIsRareAndOnlyWhereTheBackbeatHasIt() {
+        for genre in Genre.allCases {
+            let halves = Self.tracks(genre, variety: 1).filter(\.halfTime).count
+            if Variety.halfTimes(genre) {
+                #expect((1...10).contains(halves), "\(genre.rawValue): \(halves) half-time songs in 16")
+            } else {
+                #expect(halves == 0, "\(genre.rawValue)")
+            }
+        }
+    }
 }

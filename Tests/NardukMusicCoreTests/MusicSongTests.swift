@@ -330,7 +330,9 @@ import Testing
                 case .dubstep, .riddim, .trap, .chill:
                     #expect(hits(.snare, bar) == [8], "\(genre) half-time snare bar \(bar)")
                 case .drumAndBass, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk:
-                    #expect(hits(.snare, bar) == [4, 12], "\(genre) backbeat bar \(bar)")
+                    // A song may play its backbeat at half time (narduk-libs#1617): the snare moves to 3.
+                    let expected = p.tracks[bar * 16].halfTime && Variety.halfTimes(genre) ? [8] : [4, 12]
+                    #expect(hits(.snare, bar) == expected, "\(genre) backbeat bar \(bar)")
                 case .house, .techno:
                     #expect(
                         Set([0, 4, 8, 12]).isSubset(of: Set(hits(.kick, bar, loud: false))), "house four-to-the-floor")

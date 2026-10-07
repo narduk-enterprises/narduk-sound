@@ -534,7 +534,7 @@ enum GenreArrangement {
 
         var kicks = c.barInPhrase % 2 == 0 ? variant.kicksA : variant.kicksB
         var snares = variant.snares
-        if kind == .halfTime {
+        if kind == .halfTime || c.track.halfTime {
             if snares.contains(4) {
                 kicks = [0, 10]
                 snares = [8]

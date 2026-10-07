@@ -148,6 +148,8 @@ struct Track: Sendable, Hashable {
     /// Kits written for this song (narduk-libs#1617): the drop's, then DROP2's. Empty plays the bank's `drums`.
     var kits: [DrumVariant] = []
     /// 0 ... 1 per drum voice, 0.5 the standard one: this song's kick, snare and hat tuning.
+    /// The drops play the backbeat at half time: one snare on 3, kicks thinned (narduk-libs#1617).
+    var halfTime = false
     var kickTune = 0.5
     var snareTune = 0.5
     var hatTune = 0.5

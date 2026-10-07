@@ -135,9 +135,18 @@ enum Variety {
         if rng.unit() < 0.6 * variety { track.keysVoice = Int(rng.next() % 3) }
     }
 
+    /// Genres whose backbeat has a half-time reading: the snare moves from 2 and 4 to 3.
+    static func halfTimes(_ genre: Genre) -> Bool {
+        switch genre {
+        case .drumAndBass, .ukGarage, .lofi, .rock: true
+        default: false
+        }
+    }
+
     /// How long a song's drops run and how many phrases it spends before handing over.
     static func applyArrangement(to track: inout Track, variety: Double) {
         var rng = stream(track, "arrangement")
+        track.halfTime = halfTimes(track.genre) && rng.unit() < 0.3
         track.drop2Length = 1 + Int(rng.next() % 3)
         track.dropBudget = 2 + track.drop2Length + Int(rng.next() % 3)
         track.maxPhrases = 8 + Int(rng.next() % 5)
