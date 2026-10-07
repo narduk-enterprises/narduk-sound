@@ -151,7 +151,9 @@ public struct TrackFeatures: Sendable, Hashable, Codable {
     /// How different two songs are, 0 (identical features) ... 1: the mean of nine group distances, each scaled to
     /// 0 ... 1 by a fixed constant (never by the run's own spread, so baselines compare across runs).
     public static func distance(_ a: TrackFeatures, _ b: TrackFeatures) -> Double {
-        groupDistances(a, b).values.reduce(0, +) / Double(groupNames.count)
+        let groups = groupDistances(a, b)
+        // Summed in a fixed order: a dictionary's order changes between runs, and so would the last bit of the sum.
+        return groupNames.reduce(0) { $0 + (groups[$1] ?? 0) } / Double(groupNames.count)
     }
 
     public static let groupNames = [
