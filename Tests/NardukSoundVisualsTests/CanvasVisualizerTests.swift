@@ -124,6 +124,33 @@
             }
         }
 
+        @Test func aRoomyCardKeepsTheLooseLabelledPads() {
+            let layout = SoundVisualizers.PadLayout.fit(
+                count: Instrument.allCases.count, in: CGSize(width: 480, height: 270))
+            #expect(layout.showsLabels)
+            #expect(layout.gap == 8)
+        }
+
+        @Test func aShortCardPacksPadsWithoutOverlappingLabels() {
+            let count = Instrument.allCases.count
+            for size in [
+                CGSize(width: 380, height: 90), CGSize(width: 300, height: 60),
+                CGSize(width: 200, height: 40),
+            ] {
+                let layout = SoundVisualizers.PadLayout.fit(count: count, in: size)
+                #expect(layout.columns * layout.rows >= count, "\(size)")
+                let h = (size.height - layout.gap * CGFloat(layout.rows + 1)) / CGFloat(layout.rows)
+                #expect(h > 0, "\(size)")
+                // Labels only when a line of text fits in a pad: never stacked on top of each other.
+                #expect(
+                    !layout.showsLabels || h >= SoundVisualizers.PadLayout.minLabelHeight, "\(size)"
+                )
+            }
+            #expect(
+                SoundVisualizers.PadLayout.fit(count: count, in: CGSize(width: 380, height: 90))
+                    .showsLabels)
+        }
+
         @Test func theScopeTriggersOnTheFirstRisingZeroCrossing() {
             var wave = [Float](repeating: 0.4, count: SoundFrame.waveformCount)
             wave[10] = -0.3  // falls below zero at 10, crosses up at 11

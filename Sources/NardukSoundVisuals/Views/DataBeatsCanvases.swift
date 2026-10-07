@@ -249,15 +249,61 @@
             min(12, max(6, (cellWidth - 8) / (0.6 * CGFloat(max(characters, 1)))))
         }
 
+        /// How the pads sit in a card. Roomy cards keep the loose grid with a label on every pad; a card too short for
+        /// that (Data Beats' is about 380 x 90 pt for 21 instruments) packs wider pads on a tighter gap and keeps the
+        /// label only where a line of text fits.
+        struct PadLayout: Equatable {
+            var columns: Int
+            var rows: Int
+            var gap: CGFloat
+            var cornerRadius: CGFloat
+            var showsLabels: Bool
+
+            /// The shortest pad that holds a legible label.
+            static let minLabelHeight: CGFloat = 14
+            static let compactGap: CGFloat = 3
+
+            static func fit(count: Int, in size: CGSize) -> PadLayout {
+                func make(columns: Int, gap: CGFloat) -> (PadLayout, CGFloat, CGFloat) {
+                    let rows = (count + columns - 1) / columns
+                    let w = (size.width - gap * CGFloat(columns + 1)) / CGFloat(columns)
+                    let h = (size.height - gap * CGFloat(rows + 1)) / CGFloat(rows)
+                    return (
+                        PadLayout(
+                            columns: columns, rows: rows, gap: gap,
+                            cornerRadius: min(8, max(2, h / 3)),
+                            showsLabels: h >= minLabelHeight), w, h
+                    )
+                }
+                let loose = make(columns: max(2, min(count, Int(size.width / 86))), gap: 8)
+                if loose.0.showsLabels { return loose.0 }
+                // Too short for labels: try every column count and keep the one whose pads are tallest while still
+                // wide enough for a short name (about 34 pt); if none can hold a label, take the tallest and go bare.
+                var best = make(columns: max(2, min(count, Int(size.width / 86))), gap: compactGap)
+                for columns in 2...max(2, count) {
+                    let candidate = make(columns: columns, gap: compactGap)
+                    guard candidate.1 > 0, candidate.2 > 0 else { continue }
+                    let fits = candidate.0.showsLabels && candidate.1 >= 34
+                    let bestFits = best.0.showsLabels && best.1 >= 34
+                    if (fits && !bestFits) || (fits == bestFits && candidate.2 > best.2) {
+                        best = candidate
+                    }
+                }
+                return best.0
+            }
+        }
+
         /// One pad per instrument; each flashes when the instrument fires.
         static func pads(
-            _ ctx: inout GraphicsContext, _ size: CGSize, _ s: SoundVisualState, _ style: SoundVisualizerStyle
+            _ ctx: inout GraphicsContext, _ size: CGSize, _ s: SoundVisualState,
+            _ style: SoundVisualizerStyle
         ) {
             let all = Instrument.allCases
             guard size.width > 60, size.height > 40 else { return }
-            let columns = max(2, min(all.count, Int(size.width / 86)))
-            let rows = (all.count + columns - 1) / columns
-            let gap: CGFloat = 8
+            let layout = PadLayout.fit(count: all.count, in: size)
+            let columns = layout.columns
+            let rows = layout.rows
+            let gap = layout.gap
             let cellW = (size.width - gap * CGFloat(columns + 1)) / CGFloat(columns)
             let cellH = (size.height - gap * CGFloat(rows + 1)) / CGFloat(rows)
             let brightness = s.padBrightness
@@ -265,9 +311,10 @@
                 let col = index % columns
                 let row = index / columns
                 let rect = CGRect(
-                    x: gap + CGFloat(col) * (cellW + gap), y: gap + CGFloat(row) * (cellH + gap), width: cellW,
+                    x: gap + CGFloat(col) * (cellW + gap), y: gap + CGFloat(row) * (cellH + gap),
+                    width: cellW,
                     height: cellH)
-                let shape = Path(roundedRect: rect, cornerRadius: 8)
+                let shape = Path(roundedRect: rect, cornerRadius: layout.cornerRadius)
                 let level = Double(brightness[instrument.index])
                 let color = SoundCanvas.color(s.palette.sample(padPosition(instrument)))
                 ctx.fill(shape, with: .color(Color.white.opacity(0.06)))
@@ -282,12 +329,15 @@
                     }
                 }
                 ctx.stroke(shape, with: .color(color.opacity(0.25 + 0.75 * level)), lineWidth: 1.2)
+                guard layout.showsLabels else { continue }
                 ctx.draw(
                     Text(instrument.rawValue.uppercased())
                         .font(
                             .system(
-                                size: labelSize(instrument.rawValue.count, cellWidth: cellW), weight: .bold,
-                                design: .monospaced)
+                                size: min(
+                                    labelSize(instrument.rawValue.count, cellWidth: cellW),
+                                    max(6, cellH - 4)),
+                                weight: .bold, design: .monospaced)
                         )
                         .foregroundStyle(level > 0.5 ? Color.white : color.opacity(0.85)),
                     at: CGPoint(x: rect.midX, y: rect.midY), anchor: .center)
