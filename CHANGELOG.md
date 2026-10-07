@@ -12,7 +12,14 @@ about itself, and the products around it land.
 - `NardukSoundAnalysis`: any audio to a `SoundFrame` (spectrum, waveform, loudness) with `SoundAnalyzer`, `SPSCRing`,
   `SampleRing`, recent-sample and ring sources, and `AudioTapSource` on Apple hosts.
 - `NardukSonify`: `StreamSonifier` turns a stream of numbers into `MusicSignal`s, online and in bounded memory.
-- `NardukSoundVisuals`: `SoundVisualState`, the render budget and the palette contract.
+- `NardukSoundVisuals`: `SoundVisualState`, the render budget (`SoundRenderBudget`) and the palette contract, with the
+  visualizers on top: the seven Canvas visualizers (`SoundVisualizers.draw`, `SoundVisualizerView`), the Metal wobble
+  tunnel, and the spectacle set (kick-driven particle field, beat tunnel kaleidoscope, a Metal shader pack with a
+  feedback pass). The spectacle visualizers read `MusicContext` (snare ratchet, build arc).
+- `SoundGallery`, a multiplatform app (macOS, iPad, iPhone) that draws the demo song, the mic or a file, with a song
+  picker, full-screen tiles and the spectacle visualizers as tiles.
+- `SongRecipe`: a song as plain fields, mapped to `SongSettings` and an energy script.
+- Ambient: a genre family (swell and settle by signal level) with hall reverb, stereo delay, and pad and drone voices.
 - `MusicContext` and `HitCounters` (`NardukMusicCore`): the beat clock, section, energy, thresholds, `dropQueued` and
   per-instrument monotonic hit counters.
 - `DropEngine.latestSound` (`SoundFrame`) and `latestMusic` (`MusicContext`), published ~60 Hz and not observed.
@@ -34,7 +41,8 @@ about itself, and the products around it land.
 ### Source compatibility
 
 New `Genre` cases break exhaustive switches in apps. Data Beats: `VisualKit.swift:22-30`, `Panels.swift:296`.
-Wirewatcher: `DropPalette.swift:80`, `DropPanel.swift:253`.
+Wirewatcher: `DropPalette.swift:80`, `DropPanel.swift:253`, and `Instrument.glow` in `DropTrafficLayer.swift` for the
+new guitar instruments.
 The band genres add `rock`, `folk` and `funk` to the same switches (a title and a palette each).
 
 ## 0.3.0
