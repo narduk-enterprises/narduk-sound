@@ -86,11 +86,24 @@ public struct MusicContext: Sendable, Hashable {
     public var dropThreshold: Float
     public var dropQueued: Bool
 
+    // Notes: the pitches the music is playing (docs/sound-contract.md section 2). All empty from a source that does not
+    // know its notes, and visualizers fall back to the analysis chroma.
+    /// MIDI notes sounding now.
+    public var heldNotes: NoteSet
+    /// Per-note monotonic strike counters; consumers diff against the last value they saw (`struck(since:)`).
+    public var noteCounts: NoteCounters
+    /// The key's tonic as a pitch class (0 = C ... 11 = B), when the source knows it; nil otherwise.
+    public var keyPitchClass: Int?
+    /// True when the key is minor, when the source knows it.
+    public var keyIsMinor: Bool?
+
     public init(
         hitCounts: HitCounters = HitCounters(), step: Int = 0, section: SongSection = .intro, energy: Float = 0,
         wobblePhase: Float = 0, wobbleCutoff: Float = 0, isRunning: Bool = false,
         secondsPerStep: Double = 60.0 / 140 / 4, stepsPerBar: Int = 16, stepsPerPhrase: Int = 128,
-        phraseProgress: Float = 0, buildThreshold: Float = 0.55, dropThreshold: Float = 0.4, dropQueued: Bool = false
+        phraseProgress: Float = 0, buildThreshold: Float = 0.55, dropThreshold: Float = 0.4, dropQueued: Bool = false,
+        heldNotes: NoteSet = NoteSet(), noteCounts: NoteCounters = NoteCounters(), keyPitchClass: Int? = nil,
+        keyIsMinor: Bool? = nil
     ) {
         self.hitCounts = hitCounts
         self.step = step
@@ -106,5 +119,9 @@ public struct MusicContext: Sendable, Hashable {
         self.buildThreshold = buildThreshold
         self.dropThreshold = dropThreshold
         self.dropQueued = dropQueued
+        self.heldNotes = heldNotes
+        self.noteCounts = noteCounts
+        self.keyPitchClass = keyPitchClass.map { (($0 % 12) + 12) % 12 }
+        self.keyIsMinor = keyIsMinor
     }
 }

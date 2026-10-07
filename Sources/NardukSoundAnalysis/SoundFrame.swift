@@ -5,6 +5,7 @@
 public struct SoundFrame: Sendable, Hashable {
     public static let spectrumCount = SpectrumAnalyzer.bandCount
     public static let waveformCount = 512
+    public static let chromaCount = 12
     /// The level reported for silence, in dBFS.
     public static let silenceDB: Float = Loudness.silenceDB
 
@@ -14,6 +15,9 @@ public struct SoundFrame: Sendable, Hashable {
     public var time: Double
     /// Log-spaced magnitude bands, 0 ... 1 (64 bands, 20 Hz – 16 kHz).
     public var spectrum: [Float]
+    /// How strongly each pitch class sounds, 0 ... 1 (index 0 = C ... 11 = B), folded from the spectrum between 80 Hz and
+    /// 4 kHz and scaled so the strongest class reads 1 whenever anything is audible. All zero in silence.
+    public var chroma: [Float]
     /// The latest waveform, mono, -1 ... 1 (512 samples, oldest first).
     public var waveform: [Float]
     /// Peak and RMS over the most recent analysis window, in dBFS (silence is -120).
@@ -24,7 +28,8 @@ public struct SoundFrame: Sendable, Hashable {
         sequence: UInt64 = 0, time: Double = 0,
         spectrum: [Float] = Array(repeating: 0, count: SoundFrame.spectrumCount),
         waveform: [Float] = Array(repeating: 0, count: SoundFrame.waveformCount),
-        peakDB: Float = SoundFrame.silenceDB, rmsDB: Float = SoundFrame.silenceDB
+        peakDB: Float = SoundFrame.silenceDB, rmsDB: Float = SoundFrame.silenceDB,
+        chroma: [Float] = Array(repeating: 0, count: SoundFrame.chromaCount)
     ) {
         self.sequence = sequence
         self.time = time
@@ -32,5 +37,6 @@ public struct SoundFrame: Sendable, Hashable {
         self.waveform = waveform
         self.peakDB = peakDB
         self.rmsDB = rmsDB
+        self.chroma = chroma
     }
 }

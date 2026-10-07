@@ -75,15 +75,18 @@
             let frames = (0..<8).map { Script.frame(UInt64($0 + 1), level: 0.2 + Float($0) * 0.1) }
             let sections = SongSection.allCases
             var contexts: [MusicContext] = []
+            var notes = NoteCounters()
             for i in 0..<600 {
                 var counts = HitCounters()
+                if i % 6 == 0 { notes.record(48 + (i / 6) % 30) }
+                let held = NoteSet([48 + (i / 6) % 30, 55 + (i / 9) % 20])
                 for instrument in Instrument.allCases where (i + instrument.index) % 3 == 0 {
                     for _ in 0..<(i % 4 + 1) { counts.record(instrument) }
                 }
                 contexts.append(
                     MusicContext(
                         hitCounts: counts, step: i / 4, section: sections[(i / 60) % sections.count], energy: 0.9,
-                        isRunning: true))
+                        isRunning: true, heldNotes: held, noteCounts: notes))
             }
             var now = 1.0
             // Warm every path (first touch, particle pool wrap) before arming.

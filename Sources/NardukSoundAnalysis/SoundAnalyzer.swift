@@ -28,7 +28,8 @@ public final class SoundAnalyzer {
         let copied = min(samples.count, waveform.count)
         for i in 0..<copied { waveform[waveform.count - copied + i] = samples[samples.count - copied + i] }
         return SoundFrame(
-            sequence: sequence, time: time, spectrum: spectrum, waveform: waveform, peakDB: peak, rmsDB: rms)
+            sequence: sequence, time: time, spectrum: spectrum, waveform: waveform, peakDB: peak, rmsDB: rms,
+            chroma: spectrumAnalyzer.chroma)
     }
 
     public func analyze(_ samples: [Float], time: Double) -> SoundFrame {

@@ -2,6 +2,23 @@
 
 NardukMusic ships on the narduk-libs repository `vX.Y.Z` tags (SwiftPM), not on npm.
 
+## Unreleased
+
+### Added
+
+- Two musical visualizers in `NardukSoundVisuals` (narduk-libs#1573): `SoundVisualizerKind.pianoRoll`, a note waterfall,
+  and `.pitchWheel`, the 12 pitch classes around a wheel with the key marked. Both draw from `SoundVisualState.musical`
+  (`SoundMusicalState`: smoothed pitch classes, a 96-column note roll, a key estimate). SoundGallery shows both as tiles.
+- `SoundFrame.chroma` (12 pitch classes, 0 ... 1), computed by `SpectrumAnalyzer` and `SoundAnalyzer` from the spectrum's
+  peaks, placed by their true frequency. It gives raw audio (a file, a microphone) the pitch-class view.
+- `MusicContext.heldNotes`, `noteCounts`, `keyPitchClass` and `keyIsMinor`, with `NoteSet`, `NoteCounters` and
+  `NoteTracker` in `NardukMusicCore`. `DropEngine` fills the notes from the pitched notes it schedules (wobble, sub,
+  keys and the guitars) on the main actor; the render thread is unchanged. All defaulted, so no existing value changes.
+
+### Source compatibility
+
+New `SoundVisualizerKind` cases break an exhaustive `switch` over the kind (a title, an icon or a picker in an app).
+
 ## 0.4.0
 
 The sound contract (`docs/sound-contract.md`): the engine publishes what any sound is doing and what the music knows

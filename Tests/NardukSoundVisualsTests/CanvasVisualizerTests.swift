@@ -24,7 +24,16 @@
         static func busyState(silent: Bool = false) -> SoundVisualState {
             let state = SoundVisualState(seed: 42)
             var now = 100.0
+            var notes = NoteCounters()
+            // A rising C minor arpeggio, one note every ten frames, each held for twenty-five.
+            let arpeggio = [48, 55, 60, 63, 67, 72, 67, 63, 60, 55, 51, 58, 62, 65, 70]
             for i in 0..<150 {
+                if i % 10 == 0 { notes.record(arpeggio[(i / 10) % arpeggio.count]) }
+                var held = NoteSet()
+                for back in 0..<3 {
+                    let started = (i / 10 - back) * 10
+                    if started >= 0, i - started < 25 { held.insert(arpeggio[(started / 10) % arpeggio.count]) }
+                }
                 let frame =
                     silent
                     ? SoundFrame(sequence: UInt64(i + 1), time: Double(i) / 60)
@@ -38,7 +47,8 @@
                 if i >= 147 { for hit in [Instrument.kick, .snare, .laser, .glitch, .keys] { counts.record(hit) } }
                 let music = MusicContext(
                     hitCounts: counts, step: i / 4, section: i < 50 ? .build : .drop, energy: 0.85,
-                    wobblePhase: Float(i % 40) / 40, wobbleCutoff: 0.5 + 0.35 * sin(Float(i) / 11), isRunning: true)
+                    wobblePhase: Float(i % 40) / 40, wobbleCutoff: 0.5 + 0.35 * sin(Float(i) / 11), isRunning: true,
+                    heldNotes: held, noteCounts: notes)
                 state.update(SoundVisualInput(frame: frame, music: silent ? nil : music), now: now)
                 now += 1.0 / 60
             }
@@ -248,6 +258,28 @@
                 9, 12, 16, 40, 25, 37, 40, 74, 70, 49, 38, 21, 23, 19, 12, 9,
                 8, 11, 14, 18, 21, 21, 34, 36, 37, 35, 21, 21, 18, 14, 11, 8,
                 7, 10, 13, 15, 19, 23, 20, 21, 22, 20, 22, 20, 15, 13, 10, 7,
+            ],
+            .pianoRoll: [
+                7, 8, 8, 8, 10, 11, 12, 13, 14, 15, 44, 45, 17, 17, 17, 27,
+                8, 9, 9, 10, 11, 12, 14, 15, 16, 17, 30, 31, 20, 20, 20, 61,
+                10, 11, 11, 12, 13, 15, 16, 17, 18, 28, 60, 62, 31, 23, 27, 44,
+                7, 8, 8, 9, 11, 12, 13, 15, 16, 38, 36, 36, 41, 22, 53, 60,
+                8, 9, 9, 11, 12, 14, 15, 16, 37, 73, 27, 27, 76, 47, 38, 38,
+                9, 10, 11, 12, 13, 15, 16, 17, 37, 30, 21, 22, 33, 60, 59, 35,
+                7, 8, 8, 9, 10, 12, 13, 15, 31, 25, 18, 19, 28, 37, 21, 31,
+                10, 11, 11, 12, 13, 14, 16, 19, 24, 19, 20, 21, 22, 46, 30, 33,
+                8, 9, 9, 9, 11, 12, 13, 19, 32, 16, 17, 18, 18, 18, 18, 28,
+            ],
+            .pitchWheel: [
+                9, 10, 11, 12, 13, 14, 14, 15, 15, 14, 14, 13, 12, 11, 10, 9,
+                9, 10, 12, 13, 14, 15, 20, 35, 34, 21, 15, 14, 13, 12, 10, 9,
+                10, 11, 12, 13, 23, 66, 35, 41, 41, 27, 27, 19, 13, 12, 11, 10,
+                10, 11, 12, 14, 17, 122, 141, 36, 34, 107, 60, 15, 14, 12, 11, 10,
+                10, 11, 13, 14, 19, 19, 31, 50, 41, 47, 18, 21, 14, 13, 11, 10,
+                10, 11, 12, 14, 15, 16, 24, 39, 48, 33, 16, 15, 14, 12, 11, 10,
+                10, 11, 12, 13, 18, 18, 17, 23, 59, 93, 21, 16, 13, 12, 11, 10,
+                9, 10, 12, 13, 14, 15, 19, 18, 27, 43, 15, 14, 13, 12, 10, 9,
+                9, 10, 11, 12, 13, 14, 14, 15, 15, 14, 14, 13, 12, 11, 10, 9,
             ],
         ]
     }

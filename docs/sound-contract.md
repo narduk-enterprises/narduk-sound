@@ -76,8 +76,11 @@ public struct SoundFrame: Sendable, Hashable {
     /// Master bus peak and RMS in dBFS; -120 is silence.
     public var peakDB: Float
     public var rmsDB: Float
+    /// 12 pitch classes (0 = C ... 11 = B), 0 ... 1: the spectrum's peaks folded by true frequency between 80 Hz
+    /// and 4 kHz, scaled so the strongest class is 1 whenever anything is audible. All zero in silence.
+    public var chroma: [Float]
     public init(sequence: UInt64 = 0, time: Double = 0, spectrum: [Float] = ..., waveform: [Float] = ...,
-                peakDB: Float = -120, rmsDB: Float = -120)
+                peakDB: Float = -120, rmsDB: Float = -120, chroma: [Float] = /* 12 zeros */)
 }
 ```
 
@@ -86,8 +89,10 @@ The initializer is public with defaults because apps build synthetic frames
 and sample count are named constants (`SoundFrame.bandCount`,
 `SoundFrame.sampleCount`), never magic numbers in a visualizer.
 
-Onsets, beat, chroma and pitch are not here. They are added as optional fields
-when a visualizer needs one (A9).
+`chroma` was added for the musical visualizers (A9b, additive with a default, so
+no existing frame or golden changes): the analysis half of "what key is this",
+for a file or a microphone. Onsets, beat and a single pitch are not here; they
+are added the same way when a visualizer needs one.
 
 ### MusicContext (NardukMusicCore)
 
@@ -120,6 +125,16 @@ public struct MusicContext: Sendable, Hashable {
     public var buildThreshold: Float
     public var dropThreshold: Float
     public var dropQueued: Bool
+
+    // Notes (A9b). Empty from a source that does not know its notes; visualizers fall back to `SoundFrame.chroma`.
+    /// MIDI notes sounding now, a 128-bit set.
+    public var heldNotes: NoteSet
+    /// Per-note monotonic strike counters (8-bit, wrapping). Diff like `hitCounts`: `noteCounts.struck(since: last)`.
+    public var noteCounts: NoteCounters
+    /// The key's tonic as a pitch class and its quality, when the source states them; nil otherwise (the visualizers
+    /// then estimate the key from what they hear).
+    public var keyPitchClass: Int?
+    public var keyIsMinor: Bool?
 }
 
 /// 32 lanes (14 used, indices dense and never renumbered): a fixed-size value, no allocation, indexed by `Instrument.index`.
@@ -145,6 +160,16 @@ instrument, with wrapping subtraction. That keeps edges _and_ their multiplicity
 builds without allocating (a `Set` allocates when constructed). An earlier draft
 of this document used an `OptionSet` OR-ed in the mailbox; that keeps edges but
 loses multiplicity and needs a producer-supplied merge, so it was replaced.
+
+**Notes follow the same rule.** A note shorter than one poll would be missed by
+a "held now" mask alone, so the producer also keeps a strike counter per MIDI
+note and a consumer diffs it: a note struck and released between two polls still
+draws its onset. `NoteTracker` (NardukMusicCore) is the producer side for any
+source that schedules notes ahead of time: the engine feeds it the pitched notes
+it queues (wobble, sub, keys, the three guitars) and advances it to the audible
+step position, on the main actor, so the render thread is untouched. The engine
+does not set `keyPitchClass`: each generated track picks its own tonic, and the
+visualizers estimate the key from the notes.
 
 When the source is not music, `music` is `nil`. Visualizers that want a wobble,
 a section or a beat fall back as in section 3.
@@ -187,18 +212,19 @@ Wirewatcher's.
 
 ### Outputs
 
-| Group     | Members                                                                                                            | From                                      |
-| --------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Spectrum  | `spectrum[64]` smoothed, `peaks[64]` with hold                                                                     | `DropVisualState`, `SpectrumCaps`         |
-| Waveform  | `waveform[512]`, a ring of the last 10 (`history`, `historyHead`, `historyCount`)                                  | `DropVisualState`                         |
-| Meters    | `peak`, `rms`, `peakHold`, `level` (0 ... 1)                                                                       | `MeterState`, `DropVisualState.level`     |
-| Pads      | `padBrightness[Instrument]`, a fixed array indexed by instrument, not a dictionary                                 | `PadState`                                |
-| Envelopes | `kick`, `snare`, `hat`, `glitch`, `laser`, `impact`, `flash`, `shake` (+ `shakeOffset`), `chroma`                  | `DropVisualState`                         |
-| Music     | `wobblePhase`, `wobbleCutoff`, `energy`, `section`, `phraseProgress`, `dropAmount`, `travel`, `energyHistory[128]` | `DropVisualState`                         |
-| Clock     | `time`, `stepPosition`, `beats`, `beatPhase`, `barPhase`, `beatPulse`, `fps`                                       | `DropVisualState`                         |
-| Mood      | `wild`, `calm`, `palette` (the blended, saturated palette)                                                         | `DropVisualState`                         |
-| Particles | a fixed pool of 320 (`ring`, `spark`, `streak`, `block`), normalized coordinates                                   | `DropVisualState`, `StageFX`              |
-| Silence   | `isSilent` (true when RMS is below -100 dB and no band exceeds 0.002)                                              | replaces Data Beats' per-view `live` test |
+| Group     | Members                                                                                                                                                                           | From                                      |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Spectrum  | `spectrum[64]` smoothed, `peaks[64]` with hold                                                                                                                                    | `DropVisualState`, `SpectrumCaps`         |
+| Waveform  | `waveform[512]`, a ring of the last 10 (`history`, `historyHead`, `historyCount`)                                                                                                 | `DropVisualState`                         |
+| Meters    | `peak`, `rms`, `peakHold`, `level` (0 ... 1)                                                                                                                                      | `MeterState`, `DropVisualState.level`     |
+| Pads      | `padBrightness[Instrument]`, a fixed array indexed by instrument, not a dictionary                                                                                                | `PadState`                                |
+| Envelopes | `kick`, `snare`, `hat`, `glitch`, `laser`, `impact`, `flash`, `shake` (+ `shakeOffset`), `chroma`                                                                                 | `DropVisualState`                         |
+| Music     | `wobblePhase`, `wobbleCutoff`, `energy`, `section`, `phraseProgress`, `dropAmount`, `travel`, `energyHistory[128]`                                                                | `DropVisualState`                         |
+| Pitch     | `musical.pitchClasses[12]` smoothed, `musical.roll` (96 columns x 128 notes, 50 ms each) and `musical.chromaRoll` (96 x 12), `musical.keyPitchClass`/`keyIsMinor`/`keyConfidence` | `SoundMusicalState` (A9b)                 |
+| Clock     | `time`, `stepPosition`, `beats`, `beatPhase`, `barPhase`, `beatPulse`, `fps`                                                                                                      | `DropVisualState`                         |
+| Mood      | `wild`, `calm`, `palette` (the blended, saturated palette)                                                                                                                        | `DropVisualState`                         |
+| Particles | a fixed pool of 320 (`ring`, `spark`, `streak`, `block`), normalized coordinates                                                                                                  | `DropVisualState`, `StageFX`              |
+| Silence   | `isSilent` (true when RMS is below -100 dB and no band exceeds 0.002)                                                                                                             | replaces Data Beats' per-view `live` test |
 
 Without a `MusicContext`, `energy` falls back to `level`, the section is
 `.intro`, wobble values are 0, hits come from the low-band onset detector

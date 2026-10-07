@@ -63,6 +63,10 @@ public enum DropEngineError: LocalizedError {
     /// Each `start()` builds a new synth whose counters begin at 0; the published counters add them to this base, so
     /// they stay monotonic across restarts and a consumer's wrapping `delta` never sees a jump back.
     @ObservationIgnored private var hitBase = HitCounters()
+    /// The pitched notes the note pump has handed the synth, tracked against the audible step position so
+    /// `latestMusic` can say which notes are sounding. Main actor only: the render thread is untouched.
+    @ObservationIgnored private var noteTracker = NoteTracker()
+    @ObservationIgnored private var audibleStepPosition: Double = 0
 
     /// The pre-0.4.0 frame, built from `latestSound` and `latestMusic`; its `hits` are the instruments that fired since
     /// the previous publish.
@@ -182,6 +186,9 @@ public enum DropEngineError: LocalizedError {
         scheduledThrough = -1
         currentStep = 0
         hitBase = latestMusic.hitCounts
+        // Fresh synth, fresh notes; the counters carry on so a consumer's diff never sees a jump back.
+        noteTracker.reset()
+        audibleStepPosition = 0
         pumpNotes()  // fill the first look-ahead window before the first render callback
 
         do {
@@ -203,6 +210,7 @@ public enum DropEngineError: LocalizedError {
         isRunning = false
         timer?.invalidate()
         timer = nil
+        noteTracker.reset()
         core?.beginFadeOut()
         stopTask?.cancel()
         stopTask = Task { @MainActor [weak self] in
@@ -271,6 +279,7 @@ public enum DropEngineError: LocalizedError {
         let secondsPerStep = settings.secondsPerStep
         let latency = engine.outputNode.presentationLatency + Double(core.lastBufferFrames) / core.sampleRate
         let audible = max(core.renderedStepPosition - latency / secondsPerStep, 0)
+        audibleStepPosition = audible
         let step = Int(audible)
         if step != currentStep { currentStep = step }
         pumpNotes()
@@ -283,7 +292,10 @@ public enum DropEngineError: LocalizedError {
         let through = Int(core.renderedStepPosition + DropEngine.lookaheadSeconds / secondsPerStep)
         guard through > scheduledThrough else { return }
         // The core drops anything that arrives more than a step late.
-        for note in noteProvider(through) { core.schedule(note) }
+        for note in noteProvider(through) {
+            core.schedule(note)
+            noteTracker.schedule(note)
+        }
         scheduledThrough = through
     }
 
@@ -293,6 +305,7 @@ public enum DropEngineError: LocalizedError {
         analysisScratch.withUnsafeMutableBufferPointer { core.copyRecentSamples(into: $0) }
         latestSound = analysisScratch.withUnsafeBufferPointer { analyzer.analyze($0, time: time) }
         previousHits = latestMusic.hitCounts
+        noteTracker.advance(to: audibleStepPosition)
         var counts = core.hitCounters
         counts.lanes &+= hitBase.lanes
         latestMusic = musicContext(core: core, hitCounts: counts)
@@ -307,7 +320,7 @@ public enum DropEngineError: LocalizedError {
             secondsPerStep: settings.secondsPerStep, stepsPerBar: settings.stepsPerBar, stepsPerPhrase: stepsPerPhrase,
             phraseProgress: Float(currentStep % stepsPerPhrase) / Float(stepsPerPhrase),
             buildThreshold: Float(conductor.buildThreshold), dropThreshold: Float(conductor.dropThreshold),
-            dropQueued: conductor.dropQueued)
+            dropQueued: conductor.dropQueued, heldNotes: noteTracker.held, noteCounts: noteTracker.counters)
     }
 
     // MARK: Device changes

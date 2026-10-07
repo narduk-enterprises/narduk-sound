@@ -98,6 +98,8 @@ public final class SoundVisualState {
     /// Decaying flash brightness per instrument, 0 ... 1, indexed by `Instrument.index`.
     public var padBrightness: UnsafeBufferPointer<Float> { padStore.view }
     public var particles: UnsafeBufferPointer<SoundParticle> { particleStore.view }
+    /// Pitch classes, the note roll and the key estimate (the musical visualizers read these).
+    public let musical = SoundMusicalState()
     public private(set) var historyHead = 0
     public private(set) var historyCount = 0
     public private(set) var energyHead = 0
@@ -233,6 +235,7 @@ public final class SoundVisualState {
         if let music {
             energyStep(music)
         }
+        musical.update(frame: frame, music: music, now: now, dt: dt, stale: stale)
         smoothSpectrum(frame.spectrum, dt: dt)
         updateMeters(frame, dt: Double(dt))
         updateDrive(options.drive, dt: dt)

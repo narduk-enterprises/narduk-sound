@@ -17,6 +17,10 @@
         case halo
         /// X/Y Lissajous with persistence trails and the hit FX field (Wirewatcher).
         case phosphor
+        /// A note waterfall: the notes the music plays (or the analysis chroma, for raw audio) scrolling past a playhead.
+        case pianoRoll
+        /// The 12 pitch classes around a wheel, growing as they sound, with the key marked.
+        case pitchWheel
 
         public var id: String { rawValue }
 
@@ -29,13 +33,15 @@
             case .mirror: "Mirror"
             case .halo: "Halo"
             case .phosphor: "Phosphor"
+            case .pianoRoll: "Piano roll"
+            case .pitchWheel: "Pitch wheel"
             }
         }
 
         /// True when the visualizer fills its own backdrop; the others draw over whatever the host supplies.
         public var paintsBackdrop: Bool {
             switch self {
-            case .mirror, .halo, .phosphor: true
+            case .mirror, .halo, .phosphor, .pianoRoll, .pitchWheel: true
             default: false
             }
         }
@@ -56,6 +62,8 @@
             case .mirror: mirror(&context, size, state, style)
             case .halo: halo(&context, size, state, style)
             case .phosphor: phosphor(&context, size, state, style)
+            case .pianoRoll: pianoRoll(&context, size, state, style)
+            case .pitchWheel: pitchWheel(&context, size, state, style)
             }
         }
     }

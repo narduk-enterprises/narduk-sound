@@ -12,9 +12,12 @@ enum Script {
         for i in 0..<spectrum.count { spectrum[i] = level * Float(spectrum.count - i) / Float(spectrum.count) }
         var waveform = [Float](repeating: 0, count: SoundFrame.waveformCount)
         for i in 0..<waveform.count { waveform[i] = sin(Float(i) / 20) * level }
+        // A C minor triad's pitch classes, with a little of everything else.
+        var chroma = [Float](repeating: 0.05 * level, count: SoundFrame.chromaCount)
+        for pitchClass in [0, 3, 7] { chroma[pitchClass] = level }
         return SoundFrame(
             sequence: sequence, time: Double(sequence) / 60, spectrum: spectrum, waveform: waveform, peakDB: rmsDB + 6,
-            rmsDB: rmsDB)
+            rmsDB: rmsDB, chroma: chroma)
     }
 
     static func music(step: Int, kicks: UInt32 = 0, snares: UInt32 = 0, section: SongSection = .drop) -> MusicContext {

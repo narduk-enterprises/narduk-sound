@@ -18,6 +18,12 @@ public final class SpectrumAnalyzer {
 
     public let sampleRate: Double
     public private(set) var bands: [Float]
+    /// Pitch-class energy of the last `process`, 0 ... 1 (index 0 = C ... 11 = B); see `SoundFrame.chroma`.
+    public private(set) var chroma = [Float](repeating: 0, count: SoundFrame.chromaCount)
+    /// Where chroma folding starts and stops: below ~80 Hz a bin is wider than a semitone, above ~4 kHz the energy is
+    /// overtones and noise.
+    public static let chromaLowFrequency: Double = 80
+    public static let chromaHighFrequency: Double = 4_000
     public var attack: Float = 0.65
     public var release: Float = 0.12
 
@@ -35,6 +41,9 @@ public final class SpectrumAnalyzer {
     private let bandLow: [Int]
     private let bandHigh: [Int]
     private let bandCenter: [Float]
+    private let chromaFirstBin: Int
+    private let chromaLastBin: Int
+    private let chromaSums = UnsafeMutablePointer<Float>.allocate(capacity: SoundFrame.chromaCount)
 
     public init(sampleRate: Double) {
         self.sampleRate = sampleRate
@@ -78,6 +87,9 @@ public final class SpectrumAnalyzer {
         bandLow = lows
         bandHigh = highs
         bandCenter = centers
+        chromaFirstBin = max(Int((SpectrumAnalyzer.chromaLowFrequency / binHz).rounded(.up)), 1)
+        chromaLastBin = min(Int((SpectrumAnalyzer.chromaHighFrequency / binHz).rounded(.down)), half - 2)
+        chromaSums.initialize(repeating: 0, count: SoundFrame.chromaCount)
     }
 
     deinit {
@@ -89,6 +101,7 @@ public final class SpectrumAnalyzer {
         real.deallocate()
         imag.deallocate()
         magnitudes.deallocate()
+        chromaSums.deallocate()
     }
 
     /// The center frequency of `band` in Hz.
@@ -145,12 +158,49 @@ public final class SpectrumAnalyzer {
             let previous = bands[b]
             bands[b] = previous + (level - previous) * (level > previous ? attack : release)
         }
+        foldChroma(attack: attack, release: release)
         return bands
+    }
+
+    /// Folds the spectrum into 12 pitch classes. Each spectral peak is placed at its true frequency (a parabola through
+    /// the log magnitudes of the peak bin and its neighbors, since a bin is wider than a semitone below ~300 Hz) and
+    /// lends its magnitude to that frequency's class; a class takes its strongest peak, so a wide low-register
+    /// partial cannot outweigh a narrow high one. The classes are then scaled so the strongest is 1, gated by how
+    /// loud that strongest one is, and smoothed like the bands.
+    private func foldChroma(attack: Float, release: Float) {
+        let classCount = SoundFrame.chromaCount
+        for c in 0..<classCount { chromaSums[c] = 0 }
+        let binHz = Float(sampleRate / Double(SpectrumAnalyzer.fftSize))
+        if chromaFirstBin <= chromaLastBin {
+            for k in chromaFirstBin...chromaLastBin {
+                let m = magnitudes[k]
+                guard m > 1e-6, m > magnitudes[k - 1], m >= magnitudes[k + 1] else { continue }
+                let alpha = logf(max(magnitudes[k - 1], 1e-9))
+                let beta = logf(m)
+                let gamma = logf(max(magnitudes[k + 1], 1e-9))
+                let curvature = alpha - 2 * beta + gamma
+                let offset = curvature < -1e-6 ? min(max(0.5 * (alpha - gamma) / curvature, -0.5), 0.5) : 0
+                let frequency = (Float(k) + offset) * binHz
+                let midi = 69 + 12 * log2f(frequency / 440)
+                let pitchClass = ((Int(midi.rounded()) % 12) + 12) % 12
+                if m > chromaSums[pitchClass] { chromaSums[pitchClass] = m }
+            }
+        }
+        var strongest: Float = 0
+        for c in 0..<classCount where chromaSums[c] > strongest { strongest = chromaSums[c] }
+        let floor = SpectrumAnalyzer.floorDB
+        let gate = min(max((Loudness.decibels(strongest) - floor) / -floor, 0), 1)
+        for c in 0..<classCount {
+            let level = strongest > 0 ? chromaSums[c] / strongest * gate : 0
+            let previous = chroma[c]
+            chroma[c] = previous + (level - previous) * (level > previous ? attack : release)
+        }
     }
 
     /// Forgets the smoothing history: the next `process` starts from silence.
     public func reset() {
         for b in 0..<bands.count { bands[b] = 0 }
+        for c in 0..<chroma.count { chroma[c] = 0 }
     }
 
     public func process(_ samples: [Float]) -> [Float] {
