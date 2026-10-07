@@ -10,6 +10,8 @@ enum GallerySongStyle: Hashable, Identifiable {
     case genre(Genre)
     case guitars
     case ambient
+    /// A song a prompt wrote (`SongRecipe`): its settings and energy script come from the recipe.
+    case recipe(SongRecipe)
 
     var id: String {
         switch self {
@@ -17,6 +19,7 @@ enum GallerySongStyle: Hashable, Identifiable {
         case .genre(let genre): "genre-\(genre.rawValue)"
         case .guitars: "guitars"
         case .ambient: "ambient"
+        case .recipe: "recipe"
         }
     }
 
@@ -26,13 +29,14 @@ enum GallerySongStyle: Hashable, Identifiable {
         case .genre(let genre): genre.shortName
         case .guitars: "Guitars (unplugged to electric)"
         case .ambient: "Ambient (swell and settle)"
+        case .recipe(let recipe): recipe.title
         }
     }
 
     /// Whether the conductor writes this style (every genre and the ambient family do).
     var usesConductor: Bool {
         switch self {
-        case .genre, .ambient: true
+        case .genre, .ambient, .recipe: true
         case .demo, .guitars: false
         }
     }
@@ -64,6 +68,10 @@ struct GallerySong: Hashable {
         case .ambient:
             var settings = SongSettings(genre: .chill, family: .ambient)
             settings.bpm = 72
+            settings.seed = seed
+            return settings
+        case .recipe(let recipe):
+            var settings = recipe.settings()
             settings.seed = seed
             return settings
         case .demo:

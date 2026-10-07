@@ -233,6 +233,7 @@ struct GalleryView: View {
             .labelsHidden()
             .disabled(model.isRunning)
             if model.input == .demo { songControls }
+            if model.input == .demo { PromptView(model: model) }
             HStack {
                 Button(model.isRunning ? "Stop" : (model.input == .file ? "Choose file…" : "Play")) {
                     if model.isRunning {
@@ -257,6 +258,9 @@ struct GalleryView: View {
             Picker("Song", selection: $model.song.style) {
                 ForEach(GallerySongStyle.all) { style in
                     Text(style.title).tag(style)
+                }
+                if case .recipe = model.song.style {
+                    Text(model.song.style.title).tag(model.song.style)
                 }
             }
             .labelsHidden()

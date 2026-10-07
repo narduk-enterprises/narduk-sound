@@ -103,7 +103,7 @@ enum GalleryInput: String, CaseIterable, Identifiable {
         case .demo, .ambient:
             try drop.playDemo()
             status = "Playing the NardukMusic demo song."
-        case .genre, .guitars:
+        case .genre, .guitars, .recipe:
             drop.settings = song.settings
             let player = SongPlayer(song: song, engine: drop)
             drop.noteProvider = { [player] throughStep in player.notes(through: throughStep) }
@@ -111,6 +111,14 @@ enum GalleryInput: String, CaseIterable, Identifiable {
             status = "Playing \(song.style.title.lowercased()), seed \(song.seed % 10_000)."
         }
         source = drop.makeSoundSource()
+    }
+
+    /// Plays a song a prompt wrote, replacing whatever plays now.
+    func play(recipe: SongRecipe) {
+        stop()
+        input = .demo
+        song = GallerySong(style: .recipe(recipe))
+        Task { await start() }
     }
 
     /// A new seed for the current style; takes effect on the next play.

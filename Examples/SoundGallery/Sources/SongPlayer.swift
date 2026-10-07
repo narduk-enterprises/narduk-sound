@@ -10,6 +10,11 @@ import NardukMusicEngine
     private var conductor: DropConductor?
     private var nextSignal = 0
     private var droppedInLoop = -1
+    /// A recipe song's script and where its replay stands (it loops when the plan ends).
+    private var script: SongRecipe.Script?
+    private var scriptIndex = 0
+    private var scriptLoop = 0
+    private var scriptDrop = 0
     private var cursor = -1
     private weak var engine: DropEngine?
 
@@ -22,6 +27,7 @@ import NardukMusicEngine
         self.song = song
         self.engine = engine
         if song.style.usesConductor { conductor = DropConductor(settings: song.settings) }
+        if case .recipe(let recipe) = song.style { script = recipe.script(interval: Self.signalInterval) }
     }
 
     /// Energy 0 ... 1 `seconds` into the song: a build to 16 s, a hold, then a fall.
@@ -37,15 +43,47 @@ import NardukMusicEngine
             cursor = -1
             nextSignal = 0
             droppedInLoop = -1
+            scriptIndex = 0
+            scriptLoop = 0
+            scriptDrop = 0
             if song.style.usesConductor { conductor = DropConductor(settings: song.settings) }
         }
         guard throughStep > cursor else { return [] }
         defer { cursor = throughStep }
         switch song.style {
         case .genre, .ambient: return conductorNotes(through: throughStep)
+        case .recipe: return recipeNotes(through: throughStep)
         case .guitars: return GuitarPart.notes(in: (cursor + 1)...throughStep, seed: song.seed)
         case .demo: return []
         }
+    }
+
+    /// Replays the recipe's script: each signal at its time (offset by the loops already played), a drop queued where
+    /// the plan starts one.
+    private func recipeNotes(through throughStep: Int) -> [ScheduledNote] {
+        guard var conductor, let script, !script.signals.isEmpty else { return [] }
+        let seconds = Double(throughStep) * song.settings.secondsPerStep
+        while true {
+            var signal = script.signals[scriptIndex]
+            let time = Double(scriptLoop) * script.seconds + signal.time
+            guard time <= seconds else { break }
+            while scriptDrop < script.dropTimes.count, script.dropTimes[scriptDrop] <= signal.time {
+                conductor.queueDrop()
+                scriptDrop += 1
+            }
+            signal.time = time
+            conductor.ingest(signal)
+            scriptIndex += 1
+            if scriptIndex == script.signals.count {
+                scriptIndex = 0
+                scriptDrop = 0
+                scriptLoop += 1
+            }
+        }
+        let notes = conductor.advance(throughStep: throughStep)
+        engine?.section = conductor.snapshot.section
+        self.conductor = conductor
+        return notes
     }
 
     private func conductorNotes(through throughStep: Int) -> [ScheduledNote] {
