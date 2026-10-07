@@ -55,3 +55,13 @@ let package = Package(
         .testTarget(name: "NardukMusicEngineTests", dependencies: ["NardukMusicEngine"]),
     ]
 #endif
+
+// Lock screen, remote commands and the AirPlay picker: MediaPlayer and AVKit, kept out of the engine so a headless
+// consumer never links them. It names no engine type; an app or the conductor driver conforms to `NowPlayingTransport`.
+#if canImport(Darwin)
+    package.products.append(.library(name: "NardukMusicPlayback", targets: ["NardukMusicPlayback"]))
+    package.targets += [
+        .target(name: "NardukMusicPlayback"),
+        .testTarget(name: "NardukMusicPlaybackTests", dependencies: ["NardukMusicPlayback"]),
+    ]
+#endif

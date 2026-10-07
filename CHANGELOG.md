@@ -7,6 +7,9 @@ shipped on narduk-libs tags.
 
 ### Added
 
+- `NardukMusicPlayback` (Darwin): `NowPlayingBridge` publishes Now Playing info and maps play, pause, toggle and
+  next track from the lock screen and HomePods to a `NowPlayingTransport`; `AirPlayPicker` wraps `AVRoutePickerView`.
+  `docs/now-playing.md` has the `UIBackgroundModes: audio` requirement (narduk-sound#8).
 - Song videos (`NardukSoundVisuals/Video`): `SoundVisualTimelineRecorder` logs
   what the lights drew from while a song records (the music context at 60 Hz,
   the light, its look, calm) into a compact `SoundVisualTimeline` file, and
