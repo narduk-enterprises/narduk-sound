@@ -52,21 +52,22 @@ import Testing
     /// One golden per genre: the build-session scenario rendered in each genre at its own tempo, so a change to Core
     /// that moves any existing genre's song fails here.
     static let genreGoldens: [Genre: [String: UInt64]] = [
+        // Genres without a Linux fingerprint moved with the queued-drop build, the band lead and the breath band
+        // (2026-10-07); their Linux values are read from the first Linux CI run.
         .dubstep: ["darwin-arm64": 0x518a_6bbb_58e6_4717, "linux-x86_64": 0x7368_e9c5_3c8f_61c8],
         .riddim: ["darwin-arm64": 0x4bf2_aafe_24da_7278, "linux-x86_64": 0x9abc_266a_eb45_dbc8],
         .drumAndBass: ["darwin-arm64": 0x3f73_a3a6_8d18_65af, "linux-x86_64": 0x8bb6_79b2_cc40_a854],
         .trap: ["darwin-arm64": 0xb2fc_0671_4bd4_fd74, "linux-x86_64": 0xe1d6_8c8b_40ca_efba],
-        .house: ["darwin-arm64": 0x59ad_e41b_a08b_5787, "linux-x86_64": 0x7099_67bc_7023_1612],
-        .chill: ["darwin-arm64": 0xed54_7d07_5f21_f47c, "linux-x86_64": 0xabc9_9c4e_23c7_d2cf],
-        .techno: ["darwin-arm64": 0xdfb8_8bac_1a48_2563, "linux-x86_64": 0x5740_f242_f1ff_1b52],
-        .ukGarage: ["darwin-arm64": 0x012f_7638_eb24_7be7, "linux-x86_64": 0xe989_6941_a15a_231f],
-        .synthwave: ["darwin-arm64": 0xcf13_c802_0028_d3bd, "linux-x86_64": 0x39c1_53af_a26b_6088],
+        .house: ["darwin-arm64": 0xbb0f_c4fb_dc64_5f02],
+        .chill: ["darwin-arm64": 0x99c9_4129_0e26_4ad5],
+        .techno: ["darwin-arm64": 0x57fb_9a28_6137_84e5],
+        .ukGarage: ["darwin-arm64": 0x5f95_8674_7d35_916a],
+        .synthwave: ["darwin-arm64": 0x7b61_7b54_7f0f_7928],
         .lofi: ["darwin-arm64": 0x7066_a558_6ba3_d111, "linux-x86_64": 0x06d5_4551_caf9_f7dd],
-        .rock: ["darwin-arm64": 0x8afb_d4e8_19fc_9f65, "linux-x86_64": 0x32c0_ff1a_8b27_74bb],
-        .folk: ["darwin-arm64": 0xd6f4_cb52_585e_77be, "linux-x86_64": 0x55d0_a5b9_9748_c382],
-        .funk: ["darwin-arm64": 0x2d59_faa4_5e21_2e30, "linux-x86_64": 0xb776_40ab_061a_3c4a],
-        // The Linux fingerprint is read from the first Linux CI run.
-        .tropicalHouse: ["darwin-arm64": 0x72af_9e38_99b3_97ee],
+        .rock: ["darwin-arm64": 0xf948_6473_5ceb_5d30],
+        .folk: ["darwin-arm64": 0x7fcb_638f_cf1d_9f04],
+        .funk: ["darwin-arm64": 0x2d0b_5ed3_b7e1_6455],
+        .tropicalHouse: ["darwin-arm64": 0x676a_7cd5_aa47_a626],
     ]
 
     @Test(arguments: Genre.allCases)

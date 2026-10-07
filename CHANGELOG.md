@@ -23,6 +23,11 @@ shipped on narduk-libs tags.
 
 ### Changed
 
+- Fixes from Logan's Forever Loop flags (2026-10-07):
+  - A queued drop out of an intro or breakdown now builds for one phrase first and drops on the line after. A drop straight out of an intro had one bar of lead-in.
+  - The formant `vox` breakdown lead no longer plays in band genres (funk, rock, folk).
+  - `SampleVoice` breath noise is band-limited to 2.4–7 kHz and fades in over 40 ms. It was flat to 22 kHz and gated hard per note, which read as crackle.
+  - Goldens moved: chill, folk, funk, house, rock, synthwave, techno, tropicalHouse, ukGarage and the recipe fixture. Their Linux values come from the next Linux CI run.
 - Long sets repeat themselves less. Drop phrases end on the track's own fills and the genre's fill bank; only a measured lull in the flow (not the default idle of a level-only source or a pinned hint) still forces a kick drop (it ended 100% of drop phrases before). Each next track's tempo walks across the genre's whole `tempoRange` by seed, 3 BPM to 8% from the last one, instead of sitting within a few BPM of the default.
 
 ## 0.5.0 (2026-10-07)

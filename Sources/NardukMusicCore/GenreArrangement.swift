@@ -488,7 +488,9 @@ enum GenreArrangement {
 
     /// The breakdown's vocal lead: the hook's long notes on vox, an octave down from the keys.
     static func lead(_ c: StepContext) -> [ScheduledNote] {
-        guard c.section == .breakdown else { return [] }
+        // The formant vox is an electronic sound: in a band's breakdown it was the loudest thing and did not belong
+        // (Logan's flag 6, funk, 2026-10-07). The band's own guitar and keys carry its breakdowns.
+        guard c.section == .breakdown, !isBand(c.track.genre) else { return [] }
         return c.hookNotes().filter { $0.length >= 3 }.map { note in
             let pitch = c.track.pitch(c.keyRoot - 12, degree: c.chord + note.degree)
             return ScheduledNote(

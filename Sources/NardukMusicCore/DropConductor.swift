@@ -169,8 +169,11 @@ struct SectionMachine: Sendable {
         return true
     }
 
+    /// Where a queued drop goes next. Out of an intro or a breakdown it builds first, for one phrase, and drops on the
+    /// line after: a drop straight out of an intro had one bar of lead-in and landed "too fast and sudden" (Logan's
+    /// flags 7 and 8, 2026-10-07).
     private static func dropTarget(from section: SongSection) -> SongSection {
-        section == .breakdown ? .drop2 : .drop
+        section == .build ? .drop : .build
     }
 }
 
@@ -392,7 +395,8 @@ public struct DropConductor: Sendable {
     /// Goes back to classifying the flow after a source has pinned the character.
     public mutating func clearCharacterHint() { characterizer.hint = nil }
 
-    /// Forces the next phrase boundary to land a drop (from INTRO, BUILD or BREAKDOWN; no-op while dropping).
+    /// Lands a drop as soon as it can be built up to: on the next phrase line from a BUILD, after a one-phrase build from
+    /// INTRO or BREAKDOWN (no-op while dropping).
     public mutating func queueDrop() {
         guard !sections.section.isDrop else { return }
         dropQueued = true
