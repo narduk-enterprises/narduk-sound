@@ -150,6 +150,12 @@ struct Track: Sendable, Hashable {
     /// 0 ... 1 per drum voice, 0.5 the standard one: this song's kick, snare and hat tuning.
     /// The drops play the backbeat at half time: one snare on 3, kicks thinned (narduk-libs#1617).
     var halfTime = false
+    /// How the intro and the breakdown are staffed (narduk-libs#1617); 0 is the original bed.
+    /// Intro: 1 keys first (no kick or hats, a louder pad), 2 drums first (kick every bar, hats from the start, no pad),
+    /// 3 bass first (the sub from the first bar, no kick).
+    var introStyle = 0
+    /// Breakdown: 1 pad only (no drums), 2 heartbeat (a kick each bar, no hats, no pad), 3 hats only (8ths, no kick).
+    var breakdownStyle = 0
     var kickTune = 0.5
     var snareTune = 0.5
     var hatTune = 0.5

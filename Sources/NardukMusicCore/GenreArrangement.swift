@@ -384,22 +384,29 @@ enum GenreArrangement {
             : c.track.pitch(c.keyRoot - 36, degree: c.chord)
         switch c.section {
         case .intro:
-            if p.introKicks.contains(pos), c.bar % p.introKickBarStride == 0 { add(.kick, 0.55) }
+            let style = c.track.introStyle
+            let kicks = style != 1 && style != 3
+            if kicks, p.introKicks.contains(pos), c.bar % (style == 2 ? 1 : p.introKickBarStride) == 0 {
+                add(.kick, 0.55)
+            }
             let hats: [[Int]] = [[2, 6, 10, 14], [2, 6, 10, 13, 14], [2, 5, 10, 14], [2, 6, 11, 14]]
-            if c.level > 0.08, hats[variant % hats.count].contains(pos) {
-                add(.hat, (pos % 4 == 2 ? 0.18 : 0.12) + 0.3 * c.level)
+            if style != 1, c.level > (style == 2 ? 0 : 0.08), hats[variant % hats.count].contains(pos) {
+                add(.hat, (pos % 4 == 2 ? 0.18 : 0.12) + 0.3 * max(c.level, style == 2 ? 0.3 : 0))
             }
             // Once the input wakes up, a soft sub hums the progression two bars at a time.
-            if c.level > 0.3, pos == 0, c.barInPhrase % 2 == 0 {
-                add(low, 0.4, NoteParams(pitch: subPitch, lengthSteps: c.perBar * 2))
+            if c.level > (style == 3 ? 0 : 0.3), pos == 0, c.barInPhrase % 2 == 0 {
+                add(low, style == 3 ? 0.55 : 0.4, NoteParams(pitch: subPitch, lengthSteps: c.perBar * 2))
             }
-            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.22, add: add) }
+            if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.36 : 0.22, add: add) }
             if c.introHook { keysHook(genre, c, velocity: 0.3, add: add) }
         case .breakdown:
-            if pos == 0, c.barInPhrase % 4 == 0 { add(.kick, 0.45) }
-            if c.level > 0.08, pos % 4 == 2 { add(.hat, 0.15 + 0.2 * c.level) }
+            let style = c.track.breakdownStyle
+            if style == 0, pos == 0, c.barInPhrase % 4 == 0 { add(.kick, 0.45) }
+            if style == 2, pos == 0 { add(.kick, 0.35) }
+            if style == 0, c.level > 0.08, pos % 4 == 2 { add(.hat, 0.15 + 0.2 * c.level) }
+            if style == 3, pos % 2 == 0 { add(.hat, 0.12 + 0.2 * c.level) }
             if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
-            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.3, add: add) }
+            if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
         case .build:
             if p.buildKicks.contains(pos) { add(.kick, pos == 0 ? 0.9 : 0.75) }
             let rush = c.barInPhrase >= 6 && c.level > 0.7

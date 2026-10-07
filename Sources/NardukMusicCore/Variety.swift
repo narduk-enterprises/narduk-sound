@@ -147,6 +147,8 @@ enum Variety {
     static func applyArrangement(to track: inout Track, variety: Double) {
         var rng = stream(track, "arrangement")
         track.halfTime = halfTimes(track.genre) && rng.unit() < 0.3
+        track.introStyle = Int(rng.next() % 4)
+        track.breakdownStyle = Int(rng.next() % 4)
         track.drop2Length = 1 + Int(rng.next() % 3)
         track.dropBudget = 2 + track.drop2Length + Int(rng.next() % 3)
         track.maxPhrases = 8 + Int(rng.next() % 5)

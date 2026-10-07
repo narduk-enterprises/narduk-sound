@@ -124,4 +124,46 @@ import Testing
             }
         }
     }
+
+    @Test func everySongStaffsItsIntroAndBreakdownItsOwnWay() {
+        for genre in Genre.allCases {
+            let tracks = Self.tracks(genre, variety: 1)
+            #expect(Set(tracks.map(\.introStyle)).count >= 3, "\(genre.rawValue) intros")
+            #expect(Set(tracks.map(\.breakdownStyle)).count >= 3, "\(genre.rawValue) breakdowns")
+            #expect(Self.tracks(genre, variety: 0).allSatisfy { $0.introStyle == 0 && $0.breakdownStyle == 0 })
+        }
+    }
+
+    /// Plays real songs through a ramp and a settle, then checks each breakdown bar against its track's style.
+    @Test func breakdownStylesStaffTheBarsAsDescribed() {
+        var seen: Set<Int> = []
+        var introSeen: Set<Int> = []
+        for genre in [Genre.house, .dubstep, .rock, .chill] {
+            for seed in Self.seeds.prefix(10) {
+                var conductor = DropConductor(settings: SongSettings(genre: genre, seed: seed, variety: 1))
+                let r = DropConductorTests.play(&conductor, steps: 1_536, batch: DropConductorTests.rampThenSettle)
+                for bar in 0..<(r.sections.count / 16) where r.sections[bar * 16] == .breakdown {
+                    let style = r.tracks[bar * 16].breakdownStyle
+                    let slice = r.notes.filter { $0.step / 16 == bar }
+                    let kicks = slice.filter { $0.instrument == .kick }
+                    let hats = slice.filter { $0.instrument == .hat }
+                    seen.insert(style)
+                    switch style {
+                    case 1: #expect(kicks.isEmpty && hats.isEmpty, "\(genre) \(seed) bar \(bar)")
+                    case 2: #expect(kicks.count == 1 && hats.isEmpty, "\(genre) \(seed) bar \(bar)")
+                    case 3: #expect(kicks.isEmpty && !hats.isEmpty, "\(genre) \(seed) bar \(bar)")
+                    default: break
+                    }
+                }
+                for bar in 0..<(r.sections.count / 16) where r.sections[bar * 16] == .intro {
+                    let style = r.tracks[bar * 16].introStyle
+                    let kicks = r.notes.filter { $0.step / 16 == bar && $0.instrument == .kick }
+                    introSeen.insert(style)
+                    if style == 1 || style == 3 { #expect(kicks.isEmpty, "\(genre) \(seed) intro bar \(bar)") }
+                }
+            }
+        }
+        #expect(seen.isSuperset(of: [1, 2, 3]), "breakdown styles checked: \(seen)")
+        #expect(introSeen.isSuperset(of: [1, 2, 3]), "intro styles checked: \(introSeen)")
+    }
 }
