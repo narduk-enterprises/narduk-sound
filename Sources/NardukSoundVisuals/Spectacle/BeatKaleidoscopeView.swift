@@ -13,6 +13,7 @@
         let input: @MainActor () -> SoundVisualInput
         let calm: Bool
         @Environment(\.soundFramesPerSecond) private var framesPerSecond
+        @State private var rotation = KaleidoscopeRotation()
 
         public init(
             state: SoundVisualState, calm: Bool = false, input: @escaping @MainActor () -> SoundVisualInput
@@ -28,7 +29,8 @@
                 Canvas(rendersAsynchronously: false) { context, size in
                     MainActor.assumeIsolated {
                         state.update(input(), now: now, options: SoundVisualOptions(calm: calm))
-                        BeatKaleidoscope.draw(into: &context, size: size, state: state)
+                        rotation.update(state: state)
+                        BeatKaleidoscope.draw(into: &context, size: size, state: state, rotation: rotation.angle)
                     }
                 }
             }
@@ -42,7 +44,9 @@
         /// Wedges in the fold: 6 at rest, 8 in a drop (`dropAmount` blends).
         static func foldCount(_ state: SoundVisualState) -> Int { state.dropAmount > 0.5 ? 8 : 6 }
 
-        public static func draw(into context: inout GraphicsContext, size: CGSize, state: SoundVisualState) {
+        public static func draw(
+            into context: inout GraphicsContext, size: CGSize, state: SoundVisualState, rotation: Double = 0
+        ) {
             let unit = Double(min(size.width, size.height)) / 2
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let palette = state.palette
@@ -70,7 +74,7 @@
             // The fold: the spectrum mirrored into wedges around the center.
             let folds = foldCount(state)
             let bands = SoundVisualState.bandCount
-            let spin = state.calm ? 0 : Double(state.stepPosition) * 0.05 * (0.5 + Double(state.wild))
+            let spin = rotation + (state.calm ? 0 : Double(state.stepPosition) * 0.05 * (0.5 + Double(state.wild)))
             let wedge = 2 * Double.pi / Double(folds)
             let inner = unit * 0.14
             let spectrum = state.spectrum
@@ -91,6 +95,37 @@
                         color(Float(fold) / Float(folds) + state.beatPhase * 0.1, 0.55 + 0.4 * Double(state.energy))),
                     style: StrokeStyle(lineWidth: max(1.5, unit * 0.014), lineCap: .round, lineJoin: .round))
             }
+        }
+    }
+#endif
+
+#if canImport(SwiftUI)
+    /// The kaleidoscope's snare ratchet: each snare hit (a rising edge of the state's snare envelope, which only a
+    /// `MusicContext` with hit counters raises) turns the fold by half a wedge, eased so it reads as a step and not a
+    /// jump. With no music the envelope never rises, so the angle stays 0 and the picture is unchanged. Calm mode
+    /// freezes the ratchet like the spin.
+    @MainActor public final class KaleidoscopeRotation {
+        /// The eased angle in radians to add to the fold's spin.
+        public private(set) var angle = 0.0
+        /// Snare hits seen so far.
+        public private(set) var steps = 0
+        private var armed = true
+        private var lastTime = 0.0
+
+        public init() {}
+
+        public func update(state: SoundVisualState) {
+            let dt = min(max(state.time - lastTime, 0), 0.1)
+            lastTime = state.time
+            if state.snare > 0.9, armed, !state.calm {
+                steps += 1
+                armed = false
+            } else if state.snare < 0.5 {
+                armed = true
+            }
+            let wedge = 2 * Double.pi / Double(BeatKaleidoscope.foldCount(state))
+            let target = Double(steps) * wedge * 0.5
+            angle += (target - angle) * min(1, dt * 14)
         }
     }
 #endif

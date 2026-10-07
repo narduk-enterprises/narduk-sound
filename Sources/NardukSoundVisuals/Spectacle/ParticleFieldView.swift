@@ -64,6 +64,19 @@
                 with: .radialGradient(glow, center: center, startRadius: 0, endRadius: coreRadius * 2.4))
 
             context.blendMode = .plusLighter
+
+            // The build: with music, an arc around the core fills as the phrase builds toward the drop. Nothing is
+            // drawn without a MusicContext (phraseProgress stays 0) or outside a build.
+            if state.section == .build, state.phraseProgress > 0.01 {
+                let radius = unit * 0.42
+                var arc = Path()
+                arc.addArc(
+                    center: center, radius: radius, startAngle: .degrees(-90),
+                    endAngle: .degrees(-90 + 360 * Double(min(state.phraseProgress, 1))), clockwise: false)
+                context.stroke(
+                    arc, with: .color(color(0.55, 0.55 + 0.35 * Double(state.phraseProgress))),
+                    style: StrokeStyle(lineWidth: max(1.5, unit * 0.02), lineCap: .round))
+            }
             for particle in state.particles where particle.life > 0 {
                 let age = Double(particle.age)
                 let fade = 1 - age

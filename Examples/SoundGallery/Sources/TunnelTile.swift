@@ -13,7 +13,7 @@ struct TunnelTile: View {
 
     var body: some View {
         if WobbleTunnelView.isSupported {
-            WobbleTunnelView(state: state) { SoundVisualInput(frame: model.latestFrame) }
+            WobbleTunnelView(state: state) { model.latestInput }
                 .environment(\.soundFramesPerSecond, framesPerSecond)
                 .accessibilityLabel("Wobble tunnel")
         } else {
