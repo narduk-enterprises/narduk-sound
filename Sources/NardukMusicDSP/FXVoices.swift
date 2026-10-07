@@ -21,6 +21,7 @@ public struct FXVoice: Sendable, Hashable {
     private var phaseA: Float = 0
     private var phaseB: Float = 0
     private var phaseC: Float = 0
+    private var phaseD: Float = 0
     private var env1: Float = 0, env2: Float = 0, env3: Float = 0, env4: Float = 0, env5: Float = 0
     private var mul1: Float = 0, mul2: Float = 0, mul3: Float = 0, mul4: Float = 0, mul5: Float = 0
     private var filterA = SVF()
@@ -34,6 +35,9 @@ public struct FXVoice: Sendable, Hashable {
     private var timbre = 0
     /// A pumping pad (`KeysVoice.pumpPad`): the mixer ducks it on a slower sidechain of its own.
     public private(set) var pumps = false
+    /// A melodic library voice (`KeysVoice.marimba` and `panFlute` ... `softPiano`): the mixer ducks it lightly (about
+    /// 3 dB) instead of the effects' 6 dB dip, so a melody breathes with the kick rather than pumps.
+    public private(set) var ducksLightly = false
     private var gateEnd = 0
     // Vox vowel: first two formants as start + sweep over the note.
     private var f1Start: Float = 450, f1Sweep: Float = 300, f2Start: Float = 800, f2Sweep: Float = 350
@@ -50,6 +54,7 @@ public struct FXVoice: Sendable, Hashable {
         let sr = c.sampleRate
         self.kind = kind
         pumps = false
+        ducksLightly = false
         active = true
         fading = false
         fade = 1
@@ -58,6 +63,7 @@ public struct FXVoice: Sendable, Hashable {
         phaseA = 0
         phaseB = 0.37
         phaseC = 0.71
+        phaseD = 0
         filterA.reset()
         filterB.reset()
         filterC.reset()
@@ -101,10 +107,20 @@ public struct FXVoice: Sendable, Hashable {
             length = Int(0.07 * sr)
         case .keys:
             // voice picks the timbre: 0 bell pluck, 1 house stab, 2 electric piano, 3 pad, 4 marimba; 5 is the pad
-            // on the pumping sidechain.
+            // on the pumping sidechain; 6 pan flute, 7 steel drum, 8 sax-like lead, 9 soft piano.
             pumps = voice == KeysVoice.pumpPad
-            timbre = voice == KeysVoice.marimba ? 4 : pumps ? 3 : max(voice, 0) % 4
-            baseHz = DSP.midiToHz(foldPitch(pitch < 0 ? 72 : pitch, low: 48, high: 88))
+            let library = voice >= KeysVoice.panFlute && voice <= KeysVoice.softPiano
+            ducksLightly = library || voice == KeysVoice.marimba
+            timbre = voice == KeysVoice.marimba ? 4 : pumps ? 3 : library ? voice : max(voice, 0) % 4
+            // Each library voice keeps to its instrument's own register; the first five share the keys' one.
+            let (low, high): (Float, Float) =
+                switch timbre {
+                case 6: (60, 91)
+                case 7: (55, 86)
+                case 8: (46, 79)
+                default: (48, 88)
+                }
+            baseHz = DSP.midiToHz(foldPitch(pitch < 0 ? 72 : pitch, low: low, high: high))
             let gate = Float(lengthSamples)
             let (minimum, maximum, ampDecay, toneDecay, release): (Float, Float, Float, Float, Float) =
                 switch timbre {
@@ -112,11 +128,33 @@ public struct FXVoice: Sendable, Hashable {
                 case 1: (0.06, 0.5, 0.2, 0.06, 0.05)
                 case 2: (0.2, 2.5, 1.1, 0.03, 0.22)
                 case 4: (0.12, 0.7, 0.3, 0.05, 0.07)
+                case 6: (0.15, 3.0, 30, 0.07, 0.12)  // flute: held; the breath chiff dies
+                case 7: (0.15, 1.6, 0.55, 0.18, 0.09)  // steel drum: struck; the bright strike dies first
+                case 8: (0.12, 3.0, 30, 0.12, 0.1)  // sax: held; the breath bloom closes
+                case 9: (0.3, 3.0, 1.6, 0.25, 0.3)  // soft piano: a long mellow decay
                 default: (0.4, 4.0, 60, 1, 0.45)
                 }
-            if timbre == 4 {
+            switch timbre {
+            case 4:
                 env3 = 1
                 mul3 = DSP.decay(seconds: 0.012, sampleRate: sr)  // the mallet knock
+            case 6:
+                filterA.set(cutoff: min(baseHz * 2, 6_000), resonance: 0.35, sampleRate: sr)  // the breath band
+                filterB.set(cutoff: 7_000, resonance: 0.1, sampleRate: sr)  // the flute's soft top
+            case 7:
+                env3 = 1
+                mul3 = DSP.decay(seconds: 0.06, sampleRate: sr)  // the inharmonic ring
+                env4 = 1
+                mul4 = DSP.decay(seconds: 0.022, sampleRate: sr)  // the stick's FM strike
+            case 8:
+                filterB.set(cutoff: 520, resonance: 0.6, sampleRate: sr)  // first formant
+                filterC.set(cutoff: 1_450, resonance: 0.55, sampleRate: sr)  // second formant
+            case 9:
+                env3 = 1
+                mul3 = DSP.decay(seconds: 0.01, sampleRate: sr)  // the felt hammer
+                filterA.set(cutoff: 900, resonance: 0.1, sampleRate: sr)
+            default:
+                break
             }
             gateEnd = Int(min(max(gate, minimum * sr), maximum * sr))
             length = gateEnd + Int(release * 6 * sr)
@@ -256,6 +294,61 @@ public struct FXVoice: Sendable, Hashable {
                 y =
                     (sinf(DSP.twoPi * phaseA) + 0.45 * env2 * sinf(DSP.twoPi * phaseB) + 0.2 * env3
                         * sinf(DSP.twoPi * phaseC)) * env1 * attack * 0.3
+            case 6:
+                // Pan flute: a soft sine with a whisper of its second and third harmonics, under a band of breath
+                // noise that chiffs at the onset and settles to a steady air. A 60 ms attack, and from 0.25 s a
+                // vibrato that eases in to about 0.5 %.
+                let ease = min(max((seconds - 0.25) * 2.5, 0), 1)
+                let vibrato = 1 + 0.005 * ease * sinf(DSP.twoPi * 5 * seconds)
+                phaseA = DSP.wrap(phaseA + dt * (vibrato - 1))
+                phaseB = DSP.wrap(phaseB + dt * 2 * vibrato)
+                phaseC = DSP.wrap(phaseC + dt * 3 * vibrato)
+                let attack = min(seconds * 16.7, 1)
+                let tone =
+                    sinf(DSP.twoPi * phaseA) + 0.12 * sinf(DSP.twoPi * phaseB) + 0.05 * sinf(DSP.twoPi * phaseC)
+                let breath = filterA.process(noiseLeft.next()).band * (0.1 + 0.55 * env2)
+                y = filterB.process(tone * attack + breath * min(seconds * 40, 1)).low * 0.24
+            case 7:
+                // Steel drum: a carrier on the fundamental, struck by a fast-dying FM bite, with the pan's tuned
+                // octave and a slightly sharp twelfth that die at their own rates, over a short inharmonic ring.
+                // A 1.5 ms ramp keeps the bright onset from clicking.
+                env3 *= mul3
+                env4 *= mul4
+                phaseB = DSP.wrap(phaseB + dt * 2)
+                phaseC = DSP.wrap(phaseC + dt * 3.02)
+                phaseD = DSP.wrap(phaseD + dt * 4.27)
+                let attack = min(seconds * 667, 1)
+                let bite = 1.6 * env4 * sinf(DSP.twoPi * phaseD)
+                y =
+                    (sinf(DSP.twoPi * phaseA + bite) + 0.6 * env2 * sinf(DSP.twoPi * phaseB) + 0.3 * env2 * env2
+                        * sinf(DSP.twoPi * phaseC) + 0.25 * env3 * sinf(DSP.twoPi * phaseD * 1.37))
+                    * env1 * attack * 0.22
+            case 8:
+                // Sax-like lead: a saw whose lowpass opens with the breath and sits a few harmonics up, voiced by two
+                // formants, with a little breath noise. A 30 ms attack, and from 0.2 s a vibrato easing in to 0.7 %.
+                let ease = min(max((seconds - 0.2) * 3, 0), 1)
+                let vibrato = 1 + 0.007 * ease * sinf(DSP.twoPi * 5.5 * seconds)
+                let rate = dt * vibrato
+                phaseA = DSP.wrap(phaseA + rate - dt)
+                let attack = min(seconds * 33, 1)
+                let raw = DSP.saw(phaseA, rate) + 0.06 * noiseLeft.next()
+                filterA.set(cutoff: min(baseHz * (3 + 3 * env2), 9_000), resonance: 0.25, sampleRate: sr)
+                let body = filterA.process(raw).low
+                let voiced = body * 0.55 + filterB.process(body).band * 0.9 + filterC.process(body).band * 0.6
+                y = DSP.softClip(voiced * 1.2) * attack * 0.17
+            case 9:
+                // Soft piano: the fundamental with a slightly detuned twin (warmth), a second and third partial that
+                // fade faster, and a felt hammer thump; a 25 ms attack and a lowpass that keeps it mellow.
+                env3 *= mul3
+                phaseB = DSP.wrap(phaseB + dt * 2.001)
+                phaseC = DSP.wrap(phaseC + dt * 3.003)
+                phaseD = DSP.wrap(phaseD + dt * 1.0015)
+                let attack = min(seconds * 40, 1)
+                let tone =
+                    sinf(DSP.twoPi * phaseA) * 0.6 + sinf(DSP.twoPi * phaseD) * 0.4 + 0.3 * env2
+                    * sinf(DSP.twoPi * phaseB) + 0.08 * env2 * sinf(DSP.twoPi * phaseC)
+                let hammer = filterA.process(noiseLeft.next()).low * env3 * 0.4
+                y = (tone * attack + hammer) * env1 * 0.24
             default:
                 // Pad: two detuned saws, a slow attack and a gently moving lowpass.
                 phaseB = DSP.wrap(phaseB + dt * 1.006)

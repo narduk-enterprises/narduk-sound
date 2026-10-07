@@ -66,7 +66,7 @@ import Testing
         .folk: ["darwin-arm64": 0xd6f4_cb52_585e_77be, "linux-x86_64": 0x55d0_a5b9_9748_c382],
         .funk: ["darwin-arm64": 0x2d59_faa4_5e21_2e30, "linux-x86_64": 0xb776_40ab_061a_3c4a],
         // The Linux fingerprint is read from the first Linux CI run.
-        .tropicalHouse: ["darwin-arm64": 0x72af_9e38_99b3_97ee],
+        .tropicalHouse: ["darwin-arm64": 0x2969_02ff_b531_9b31],
     ]
 
     @Test(arguments: Genre.allCases)

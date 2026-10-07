@@ -657,6 +657,8 @@ public struct DropConductor: Sendable {
         }
         let remaining = perBar - barStep
         guard !leadInFired, barStep != 0, !dropComing, remaining >= 4 else { return }
+        // A gentle genre (tropical house) hands over without a riser or a tape stop.
+        guard !GenreArrangement.profile(activeGenre).gentle else { return }
         leadInFired = true
         if sections.section.isDrop, quantizer.canSpend(.instrument(.tapeStop), bar: bar) {
             out.append(
@@ -703,8 +705,10 @@ public struct DropConductor: Sendable {
 
         // The ambient family has no risers, snare rolls, impacts or tape stops: its sections swell and settle.
         let ambient = settings.family == .ambient
+        // Tropical house has none of them either: its drop is a lift, and its hand-overs just let go.
+        let gentle = profile.gentle
 
-        if dropComing, !ambient {
+        if dropComing, !ambient, !gentle {
             // The last bar: a riser that ends exactly on the drop, and a snare roll that speeds up into it.
             if !riserFired {
                 riserFired = true
@@ -719,7 +723,7 @@ public struct DropConductor: Sendable {
         }
 
         // The hand-over to the next track: a tape stop into the bar line, or a riser over a bridge or a closing filter.
-        if let outro, !outroFired, !ambient {
+        if let outro, !outroFired, !ambient, !gentle {
             if outro == .tapeStop, barStep >= half, quantizer.canSpend(.instrument(.tapeStop), bar: bar) {
                 outroFired = true
                 add(.tapeStop, 0.9, NoteParams(lengthSteps: perBar - barStep))
@@ -734,7 +738,7 @@ public struct DropConductor: Sendable {
             }
         }
 
-        if barStep == 0, !ambient, switched || (section.isDrop && sectionJustStarted) {
+        if barStep == 0, !ambient, !gentle, switched || (section.isDrop && sectionJustStarted) {
             add(.impact, section.isDrop ? 1.0 : 0.85)
             quantizer.spend(.instrument(.impact), bar: bar)
         }
@@ -933,10 +937,13 @@ public struct DropConductor: Sendable {
             guard quantizer.canSpend(.ghostSnare, bar: bar) else { return .wait }
             return make(.snare, 0.22 + 0.16 * rng.unit(), budget: .ghostSnare, legend: "snare ghost ← \(cue.label)")
         case .impact:
+            // A gentle genre lets the cue go rather than boom (tropical house: no whomps).
+            guard !GenreArrangement.profile(activeGenre).gentle else { return .discard }
             return make(.impact, 0.7, legend: "impact ← \(cue.label)")
         case .scratch:
             return make(.scratch, 0.7, legend: "scratch ← \(cue.label)")
         case .tapeStop:
+            guard !GenreArrangement.profile(activeGenre).gentle else { return .discard }
             return make(.tapeStop, 0.8, params: NoteParams(lengthSteps: 4), legend: "tape stop ← \(cue.label)")
         case .zap:
             // Higher is a higher zap on the bar's chord: 1 tops the range, 0 bottoms it.
@@ -952,8 +959,17 @@ public struct DropConductor: Sendable {
             return make(.laser, 0.25, budget: .sparkle, params: params, legend: "sparkle ← \(cue.label)")
         case .voice:
             let voice = cue.variant.map { max(0, $0) % 4 } ?? Int(StableHash.fnv1a(cue.hashKey) % 4)
+            if GenreArrangement.profile(activeGenre).gentle {
+                // A gentle genre answers with an airy, pitched vocal chop on the chord, not the low formant vox.
+                let vowel = VocalVowel.allCases[voice % VocalVowel.allCases.count]
+                let params = NoteParams(
+                    pitch: track.keyRoot + 12 + chordTone(voice % 3), lengthSteps: 1,
+                    voice: NoteParams.vocalVoice(vowel, feel: .airy), pan: pan)
+                return make(.vocalChop, 0.45, params: params, legend: "vocal chop ← \(cue.label)")
+            }
             return make(.vox, 0.8, params: NoteParams(voice: voice), legend: "vox chop ← \(cue.label)")
         case .swell:
+            guard !GenreArrangement.profile(activeGenre).gentle else { return .discard }
             let params = NoteParams(pitch: track.keyRoot + 12, lengthSteps: perBar)
             return make(.riser, 0.6, params: params, legend: "riser ← \(cue.label)")
         }

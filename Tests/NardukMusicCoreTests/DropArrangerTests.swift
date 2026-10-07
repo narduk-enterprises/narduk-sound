@@ -91,6 +91,11 @@ import Testing
 
     @Test(arguments: Genre.allCases) func theRiserEndsOnTheTonic(genre: Genre) throws {
         let c = Self.context(genre)
+        guard genre != .tropicalHouse else {
+            // Tropical house charges without a riser: no whomps.
+            #expect(DropArranger.build(step: 0, heldSteps: 0, context: c).allSatisfy { $0.instrument != .riser })
+            return
+        }
         let riser = try #require(
             DropArranger.build(step: 0, heldSteps: 0, context: c).first { $0.instrument == .riser })
         #expect(try #require(riser.params.pitch) % 12 == c.keyRoot % 12)
