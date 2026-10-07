@@ -9,8 +9,8 @@ import Testing
 /// when the mapping changes on purpose, read the new fingerprint from the failure, listen to the render, update it.
 @Suite struct SongRecipeGoldenTests {
     static let goldens: [String: UInt64] = [
-        "darwin-arm64": 0x1246_3953_70ea_d8fb,
-        "linux-x86_64": 0x8591_2368_aa6d_9483,
+        // Moved with the breath band (2026-10-07); the Linux value is read from the first Linux CI run.
+        "darwin-arm64": 0xca06_d8de_504a_6b4d,
     ]
 
     static let recipe = SongRecipe(

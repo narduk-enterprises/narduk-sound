@@ -333,6 +333,37 @@ import Testing
         #expect(peak > 0.1)
     }
 
+    /// The library keys voices (pan flute, steel drum, sax-like lead, soft piano, and the marimba): finite, a bounded
+    /// peak, a soft onset (no click) and silence after the release, on their own and with a gate of half a second.
+    @Test(arguments: [
+        KeysVoice.marimba, KeysVoice.panFlute, KeysVoice.steelDrum, KeysVoice.saxLead, KeysVoice.softPiano,
+    ])
+    func libraryKeysVoicesAreCleanAndEnd(voice: Int) {
+        let c = SynthCoefficients(sampleRate: 48_000)
+        for pitch: Float in [50, 69, 84] {
+            var fx = FXVoice()
+            fx.trigger(.keys, pitch: pitch, lengthSamples: 24_000, velocity: 1, pan: 0, voice: voice, c)
+            var peak: Float = 0
+            var onset: Float = 0  // the loudest sample of the first half millisecond
+            var last: Float = 0
+            var samples = 0
+            while fx.active, samples < 48_000 * 8 {
+                let (l, r) = fx.next(c)
+                #expect(l.isFinite && r.isFinite)
+                if samples == 0 { #expect(abs(l) < 0.005, "voice \(voice) starts at \(l)") }
+                if samples < 24 { onset = max(onset, abs(l), abs(r)) }
+                peak = max(peak, abs(l), abs(r))
+                last = max(abs(l), abs(r))
+                samples += 1
+            }
+            #expect(!fx.active, "voice \(voice) at \(pitch) never ended")
+            #expect(peak > 0.02 && peak < 0.6, "voice \(voice) at \(pitch): peak \(peak)")
+            #expect(onset < 0.6 * peak, "voice \(voice) at \(pitch) clicks on: \(onset) of \(peak)")
+            #expect(last < 0.001, "voice \(voice) at \(pitch) clicks off: \(last)")
+            #expect(fx.ducksLightly)
+        }
+    }
+
     @Test func fadeOutReachesSilence() {
         let core = DropSynthCore(sampleRate: 48_000)
         for note in DemoPattern.notes(in: 32...40) {

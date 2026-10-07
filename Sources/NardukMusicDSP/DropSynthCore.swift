@@ -601,12 +601,20 @@ struct SynthState {
             var pumpL: Float = 0
             var pumpR: Float = 0
             var pumping = false
+            // Melodic library voices sum apart too and join on a light duck of their own (about 3 dB).
+            var lightL: Float = 0
+            var lightR: Float = 0
+            var light = false
             for i in 0..<SynthState.fxCount {
                 let f = fx[i].next(c)
                 if fx[i].pumps {
                     pumpL += f.0
                     pumpR += f.1
                     pumping = true
+                } else if fx[i].ducksLightly {
+                    lightL += f.0
+                    lightR += f.1
+                    light = true
                 } else {
                     fxL += f.0
                     fxR += f.1
@@ -682,9 +690,15 @@ struct SynthState {
             fxL *= fxDuck
             fxR *= fxDuck
             if pumping {
-                let pumpDuck = 1 - 0.85 * pump
+                // A gentle pump: at most about 3.7 dB under each kick, recovering slowly. Deeper read as a whomp.
+                let pumpDuck = 1 - 0.35 * pump
                 fxL += pumpL * pumpDuck
                 fxR += pumpR * pumpDuck
+            }
+            if light {
+                let lightDuck = 1 - 0.3 * sidechain
+                fxL += lightL * lightDuck
+                fxR += lightR * lightDuck
             }
 
             if ambientTail > 0 {

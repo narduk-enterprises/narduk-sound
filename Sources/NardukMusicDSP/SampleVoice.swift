@@ -113,6 +113,9 @@ struct SampleVoice: @unchecked Sendable {
     private var grit: Float = 0
     private var noise: UInt32 = 0x1234_5678
     private var breathFilter = OnePole()
+    private var breathTop = OnePole()
+    private var breathFade: Float = 0
+    private var breathFadeStep: Float = 0
     private var chainA = SVF()
     private var chainB = SVF()
     private var chainKind = VocalFilter.none
@@ -202,6 +205,11 @@ struct SampleVoice: @unchecked Sendable {
         grit = Float(x.grit)
         noise = seed &* 2_654_435_761 | 1
         breathFilter.setCutoff(2_400, sampleRate: sampleRate)
+        // Air, not hiss: a band of 2.4 to 7 kHz that fades in with the note. Flat to 22 kHz and switched on hard with
+        // every note, it read as crackle on lofi vocals (Logan's flag 3, 2026-10-07).
+        breathTop.setCutoff(7_000, sampleRate: sampleRate)
+        breathFade = 0
+        breathFadeStep = 1 / max(0.04 * sampleRate, 1)
 
         // Pitch automation.
         let snapped = x.snap && sustain
@@ -468,7 +476,8 @@ struct SampleVoice: @unchecked Sendable {
         var s = input
         if breath > 0 {
             let n = Float(Int32(bitPattern: nextRandom())) * (1 / 2_147_483_648)
-            s += breathFilter.highpass(n) * breath * 0.4
+            breathFade = min(1, breathFade + breathFadeStep)
+            s += breathTop.lowpass(breathFilter.highpass(n)) * breath * 0.4 * breathFade
         }
         if grit > 0 {
             let drive = 1 + 5 * grit

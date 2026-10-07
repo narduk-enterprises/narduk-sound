@@ -330,8 +330,50 @@ import Testing
                 return track.mode.contains(semitones: (note.params.pitch ?? 0) - track.keyRoot)
             }, "every pluck is in key")
         #expect(drop.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.pumpPad })
-        // No wobble lead: the bass stays a round off-beat sub with a soft, closed wub.
-        #expect(drop.filter { $0.instrument == .wobble }.allSatisfy { $0.velocity <= 0.5 })
+        // No wobble at all: the bass is a round off-beat sub (take one's soft wub was the whomp).
+        #expect(!p.notes.contains { $0.instrument == .wobble })
+    }
+
+    /// Logan on take one: "i dont think there should be little whomp in my tropical house". Every whomp source is gone:
+    /// the wobble, the drop impact, risers, tape stops, the low vox chop and lead, and a sub that slides in pitch.
+    @Test(arguments: [UInt64(3), 11, 29])
+    func tropicalHouseHasNoWhomp(seed: UInt64) {
+        let segments = [
+            Segment(character: .idle, seconds: 20), Segment(character: .busy, seconds: 60),
+            Segment(character: .surge, seconds: 40), Segment(character: .chaos, seconds: 30),
+        ]
+        let p = Self.perform(genre: .tropicalHouse, seed: seed, segments: segments)
+        #expect(p.sections.contains { $0.isDrop }, "seed \(seed) never dropped")
+        let whomps: Set<Instrument> = [.wobble, .impact, .tapeStop, .riser, .vox]
+        let found = p.notes.filter { whomps.contains($0.instrument) }
+        #expect(found.isEmpty, "seed \(seed): \(Set(found.map(\.instrument)))")
+        // The sub never glides: no glide amount, and each note ends before the next begins, so it starts fresh.
+        let subs = p.notes.filter { $0.instrument == .sub }.sorted { $0.step < $1.step }
+        #expect(subs.count > 32)
+        #expect(subs.allSatisfy { ($0.params.glide ?? 0) == 0 })
+        for (a, b) in zip(subs, subs.dropFirst()) where a.step != b.step {
+            #expect(a.step + a.params.lengthSteps < b.step, "sub at \(a.step) runs into \(b.step)")
+        }
+    }
+
+    /// Tropical house is softer than house on the same seeds: fewer, quieter drum hits and less velocity in the drop.
+    @Test func tropicalHouseDropIsSofterThanHouse() {
+        func dropEnergy(_ genre: Genre, seed: UInt64) -> (energy: Double, drums: Double) {
+            let p = Self.perform(genre: genre, seed: seed, segments: [Segment(character: .busy, seconds: 120)])
+            let drop = p.notes.filter { p.sections[$0.step].isDrop }
+            let steps = Double(max(1, p.sections.filter(\.isDrop).count))
+            let drumSet: Set<Instrument> = [.kick, .snare, .hat, .openHat]
+            let energy = drop.map(\.velocity).reduce(0, +) / steps * 16
+            let drums = drop.filter { drumSet.contains($0.instrument) }.map(\.velocity).reduce(0, +) / steps * 16
+            return (energy, drums)
+        }
+        for seed: UInt64 in [3, 11, 29] {
+            let tropical = dropEnergy(.tropicalHouse, seed: seed)
+            let house = dropEnergy(.house, seed: seed)
+            print("seed \(seed) drop velocity/bar: tropical \(tropical), house \(house)")
+            #expect(tropical.energy < house.energy, "seed \(seed): \(tropical) vs \(house)")
+            #expect(tropical.drums < house.drums, "seed \(seed): \(tropical) vs \(house)")
+        }
     }
 
     @Test func genresSoundLikeThemselves() {
@@ -345,7 +387,8 @@ import Testing
             let dropBars = (0..<(p.steps / 16)).filter { p.sections[$0 * 16].isDrop && $0 % 8 != 7 && $0 % 8 != 3 }
             #expect(!dropBars.isEmpty, "\(genre) never dropped")
             // Chill's, folk's, lo-fi's, techno's and tropical house's backbeats are soft; everyone else's lands hard.
-            let loudest = [.chill, .lofi, .techno, .folk, .tropicalHouse].contains(genre) ? 0.5 : 0.9
+            let loudest =
+                genre == .tropicalHouse ? 0.4 : [.chill, .lofi, .techno, .folk].contains(genre) ? 0.5 : 0.9
             func hits(_ instrument: Instrument, _ bar: Int, loud: Bool = true) -> [Int] {
                 p.notes.filter {
                     $0.instrument == instrument && $0.step / 16 == bar && (!loud || $0.velocity >= loudest)

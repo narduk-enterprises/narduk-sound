@@ -140,6 +140,9 @@ struct GenreProfile {
     var formantRange: ClosedRange<Double> = 0...1
     /// Glide amount for legato bass (0 = the engine's short default).
     var glide: Double?
+    /// No whomps: no riser, impact or tape stop, no snare roll into the drop and no rushing build snare (tropical
+    /// house). The drop is a lift, not a slam.
+    var gentle = false
 }
 
 enum GenreArrangement {
@@ -190,7 +193,7 @@ enum GenreArrangement {
         case .tropicalHouse:
             GenreProfile(
                 gain: 0.85, introKicks: [0, 4, 8, 12], introKickBarStride: 1, buildKicks: [0, 4, 8, 12],
-                buildSnares: [4, 12], riserVelocity: 0.5, chops: true, formantRange: 0.1...0.4, glide: 0.2)
+                buildSnares: [4, 12], riserVelocity: 0, formantRange: 0.1...0.4, glide: 0, gentle: true)
         }
     }
 
@@ -389,6 +392,8 @@ enum GenreArrangement {
             band
             ? bassRegister(c.track.pitch(c.keyRoot - 24, degree: c.chord))
             : c.track.pitch(c.keyRoot - 36, degree: c.chord)
+        // A gentle genre's held sub stops a step short, so it never glides into the next chord's root.
+        func held(_ steps: Int) -> Int { p.gentle ? steps - 1 : steps }
         switch c.section {
         case .intro:
             let style = c.track.introStyle
@@ -402,7 +407,7 @@ enum GenreArrangement {
             }
             // Once the input wakes up, a soft sub hums the progression two bars at a time.
             if c.level > (style == 3 ? 0 : 0.3), pos == 0, c.barInPhrase % 2 == 0 {
-                add(low, style == 3 ? 0.55 : 0.4, NoteParams(pitch: subPitch, lengthSteps: c.perBar * 2))
+                add(low, style == 3 ? 0.55 : 0.4, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar * 2)))
             }
             if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.36 : 0.22, add: add) }
             if c.introHook { keysHook(genre, c, velocity: 0.3, add: add) }
@@ -412,7 +417,7 @@ enum GenreArrangement {
             if style == 2, pos == 0 { add(.kick, 0.35) }
             if style == 0, c.level > 0.08, pos % 4 == 2 { add(.hat, 0.15 + 0.2 * c.level) }
             if style == 3, pos % 2 == 0 { add(.hat, 0.12 + 0.2 * c.level) }
-            if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
+            if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar))) }
             if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
             // Tropical house keeps its pluck through the breakdown: pads and the hook, softly.
             if genre == .tropicalHouse { keysHook(genre, c, velocity: 0.34, add: add) }
@@ -421,7 +426,9 @@ enum GenreArrangement {
             let rush = c.barInPhrase >= 6 && c.level > 0.7
             if pos % 2 == 0 || rush { add(.hat, (pos % 2 == 0 ? 0.3 : 0.18) + 0.3 * c.level) }
             // The snare tightens across the phrase: the genre's backbeat, then every beat, then 8ths.
-            if !c.dropComing {
+            if p.gentle {
+                if p.buildSnares.contains(pos) { add(.snare, 0.5) }
+            } else if !c.dropComing {
                 let ramp = 0.45 + 0.4 * Double(c.barInPhrase) / Double(max(1, c.barsPerPhrase - 1))
                 let fraction = Double(c.barInPhrase) / Double(max(1, c.barsPerPhrase))
                 if fraction < 0.5 {
@@ -432,7 +439,7 @@ enum GenreArrangement {
                     add(.snare, ramp)
                 }
             }
-            if pos == 0 { add(low, 0.55, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
+            if pos == 0 { add(low, 0.55, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar))) }
             // The hook, stated on keys and growing toward the drop.
             let grow = 0.35 + 0.3 * Double(c.barInPhrase) / Double(max(1, c.barsPerPhrase - 1))
             keysHook(genre, c, velocity: grow, add: add)
@@ -488,7 +495,10 @@ enum GenreArrangement {
 
     /// The breakdown's vocal lead: the hook's long notes on vox, an octave down from the keys.
     static func lead(_ c: StepContext) -> [ScheduledNote] {
-        guard c.section == .breakdown else { return [] }
+        // The formant vox is an electronic sound: in a band's breakdown it was the loudest thing and did not belong
+        // (Logan's flag 6, funk, 2026-10-07). Tropical house has none either: its low formant sweep reads as a whomp
+        // under the pluck.
+        guard c.section == .breakdown, !isBand(c.track.genre), !profile(c.track.genre).gentle else { return [] }
         return c.hookNotes().filter { $0.length >= 3 }.map { note in
             let pitch = c.track.pitch(c.keyRoot - 12, degree: c.chord + note.degree)
             return ScheduledNote(
@@ -564,7 +574,7 @@ enum GenreArrangement {
         if kicks.contains(pos) {
             let velocity =
                 genre == .tropicalHouse
-                ? 0.82
+                ? 0.7
                 : pos == 0 ? (soft ? 0.7 : 1.0) : (soft ? 0.4 : driving ? 0.95 : genre == .synthwave ? 0.9 : 0.75)
             add(.kick, velocity, NoteParams())
         }
@@ -635,8 +645,8 @@ enum GenreArrangement {
             if pos % 2 == 1, level > 0.3 { add(.hat, 0.12 + 0.1 * level, NoteParams()) }
         case .tropicalHouse:
             // A shaker: the off-beat 8th leans in, the 16ths around it whisper.
-            if pos % 4 == 2 { add(.hat, 0.3 + 0.15 * level, NoteParams()) }
-            if pos % 2 == 1 { add(.hat, 0.1 + 0.08 * level, NoteParams()) }
+            if pos % 4 == 2 { add(.hat, 0.24 + 0.1 * level, NoteParams()) }
+            if pos % 2 == 1 { add(.hat, 0.08 + 0.06 * level, NoteParams()) }
         case .drumAndBass:
             // Breakbeat hats: 8ths with a swung 16th before the snare.
             if pos % 2 == 0 { add(.hat, 0.32 + 0.3 * level + accent, NoteParams()) }
@@ -648,7 +658,8 @@ enum GenreArrangement {
             }
         }
         if variant.openHats.contains(pos), driving || level > 0.6, kind != .kickDrop {
-            add(.openHat, 0.55 + 0.25 * level, NoteParams())
+            // Tropical house's open hat is a light tambourine-like lift, not a wash.
+            add(.openHat, genre == .tropicalHouse ? 0.3 + 0.15 * level : 0.55 + 0.25 * level, NoteParams())
         }
     }
 
@@ -763,16 +774,12 @@ enum GenreArrangement {
                 add(.sub, 0.5, NoteParams(pitch: pitch, lengthSteps: length(6)))
             }
         case .tropicalHouse:
-            // A round off-beat bass the kick pumps: the sub on every "and", the last one of an odd bar on the fifth,
-            // and a soft, closed wub on beats 2 and 4's "and" for body.
+            // A round off-beat sub on every "and", the last one of an odd bar on the fifth. No wobble (take one's soft
+            // wub was the whomp) and no glide: each note is short, so the next starts fresh at its own pitch.
             if pos % 4 == 2 {
                 let turn = pos == 14 && c.barInPhrase % 2 == 1
                 let pitch = turn ? track.pitch(c.keyRoot - 36, degree: c.chord + 4) : subPitch
                 add(.sub, 0.8, NoteParams(pitch: pitch, lengthSteps: length(2)))
-                if pos == 6 || pos == 14 {
-                    let degree = c.chord + (turn ? 4 : 0)
-                    wobble(track.pitch(wobbleBase, degree: degree), 2, velocity: 0.4, accent: false)
-                }
             }
         case .rock, .folk, .funk:
             break  // the band's bass guitar is written above

@@ -152,24 +152,26 @@ import Testing
         #expect(!recording.notes.contains { $0.instrument == .wobble || $0.instrument == .sub })
     }
 
-    @Test func queueDropForcesTheDropAtTheNextBoundary() {
+    @Test func aQueuedDropOutOfAnIntroBuildsFirst() {
         var conductor = DropConductor(settings: Self.settings)
         _ = Self.play(&conductor, steps: 20) { _ in Self.quiet }
         conductor.queueDrop()
         #expect(conductor.snapshot.dropQueued)
         var notes: [ScheduledNote] = []
         var sections: [SongSection] = []
-        for step in 20..<(Self.phrase + 8) {
+        for step in 20..<(Self.phrase * 2 + 8) {
             conductor.ingest(Self.quiet)
             notes += conductor.advance(throughStep: step)
             sections.append(conductor.snapshot.section)
         }
         #expect(sections[Self.phrase - 21] == .intro)  // still intro on the last step of the phrase
-        #expect(sections[Self.phrase - 20] == .drop)  // drop exactly on the boundary
+        #expect(sections[Self.phrase - 20] == .build)  // a whole phrase of build first
+        #expect(sections[Self.phrase * 2 - 21] == .build)
+        #expect(sections[Self.phrase * 2 - 20] == .drop)  // then the drop, on the next line
         #expect(!conductor.snapshot.dropQueued)
-        #expect(notes.contains { $0.step == Self.phrase && $0.instrument == .impact })
-        #expect(notes.contains { $0.instrument == .riser })
-        #expect(notes.contains { $0.step == Self.phrase && $0.instrument == .wobble })
+        #expect(notes.contains { $0.step == Self.phrase * 2 && $0.instrument == .impact })
+        #expect(notes.contains { $0.instrument == .riser && $0.step < Self.phrase * 2 })
+        #expect(notes.contains { $0.step == Self.phrase * 2 && $0.instrument == .wobble })
     }
 
     @Test func queueDropFromABuildAndLateInTheLastBar() {
