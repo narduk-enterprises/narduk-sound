@@ -44,7 +44,6 @@ extension GalleryTile {
             }
             return AnyView(PluginErrorTile(file: entry.id, message: entry.error ?? "Not loaded."))
         }
-        .metal
     }
 }
 

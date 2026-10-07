@@ -1,9 +1,10 @@
 # Drop-in Metal visualizer plugins (SoundGallery)
 
 SoundGallery loads Metal visualizers from a folder at run time
-(narduk-libs#1665), so a new visualizer is a file, not a rebuild. Canvas kinds
-are Swift and stay built in (iOS forbids loading compiled code); the Intense
-shaders are plain MSL text, so they can be loaded.
+(narduk-libs#1665), so a new visualizer is a file, not a rebuild. The Canvas
+visualizers are retired: every built-in kind is a Metal shader, and plain MSL
+text can be loaded where compiled Swift cannot (iOS forbids loading compiled
+code).
 
 ## Drop one in
 

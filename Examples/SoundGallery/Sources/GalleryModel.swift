@@ -97,10 +97,6 @@ enum GalleryInput: String, CaseIterable, Identifiable {
         if state.look != look { state.look = look }
     }
 
-    /// The colors the gallery's own Canvas cards (Spectrum, Scope, Levels, Radial) draw with: their classic accents until
-    /// the look changes, then the state's palette.
-    var cardPalette: SoundPalette { look.isNeutral ? GalleryPalette.classic : visualState.palette }
-
     func choose(_ preset: SoundPalettePreset) {
         self.preset = preset
         look.colors = preset.colors

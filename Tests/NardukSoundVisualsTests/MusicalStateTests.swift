@@ -191,20 +191,6 @@ import Testing
         #expect(state.musical.keyPitchClass == nil && state.musical.keyConfidence == 0)
     }
 
-    @Test func rowsFitThePlayedRangeAndNeverLeaveMidiRange() {
-        #if canImport(SwiftUI)
-            #expect(SoundVisualizers.rollRows(nil) == nil)
-            let one = SoundVisualizers.rollRows(60...60)
-            #expect(one != nil && one!.count >= 24 && one!.contains(60))
-            let low = SoundVisualizers.rollRows(0...3)
-            #expect(low!.lowerBound == 0 && low!.count >= 24)
-            let high = SoundVisualizers.rollRows(120...127)
-            #expect(high!.upperBound == 127 && high!.count >= 24)
-            let wide = SoundVisualizers.rollRows(20...100)
-            #expect(wide!.contains(20) && wide!.contains(100))
-        #endif
-    }
-
     @Test func pitchClassesNameThemselves() {
         #expect(SoundMusicalState.name(ofPitchClass: 0) == "C")
         #expect(SoundMusicalState.name(ofPitchClass: 9) == "A")

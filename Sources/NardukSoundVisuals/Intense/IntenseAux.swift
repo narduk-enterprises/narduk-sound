@@ -18,6 +18,8 @@
             static let history = Needs(rawValue: 2)
             /// Buffers 6 and 7: the piano roll, `rollRows` x `rollColumns` bytes, split at `rollSplit` rows.
             static let roll = Needs(rawValue: 4)
+            /// Buffer 8: the particle pool (`particleHeader` + `particleStride` floats a particle).
+            static let particles = Needs(rawValue: 8)
         }
 
         // Layout of buffer 4 (floats).
@@ -66,7 +68,23 @@
         private(set) var rollTop = [UInt8](repeating: 0, count: rollSplit * rollColumns)
         private(set) var rollBottom = [UInt8](repeating: 0, count: (rollRows - rollSplit) * rollColumns)
 
+        // The particle pool (buffer 8, a shared `MTLBuffer` because 320 particles exceed `setFragmentBytes`' 4 KB): a header
+        // float4 (live count, build progress), then two float4s a particle: x, y, age, size; vx, vy, tint, kind.
+        static let particleFloats = 8
+        static let particleBufferCount = 3
+        private var particleBuffers: [any MTLBuffer] = []
+        private var particleSlot = 0
+
         init() {}
+
+        /// A set that can also feed the particle field: three rotating buffers, so the GPU never reads one the CPU is
+        /// rewriting.
+        init(device: any MTLDevice) {
+            let length = (1 + 2 * 320) * 16
+            particleBuffers = (0..<Self.particleBufferCount).compactMap {
+                _ in device.makeBuffer(length: length, options: .storageModeShared)
+            }
+        }
 
         /// The first rising zero crossing in the leading 128 samples, so a trace holds still; 0 when there is none.
         static func trigger(_ wave: UnsafeBufferPointer<Float>, base: Int = 0) -> Int {
@@ -104,6 +122,7 @@
             if needs.contains(.scalars) { fillScalars(state) }
             if needs.contains(.history) { fillHistory(state) }
             if needs.contains(.roll) { fillRoll(state) }
+            if needs.contains(.particles) { fillParticles(state) }
         }
 
         @MainActor private mutating func fillScalars(_ state: SoundVisualState) {
@@ -128,6 +147,33 @@
                 out[Self.rollSpan] = Float(window?.count ?? SoundMusicalState.pitchClassCount)
                 out[Self.scopeTrigger] = Float(Self.trigger(state.waveform))
                 out[Self.silent] = state.isSilent ? 1 : 0
+            }
+        }
+
+        @MainActor private mutating func fillParticles(_ state: SoundVisualState) {
+            guard !particleBuffers.isEmpty else { return }
+            particleSlot = (particleSlot + 1) % particleBuffers.count
+            let buffer = particleBuffers[particleSlot]
+            let capacity = buffer.length / 16 / 2 - 1
+            let out = buffer.contents().assumingMemoryBound(to: Float.self)
+            let pool = state.particles
+            let count = min(pool.count, capacity)
+            out[0] = Float(count)
+            out[1] = state.section == .build ? state.phraseProgress : 0
+            out[2] = 0
+            out[3] = 0
+            for i in 0..<count {
+                let particle = pool[i]
+                let base = 4 + i * Self.particleFloats
+                let live = particle.life > 0
+                out[base] = particle.x
+                out[base + 1] = particle.y
+                out[base + 2] = live ? particle.age : 1
+                out[base + 3] = particle.size
+                out[base + 4] = particle.vx
+                out[base + 5] = particle.vy
+                out[base + 6] = particle.tint - particle.tint.rounded(.down)
+                out[base + 7] = Float(particle.kind.rawValue)
             }
         }
 
@@ -199,6 +245,9 @@
             if needs.contains(.roll) {
                 Self.set(rollTop, on: encoder, index: 6)
                 Self.set(rollBottom, on: encoder, index: 7)
+            }
+            if needs.contains(.particles), !particleBuffers.isEmpty {
+                encoder.setFragmentBuffer(particleBuffers[particleSlot], offset: 0, index: 8)
             }
         }
 

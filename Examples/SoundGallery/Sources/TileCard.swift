@@ -16,7 +16,7 @@ struct TileCard: View {
             HStack {
                 Text(tile.id).font(GalleryTheme.cardTitle).lineLimit(1)
                 Spacer(minLength: GalleryTheme.Space.s)
-                GalleryBadge(text: tile.isMetal ? "Metal" : "Canvas", tint: tile.isMetal ? GalleryPalette.high : .white)
+                GalleryBadge(text: "Metal", tint: GalleryPalette.high)
             }
             .padding(.horizontal, GalleryTheme.Space.m)
             .padding(.bottom, GalleryTheme.Space.m)

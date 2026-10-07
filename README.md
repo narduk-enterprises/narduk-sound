@@ -30,7 +30,7 @@ it needs no credential.
 
 `Apps/SoundGallery` is a SwiftUI app for macOS, iPad and iPhone that plays the
 demo song, the microphone or an audio file through `NardukSoundAnalysis` into
-four Canvas visualizers side by side (`xcodegen generate`, then build the
+every Metal visualizer side by side (`xcodegen generate`, then build the
 `SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch).
 It is unsigned and local only; CI builds it for macOS and the iOS simulator.
 

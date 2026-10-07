@@ -20,29 +20,29 @@
         @Test func theNeutralLookIsTheIdentity() {
             #expect(SoundPaletteLook.neutral.isNeutral)
             #expect(SoundPaletteLook(preset: .neon).isNeutral)
-            let plain = CanvasVisualizerTests.busyState()
-            let neutral = CanvasVisualizerTests.busyState(look: .neutral)
+            let plain = BusyStateScript.state()
+            let neutral = BusyStateScript.state(look: .neutral)
             #expect(plain.palette == neutral.palette)
         }
 
         @Test func aPresetChangesThePaletteAndNeonDoesNot() {
-            let base = CanvasVisualizerTests.busyState().palette
-            #expect(CanvasVisualizerTests.busyState(look: SoundPaletteLook(preset: .neon)).palette == base)
+            let base = BusyStateScript.state().palette
+            #expect(BusyStateScript.state(look: SoundPaletteLook(preset: .neon)).palette == base)
             for preset in SoundPalettePreset.allCases where preset != .neon {
-                let palette = CanvasVisualizerTests.busyState(look: SoundPaletteLook(preset: preset)).palette
+                let palette = BusyStateScript.state(look: SoundPaletteLook(preset: preset)).palette
                 #expect(palette != base, "\(preset.title) left the palette unchanged")
             }
         }
 
         @Test func theKnobsMoveTheColors() {
-            let base = CanvasVisualizerTests.busyState().palette
+            let base = BusyStateScript.state().palette
             for look in [
                 SoundPaletteLook(hueShift: 90), SoundPaletteLook(saturation: 0), SoundPaletteLook(brightness: 0.5),
             ] {
-                #expect(CanvasVisualizerTests.busyState(look: look).palette != base, "\(look) changed nothing")
+                #expect(BusyStateScript.state(look: look).palette != base, "\(look) changed nothing")
             }
             // Zero saturation is grey: the three channels agree.
-            let grey = CanvasVisualizerTests.busyState(look: SoundPaletteLook(saturation: 0)).palette.c0
+            let grey = BusyStateScript.state(look: SoundPaletteLook(saturation: 0)).palette.c0
             #expect(abs(grey.x - grey.y) < 1e-4 && abs(grey.y - grey.z) < 1e-4)
         }
 
@@ -124,31 +124,12 @@
             #expect(mid.x + mid.y + mid.z > 1.0)
         }
 
-        @Test func theStageBackdropAndFringesFollowALookAndKeepTheirClassicColorsWhenNeutral() {
-            let classic = SoundVisualizerStyle()
-            #expect(classic.tinted(by: CanvasVisualizerTests.busyState()) == classic)
-            let tinted = classic.tinted(by: CanvasVisualizerTests.busyState(look: SoundPaletteLook(preset: .toxic)))
-            #expect(tinted.stage != classic.stage)
-            #expect(tinted.phosphorStage != classic.phosphorStage)
-            #expect(tinted.fringeA != classic.fringeA && tinted.fringeB != classic.fringeB)
-            #expect(tinted.label == classic.label)
-        }
-
-        @Test(arguments: SoundVisualizerKind.allCases)
-        func everyCanvasKindDrawsDifferentPixelsInANewPalette(_ kind: SoundVisualizerKind) throws {
-            let base = try CanvasVisualizerTests.grid(kind, CanvasVisualizerTests.busyState())
-            for (name, look) in Self.looks {
-                let tinted = try CanvasVisualizerTests.grid(kind, CanvasVisualizerTests.busyState(look: look))
-                #expect(base != tinted, "\(kind.rawValue) ignored the \(name) palette")
-            }
-        }
-
         @Test func everyPresetAndRandomRollKeepsFlashesRedSafe() {
             var looks = SoundPalettePreset.allCases.map { SoundPaletteLook(preset: $0) }
             looks += (0..<300).map { SoundPaletteLook.random(seed: UInt64($0)) }
             looks += [SoundPaletteLook(hueShift: -40, saturation: 2, brightness: 2)]
             for look in looks {
-                let state = CanvasVisualizerTests.busyState(look: look)
+                let state = BusyStateScript.state(look: look)
                 var limiter = IntenseFlashLimiter()
                 let drive = IntenseDrive(
                     flashDemand: 1, glitchDemand: 1, tint: state.palette.c2, calm: false, now: 1, limiter: &limiter)
@@ -177,11 +158,22 @@
             #expect(uniforms.extra.y == 1)
         }
 
+        /// Mean absolute difference per channel (0 ... 255) between two renders of the same frame.
+        static func drift(_ a: [UInt8], _ b: [UInt8]) -> Double {
+            precondition(a.count == b.count)
+            var total = 0
+            for i in 0..<a.count { total += abs(Int(a[i]) - Int(b[i])) }
+            return Double(total) / Double(a.count)
+        }
+
+        /// A palette look must change the picture, not one stray pixel: every kept Metal visualizer drifts beyond the
+        /// threshold under two very different looks.
         @Test(.enabled(if: hasMetal, "no Metal device on this host"), arguments: IntenseKind.allCases)
         func everyIntenseKindDrawsDifferentPixelsInANewPalette(kind: IntenseKind) throws {
             let base = try Self.render(kind)
             for look in [SoundPaletteLook(preset: .ocean), SoundPaletteLook(hueShift: 120)] {
-                #expect(try Self.render(kind, look: look) != base, "\(kind.rawValue) ignored \(look)")
+                let drift = Self.drift(base, try Self.render(kind, look: look))
+                #expect(drift > 0.5, "\(kind.rawValue) barely changed (drift \(drift)) under \(look)")
             }
         }
     }

@@ -45,17 +45,4 @@ import Testing
         model.sync(tileState)
         #expect(tileState.look.isNeutral)
     }
-
-    @Test func theGalleryCanvasCardsDrawInTheChosenPalette() {
-        let model = GalleryModel()
-        #expect(model.cardPalette == GalleryPalette.classic)
-        model.choose(.sunset)
-        Self.pump(model.visualState)
-        #expect(model.cardPalette != GalleryPalette.classic)
-        #expect(model.cardPalette == model.visualState.palette)
-        let first = model.cardPalette
-        model.rollRandom(seed: 11)
-        Self.pump(model.visualState, from: 102)
-        #expect(model.cardPalette != first)
-    }
 }

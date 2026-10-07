@@ -45,7 +45,7 @@ public enum SoundPalettePreset: String, CaseIterable, Sendable, Codable, Identif
 }
 
 /// How the palette looks right now: an optional replacement for the section-driven colors, plus the tuning knobs.
-/// `SoundVisualState.look` applies it to every visualizer at once, because every visualizer (Canvas and Metal) draws
+/// `SoundVisualState.look` applies it to every visualizer at once, because every visualizer (Metal) draws
 /// from `state.palette`. The default is the identity, so the default look changes no pixel.
 public struct SoundPaletteLook: Equatable, Sendable, Codable {
     /// Replaces the provider's colors when set; nil follows the provider (the section table).

@@ -7,32 +7,6 @@ import SwiftUI
 /// they cannot share the model's state without fighting over time. They poll `model.latestFrame`, the frame the
 /// gallery's one timeline last polled, so the analyzer still runs once per tick. The rate comes from the gallery's
 /// render budget through the environment.
-struct ParticleFieldTile: View {
-    let model: GalleryModel
-    let framesPerSecond: Int
-    @State private var state = SoundVisualState()
-
-    var body: some View {
-        model.sync(state)
-        return ParticleFieldView(state: state) { model.latestInput }
-            .environment(\.soundFramesPerSecond, framesPerSecond)
-            .accessibilityLabel("Particle field")
-    }
-}
-
-struct KaleidoscopeTile: View {
-    let model: GalleryModel
-    let framesPerSecond: Int
-    @State private var state = SoundVisualState()
-
-    var body: some View {
-        model.sync(state)
-        return BeatKaleidoscopeView(state: state) { model.latestInput }
-            .environment(\.soundFramesPerSecond, framesPerSecond)
-            .accessibilityLabel("Beat kaleidoscope")
-    }
-}
-
 struct ShaderPackTile: View {
     let kind: ShaderPackKind
     let title: String
@@ -55,12 +29,6 @@ struct ShaderPackTile: View {
 extension GalleryTile {
     /// The new visualizers, in the order the gallery shows them.
     static let spectacle: [GalleryTile] = [
-        GalleryTile(id: "Particle field") { context in
-            AnyView(ParticleFieldTile(model: context.model, framesPerSecond: context.framesPerSecond))
-        },
-        GalleryTile(id: "Beat kaleidoscope") { context in
-            AnyView(KaleidoscopeTile(model: context.model, framesPerSecond: context.framesPerSecond))
-        },
         GalleryTile(id: "Feedback (Milkdrop)") { context in
             AnyView(
                 ShaderPackTile(
