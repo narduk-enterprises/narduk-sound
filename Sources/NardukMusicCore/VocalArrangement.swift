@@ -118,7 +118,7 @@ enum VocalArrangement {
         if plan.pad, VocalPlan.padGenre(c.track.genre) {
             let singsPad: Bool =
                 switch c.section {
-                case .intro: c.barInPhrase % 4 == 0
+                case .intro: c.barInPhrase % (c.adds(.vocals, 0x5E11) ? 2 : 4) == 0
                 case .breakdown, .build: c.barInPhrase % 2 == 0
                 case .drop, .drop2: false
                 }
@@ -135,7 +135,9 @@ enum VocalArrangement {
         }
 
         if plan.chop {
-            if c.section == .build, c.barInPhrase >= c.barsPerPhrase / 2, !c.dropComing || pos < 12 {
+            // Vocals pushed up start the gated chops a quarter of the way into the build instead of halfway.
+            let gateFrom = c.barsPerPhrase / (c.adds(.vocals, 0x5E12) ? 4 : 2)
+            if c.section == .build, c.barInPhrase >= gateFrom, !c.dropComing || pos < 12 {
                 // Gated vocals: short chops on the eighths, one rung higher up the chord each bar.
                 if pos % 2 == 0, !tones.isEmpty {
                     let rung = (c.barInPhrase + pos / 2) % tones.count
@@ -151,7 +153,10 @@ enum VocalArrangement {
             }
             if c.section.isDrop {
                 let shift = c.barInPhrase % 2 == 1 ? 2 : 0
-                if let index = plan.chopSteps.firstIndex(of: (pos + 16 - shift) % 16), !tones.isEmpty {
+                // Vocals pushed up add a chop on the grid step before each of the hook's.
+                let extra =
+                    c.adds(.vocals, 0x5E13) ? plan.chopSteps.firstIndex(of: (pos + 1 + 16 - shift) % 16) : nil
+                if let index = plan.chopSteps.firstIndex(of: (pos + 16 - shift) % 16) ?? extra, !tones.isEmpty {
                     let degreeLift = [0, 2, 1, 3][(index + c.barInPhrase) % 4]
                     add(
                         .vocalChop, 0.5 + 0.3 * level,

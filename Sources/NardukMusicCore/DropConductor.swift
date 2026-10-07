@@ -337,6 +337,10 @@ public struct DropConductor: Sendable {
     private var outroFired = false
     private var sectionJustStarted = false
 
+    /// How much each part is written (see `PartEmphasis`); the one playing now, and one waiting for the phrase line.
+    public private(set) var partEmphasis = PartEmphasis.neutral
+    public private(set) var pendingPartEmphasis: PartEmphasis?
+
     public init(settings: SongSettings) {
         self.settings = settings
         self.activeGenre = settings.genre
@@ -369,6 +373,13 @@ public struct DropConductor: Sendable {
         nextTrackRequested = true
         nextTrackGenre = genre
         settings.genre = activeGenre
+    }
+
+    /// Steers how much each part of the band is written, apart from its gain. Steps already emitted are never touched:
+    /// the new weights take over at the next phrase line (step 0 if nothing has been emitted yet), so a part never
+    /// changes mid-bar. A later call before that line replaces an earlier one. `PartEmphasis.neutral` is today's song.
+    public mutating func setPartEmphasis(_ emphasis: PartEmphasis) {
+        pendingPartEmphasis = emphasis == partEmphasis ? nil : emphasis
     }
 
     /// Whether a hand-over asked for by `requestNextTrack` is still to come, and the genre it lands in.
@@ -488,6 +499,10 @@ public struct DropConductor: Sendable {
         if tracksStarted == 0 { startTrack(step: step, reason: .first) }
         if barStep == 0 { startBar() }
         if phraseStep == 0 {
+            if let pending = pendingPartEmphasis {
+                partEmphasis = pending
+                pendingPartEmphasis = nil
+            }
             if step > 0 {
                 sectionJustStarted = sections.enterNext()
                 if sections.section.isDrop { dropQueued = false }
@@ -546,6 +561,14 @@ public struct DropConductor: Sendable {
         place(into: &stepNotes, step: step, bar: bar, barStep: barStep, perBar: perBar)
         stepNotes += compNotes
         compNotes = []
+        if !partEmphasis.isNeutral {
+            let pos: Int? = (barStep * 16) % perBar == 0 ? barStep * 16 / perBar : nil
+            let plan = plan
+            partEmphasis.thin(
+                &stepNotes, pos: pos, section: sections.section, phraseInTrack: trackPhrases - 1,
+                barInPhrase: bar % max(1, settings.barsPerPhrase), barsPerPhrase: max(1, settings.barsPerPhrase),
+                draw: { plan.unit(step, $0 ^ 0x7E1C) })
+        }
         notes.append(contentsOf: stepNotes)
         sectionJustStarted = false
     }
@@ -747,6 +770,7 @@ public struct DropConductor: Sendable {
         // How this genre arrives at a drop (GenreArrangement.DropEntry). A build writes its own snare roll, so the
         // conductor's roll only leads a drop that comes straight out of a breakdown.
         let entry: GenreArrangement.DropEntry = ambient || gentle ? .none : GenreArrangement.dropEntry(genre)
+        let drums = partEmphasis.lift(.drums)
         if dropComing {
             let lastBeat = barStep >= perBar - beat
             switch entry {
@@ -759,7 +783,11 @@ public struct DropConductor: Sendable {
                         NoteParams(pitch: track.keyRoot + 12, lengthSteps: perPhrase - phraseStep))
                     note(legend: "riser ← build to drop", replacingPrefix: "riser")
                 }
-                if section != .build, Self.rolls(barStep: barStep, half: half, beat: beat) {
+                // Drums pushed up roll harder: 8ths through the first half and 16ths from the half.
+                if section != .build,
+                    Self.rolls(barStep: barStep, half: half, beat: beat)
+                        || (drums > 0 && barStep % max(1, (barStep < half ? beat / 2 : 1)) == 0)
+                {
                     add(.snare, (0.35 + 0.65 * Double(barStep) / Double(perBar)) * profile.gain)
                 }
             case .pickup:
@@ -778,6 +806,9 @@ public struct DropConductor: Sendable {
                 }
             case .filterOpen, .none:
                 break
+            }
+            if drums > 0, !ambient, barStep == perBar - max(1, beat / 2), plan.unit(bar, 0x0B47) < drums {
+                add(.openHat, (0.5 + 0.2 * drums) * profile.gain)
             }
         }
 
@@ -810,6 +841,13 @@ public struct DropConductor: Sendable {
             case .filterOpen, .none:
                 break
             }
+        } else if barStep == 0, !ambient, section == .build, sectionJustStarted,
+            partEmphasis.adds(.fx, plan.unit(bar, 0x1A9C)),
+            quantizer.canSpend(.instrument(.impact), bar: bar)
+        {
+            // Effects pushed up mark the build's arrival too.
+            add(.impact, 0.6)
+            quantizer.spend(.instrument(.impact), bar: bar)
         }
 
         let context = StepContext(
@@ -820,7 +858,8 @@ public struct DropConductor: Sendable {
             introHook: section == .intro && trackPhrases >= 2,
             phraseInSection: sections.phrasesInSection - 1,
             sectionPhrases: section == .build ? sections.buildLength : 1,
-            voicing: settings.effectiveVoicing, comping: settings.effectiveComping)
+            voicing: settings.effectiveVoicing, comping: settings.effectiveComping,
+            emphasis: partEmphasis)
         if ambient {
             out += AmbientArrangement.notes(context)
             out += VocalArrangement.ambientNotes(
@@ -852,9 +891,19 @@ public struct DropConductor: Sendable {
         if profile.chops, level > 0.05 { chops(bar: bar, barStep: barStep, perBar: perBar, into: &out, step: step) }
     }
 
-    /// Chill: a low-velocity vox chop every other bar.
+    /// Chill: a low-velocity vox chop every other bar. Vocals pushed up chop in the odd bars too, and answer on the 14.
     private mutating func chops(bar: Int, barStep: Int, perBar: Int, into out: inout [ScheduledNote], step: Int) {
-        if barStep * 16 == 6 * perBar, bar % 2 == 0, quantizer.canSpend(.instrument(.vox), bar: bar) {
+        let more = partEmphasis.adds(.vocals, plan.unit(bar, 0xC409))
+        if barStep * 16 == 14 * perBar, more, partEmphasis.lift(.vocals) >= 0.5,
+            quantizer.canSpend(.instrument(.vox), bar: bar)
+        {
+            out.append(
+                ScheduledNote(
+                    step: step, instrument: .vox, velocity: 0.26,
+                    params: NoteParams(voice: (bar / 2 + track.vowel + 1) % 4)))
+            quantizer.spend(.instrument(.vox), bar: bar)
+        }
+        if barStep * 16 == 6 * perBar, bar % 2 == 0 || more, quantizer.canSpend(.instrument(.vox), bar: bar) {
             out.append(
                 ScheduledNote(
                     step: step, instrument: .vox, velocity: 0.3,

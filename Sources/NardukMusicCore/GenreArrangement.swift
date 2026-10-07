@@ -111,6 +111,13 @@ struct StepContext {
     /// How the chords are voiced, and the chord layer played over the arrangement; nil is the arrangement's own.
     var voicing: ChordVoicing?
     var comping: CompingPattern?
+    /// How much each part is written (`PartEmphasis`); neutral writes the genre as it is.
+    var emphasis = PartEmphasis.neutral
+
+    /// A stable 0 ..< 1 draw for this bar and a purpose, so an emphasis choice holds for the whole bar.
+    func draw(_ salt: UInt64) -> Double { plan.unit(bar, salt) }
+    /// Whether a part pushed above 1 takes an extra choice in this bar (never at neutral).
+    func adds(_ part: PartEmphasis.Part, _ salt: UInt64) -> Bool { emphasis.adds(part, draw(salt)) }
 
     /// Position on a 16-step bar grid, or nil when this step is between grid positions (odd bar sizes).
     var pos: Int? { (barStep * 16) % perBar == 0 ? barStep * 16 / perBar : nil }
@@ -262,6 +269,9 @@ enum GenreArrangement {
 
     /// Rock, folk and funk: the guitars carry the chords and hook and a bass guitar replaces the sub.
     static func isBand(_ genre: Genre) -> Bool { genre.family == .band }
+
+    /// The part that carries a genre's hook and pads: the guitar in a band, the keys everywhere else.
+    static func hookPart(_ genre: Genre) -> PartEmphasis.Part { isBand(genre) ? .guitar : .keys }
 
     /// The chord (strum) and single-note (lead) guitar the genre plays.
     private static func guitars(_ genre: Genre) -> (strum: Instrument, lead: Instrument) {
@@ -464,17 +474,26 @@ enum GenreArrangement {
         switch c.section {
         case .intro:
             let style = c.track.introStyle
-            let kicks = style != 1 && style != 3
-            if kicks, p.introKicks.contains(pos), c.bar % (style == 2 ? 1 : p.introKickBarStride) == 0 {
+            // Drums pushed up enter earlier: the kick on every bar from the start, the hats before the input wakes.
+            let drumsIn = c.adds(.drums, 0x1D01)
+            let kicks = (style != 1 && style != 3) || drumsIn
+            let stride = drumsIn ? 1 : (style == 2 ? 1 : p.introKickBarStride)
+            if kicks, p.introKicks.contains(pos), c.bar % stride == 0 {
                 add(.kick, 0.55)
             }
             let hats: [[Int]] = [[2, 6, 10, 14], [2, 6, 10, 13, 14], [2, 5, 10, 14], [2, 6, 11, 14]]
-            if style != 1, c.level > (style == 2 ? 0 : 0.08), hats[variant % hats.count].contains(pos) {
+            if style != 1 || drumsIn, c.level > (style == 2 || drumsIn ? 0 : 0.08),
+                hats[variant % hats.count].contains(pos)
+            {
                 add(.hat, (pos % 4 == 2 ? 0.18 : 0.12) + 0.3 * max(c.level, style == 2 ? 0.3 : 0))
             }
-            // Once the input wakes up, a soft sub hums the progression two bars at a time.
-            if c.level > (style == 3 ? 0 : 0.3), pos == 0, c.barInPhrase % 2 == 0 {
-                add(low, style == 3 ? 0.55 : 0.4, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar * 2)))
+            // Once the input wakes up, a soft sub hums the progression two bars at a time; bass pushed up hums from
+            // the start, and every bar.
+            let bassIn = c.adds(.bass, 0x1D02)
+            if c.level > (style == 3 || bassIn ? 0 : 0.3), pos == 0, c.barInPhrase % 2 == 0 || bassIn {
+                add(
+                    low, style == 3 ? 0.55 : 0.4,
+                    NoteParams(pitch: subPitch, lengthSteps: held(c.perBar * (bassIn ? 1 : 2))))
             }
             // The second half of every phrase moves: the pad swells and a soft hat pickup leads into the bars between.
             let swell = c.inSecondHalf ? 1.3 : 1
@@ -482,7 +501,8 @@ enum GenreArrangement {
                 pad(c, velocity: (style == 1 ? 0.36 : 0.22) * swell, add: add)
             }
             if c.inSecondHalf, pos == 15, style == 2 || c.barInPhrase % 2 == 1 { add(.hat, 0.12 + 0.2 * c.level) }
-            if c.introHook { keysHook(genre, c, velocity: 0.3, add: add) }
+            // The hook part pushed up states the hook from the track's first phrase.
+            if c.introHook || c.adds(hookPart(genre), 0x1D03) { keysHook(genre, c, velocity: 0.3, add: add) }
             introLayers(genre, c, pos: pos, subPitch: subPitch, add: add)
         case .breakdown:
             let style = c.track.breakdownStyle
@@ -490,13 +510,23 @@ enum GenreArrangement {
             if style == 2, pos == 0 { add(.kick, 0.35) }
             if style == 0, c.level > 0.08, pos % 4 == 2 { add(.hat, 0.15 + 0.2 * c.level) }
             if style == 3, pos % 2 == 0 { add(.hat, 0.12 + 0.2 * c.level) }
+            // Drums pushed up stay in the breakdown: a soft kick on the one and the off-beat hats.
+            if c.adds(.drums, 0x1D11) {
+                if style != 0, style != 2, pos == 0 { add(.kick, 0.4) }
+                if style != 0, style != 3, pos % 4 == 2 { add(.hat, 0.14 + 0.2 * c.level) }
+            }
             if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar))) }
+            if pos == 8, c.adds(.bass, 0x1D12) {
+                add(low, 0.35, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar / 2)))
+            }
             if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
             // Tropical house keeps its hook through the breakdown, softly, handed to a recorded sax or nylon guitar
-            // (by the track's breakdown style) over the pads.
+            // (by the track's breakdown style) over the pads. Any other hook part pushed up keeps it too.
             if genre == .tropicalHouse {
                 let voice = c.track.breakdownStyle % 2 == 0 ? KeysVoice.sampledSax : KeysVoice.sampledNylonGuitar
                 keysHook(genre, c, velocity: 0.34, voice: voice, add: add)
+            } else if c.adds(hookPart(genre), 0x1D13) {
+                keysHook(genre, c, velocity: 0.34, add: add)
             }
         case .build:
             // The build ramps bar by bar across its whole planned length, not once per phrase (#40): the kick firms up
@@ -508,6 +538,9 @@ enum GenreArrangement {
             let hatStride = t < 0.25 ? 4 : t < 0.6 ? 2 : 1
             if pos % hatStride == (hatStride == 4 ? 2 : 0) {
                 add(.hat, (pos % 2 == 0 ? 0.22 : 0.14) + 0.2 * t + 0.1 * c.level)
+            } else if t >= 0.5, c.adds(.drums, 0x1D21) {
+                // Drums pushed up rush the second half of the build with the 16ths in between.
+                add(.hat, 0.14 + 0.2 * t + 0.1 * c.level)
             }
             if p.gentle {
                 if p.buildSnares.contains(pos) { add(.snare, 0.4 + 0.2 * t) }
@@ -654,7 +687,10 @@ enum GenreArrangement {
         // The formant vox is an electronic sound: in a band's breakdown it was the loudest thing and did not belong
         // (Logan's flag 6, funk, 2026-10-07). Tropical house has none either: its low formant sweep reads as a whomp
         // under the pluck.
-        guard c.section == .breakdown, !isBand(c.track.genre), !profile(c.track.genre).gentle else { return [] }
+        // Vocals pushed up sing the lead through the build's first half and the intro's hook too.
+        let early = (c.section == .build && c.barInPhrase < c.barsPerPhrase / 2) || (c.section == .intro && c.introHook)
+        let more = early && c.adds(.vocals, 0x5E01)
+        guard c.section == .breakdown || more, !isBand(c.track.genre), !profile(c.track.genre).gentle else { return [] }
         return c.hookNotes().filter { $0.length >= 3 }.map { note in
             let pitch = c.track.pitch(c.keyRoot - 12, degree: c.chord + note.degree)
             return ScheduledNote(
@@ -726,11 +762,63 @@ enum GenreArrangement {
         drums(genre, c, pos: pos, fill: fill, variation: variation, add: add)
         bass(genre, c, pos: pos, fill: fill, add: add)
         keys(genre, c, pos: pos, fill: fill, add: add)
+        counterLine(genre, c, pos: pos, fill: fill, add: add)
         return out
+    }
+
+    /// Whether a genre's drop already writes its hook part (keys, or the band's guitar) in this section.
+    static func dropHasHookPart(_ genre: Genre, _ section: SongSection) -> Bool {
+        switch genre {
+        case .riddim: false
+        case .dubstep: section == .drop2
+        default: true
+        }
+    }
+
+    /// The hook part pushed above 1, in a drop that already has it: extra chord stabs on the off-beats around the hook
+    /// and a counter-line answering it on the fifth. Keys stab on electric piano; a band strums and picks the lead.
+    private static func counterLine(
+        _ genre: Genre, _ c: StepContext, pos: Int, fill: (kind: Fill, from: Int)?,
+        add: (Instrument, Double, NoteParams) -> Void
+    ) {
+        let part = hookPart(genre)
+        guard c.emphasis.lift(part) > 0, c.outro != .drumBridge, dropHasHookPart(genre, c.section) else { return }
+        if let fill, fill.kind == .kickDrop, pos >= fill.from { return }
+        let hooked = !c.hookNotes().isEmpty
+        if pos == 6 || pos == 14, !hooked, c.adds(part, 0x2C01) {
+            if isBand(genre) {
+                strum(genre, c, velocity: 0.42, length: 1, up: true, add: add)
+            } else {
+                for pitch in chord(c, degree: c.chord, base: c.keyRoot, seventh: lush(genre)) {
+                    add(.keys, 0.3, NoteParams(pitch: pitch, lengthSteps: c.scaled(1), voice: 2))
+                }
+            }
+        }
+        if pos == 4 || pos == 12, !hooked, c.emphasis.lift(part) >= 0.5, c.adds(part, 0x2C02 &+ UInt64(pos)) {
+            let degree = c.chord + (pos == 4 ? 4 : 2)
+            let instrument: Instrument = isBand(genre) ? guitars(genre).lead : .keys
+            let params =
+                isBand(genre)
+                ? NoteParams(
+                    pitch: c.track.pitch(c.keyRoot + 12, degree: degree), lengthSteps: c.scaled(2), drive: c.track.drive)
+                : NoteParams(pitch: c.track.pitch(c.keyRoot + 12, degree: degree), lengthSteps: c.scaled(2), voice: 2)
+            add(instrument, 0.34, params)
+        }
     }
 
     /// The fill acting at this position, with where its zone starts (the last bar's, or the half-phrase's last beat).
     static func activeFill(_ c: StepContext, pos: Int) -> (kind: Fill, from: Int)? {
+        guard let fill = writtenFill(c) else {
+            // Drums pushed up add a snare-roll fill at the half phrase where the track has none.
+            return c.isHalfPhraseBar && c.adds(.drums, 0x3F12) ? (.snareRoll, 12) : nil
+        }
+        // A part held down skips some of its fills: the bass its stutter, the drums the rest.
+        let weight = c.emphasis[fill.kind == .bassStutter ? .bass : .drums]
+        return weight < 1 && c.draw(0x3F11) >= weight ? nil : fill
+    }
+
+    /// The fill the track writes here, before any emphasis.
+    private static func writtenFill(_ c: StepContext) -> (kind: Fill, from: Int)? {
         if c.isLastBar {
             let from: Int
             switch c.plan.fill {
@@ -806,7 +894,8 @@ enum GenreArrangement {
                 snared = true
             }
         }
-        let ghostChance = c.track.ghostDensity * (genre == .drumAndBass ? 1 : 0.4 + 0.6 * level)
+        var ghostChance = c.track.ghostDensity * (genre == .drumAndBass ? 1 : 0.4 + 0.6 * level)
+        if c.emphasis[.drums] != 1 { ghostChance = min(1, ghostChance * c.emphasis[.drums]) }
         if !snared, variant.ghosts.contains(pos), c.plan.unit(c.bar, UInt64(pos) &+ 101) < ghostChance {
             add(.snare, 0.16 + 0.14 * c.plan.unit(c.bar, UInt64(pos) &+ 211), NoteParams())
         }
@@ -872,6 +961,9 @@ enum GenreArrangement {
         if variant.openHats.contains(pos), driving || level > 0.6, kind != .kickDrop {
             // Tropical house's open hat is a light tambourine-like lift, not a wash.
             add(.openHat, genre == .tropicalHouse ? 0.3 + 0.15 * level : 0.55 + 0.25 * level, NoteParams())
+        } else if pos == 14, kind != .kickDrop, !variation.hatSwap, c.barInPhrase % 2 == 1, c.adds(.drums, 0x3F21) {
+            // Drums pushed up lift every other bar with an open hat into the next.
+            add(.openHat, genre == .tropicalHouse ? 0.25 + 0.1 * level : 0.45 + 0.25 * level, NoteParams())
         }
         if variation.hatSwap {
             // The swapped pattern: 16th pickups into beats 2 and 4, and an open hat on the bar's last 8th.
@@ -934,6 +1026,20 @@ enum GenreArrangement {
             return
         }
 
+        // Bass pushed up answers the bar with a short octave on the last 8th, on the genre's own bass instrument.
+        if pos == 14, c.adds(.bass, 0x4B01) {
+            if isBand(genre) {
+                add(
+                    .bassGuitar, 0.6,
+                    NoteParams(
+                        pitch: bassRegister(track.pitch(wobbleBase, degree: c.chord)) + 12, lengthSteps: length(1),
+                        drive: 0.3))
+            } else {
+                add(
+                    .sub, 0.6,
+                    NoteParams(pitch: subRegister(track.pitch(c.keyRoot - 36, degree: c.chord) + 12), lengthSteps: length(1)))
+            }
+        }
         if isBand(genre) {
             bandBass(genre, c, pos: pos, length: length, add: add)
             return
