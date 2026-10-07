@@ -7,6 +7,7 @@ shipped on narduk-libs tags.
 
 ### Added
 
+- Per-track timbre variation (narduk-sound#33): each track written with variety above 0 draws a `TimbreMacro` (detune, cutoff, attack, decay, width, drive) from one of its genre's two or three designed `TimbreCharacter`s, inside a genre range that is narrow for tropical house, lofi and chill. The conductor stamps it on every note (`NoteParams.timbre`), and the drum, wobble, keys, pad and guitar voices apply it when a note starts; under a macro, drum hits take a seeded round-robin (a few cents of pitch, up to 8 % of decay, a fresh noise seed) and velocity moves brightness and attack. Variety 0 and notes without a macro render bit for bit as before.
 - `Genre.tropicalHouse` ("Tropical House", 100 ... 112 BPM): a soft four-on-the-floor with an off-beat shaker and a light clap, a round off-beat sub, a marimba pluck hook (new `KeysVoice.marimba`) over pads that pump on their own slower sidechain (`KeysVoice.pumpPad`), airy vocal chops, and a gentle drop with no impact bias or grit. First version for listening.
 - Library keys voices, for any genre (`KeysVoice`, played on `.keys`):
   - `panFlute`: a breathy pan flute, a soft sine under a band of breath that chiffs at the onset, with a delayed vibrato.

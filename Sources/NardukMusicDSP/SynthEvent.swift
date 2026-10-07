@@ -19,6 +19,7 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
     public var flags: UInt8  // `StrumFlags`; 0 for every note the conductor writes
     public var expression: Int64  // `VocalExpression.packed` of a sampled vocal; 0 for every other note
     public var offset: Int32  // samples late, on top of the step and `delay`; 0 for every note the conductor writes
+    public var timbre: Int64  // the track's packed `TimbreMacro`; 0 plays the standard sound
 
     /// Bits of `flags`: what a strum's expansion into six string events carries.
     enum StrumFlags {
@@ -48,6 +49,7 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
         flags = 0
         expression = Int64(note.params.expression ?? 0)
         offset = 0
+        timbre = Int64(note.params.timbre ?? 0)
     }
 }
 

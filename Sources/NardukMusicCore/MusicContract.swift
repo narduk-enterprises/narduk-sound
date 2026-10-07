@@ -248,13 +248,17 @@ public struct NoteParams: Sendable, Hashable, Codable {
     /// A `vocalSample` note's packed `VocalExpression` (vibrato, scoops, morph, formant shift, echo and the rest); nil
     /// or 0 is a plain note. Build it with `NoteParams.expressed(_:)`.
     public var expression: Int?
+    /// The track's packed `TimbreMacro` (narduk-sound#33); nil plays the voice's standard sound. The conductor stamps
+    /// it on every note of a track written with variety above 0.
+    public var timbre: Int?
 
     public init(
         pitch: Int? = nil, lengthSteps: Int = 1, wobbleRate: WobbleRate? = nil, formant: Double? = nil,
         drive: Double? = nil, voice: Int? = nil, pan: Double = 0, glide: Double? = nil, delay: Double? = nil,
-        expression: Int? = nil
+        expression: Int? = nil, timbre: Int? = nil
     ) {
         self.expression = expression
+        self.timbre = timbre
         self.pitch = pitch
         self.lengthSteps = lengthSteps
         self.wobbleRate = wobbleRate

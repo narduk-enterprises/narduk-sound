@@ -438,7 +438,11 @@ public struct DropConductor: Sendable {
             }
             characterizer.observe(
                 bytesIn: bytesIn, bytesOut: bytesOut, connections: connections, errors: errors, seconds: seconds)
+            let first = notes.count
             process(step: step, into: &notes)
+            if let timbre = track.timbre?.packed {
+                for i in first..<notes.count where notes[i].params.timbre == nil { notes[i].params.timbre = timbre }
+            }
         }
         nextStep = throughStep + 1
         snapshot.step = throughStep
