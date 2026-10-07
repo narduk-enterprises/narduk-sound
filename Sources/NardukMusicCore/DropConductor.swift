@@ -523,7 +523,8 @@ public struct DropConductor: Sendable {
         let previous: Track? = reason == .next || reason == .genre ? track : nil
         track = TrackGenerator.make(
             number: number, genre: activeGenre, character: live, sessionSeed: settings.seed, bpm: bpm,
-            topApp: topApp, previous: previous, mode: settings.mode?.internalMode)
+            topApp: topApp, previous: previous, mode: settings.mode?.internalMode,
+            variety: settings.variety)
         tracksStarted = number
         if bpm != settings.bpm {
             setTempo(bpm)

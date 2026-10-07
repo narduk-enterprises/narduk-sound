@@ -129,7 +129,7 @@ import Testing
             {"bpm":128,"genre":"house","keyRoot":62,"stepsPerBar":16,"barsPerPhrase":8,"seed":42}
             """
         let settings = try JSONDecoder().decode(SongSettings.self, from: Data(old.utf8))
-        #expect(settings == SongSettings(bpm: 128, genre: .house, keyRoot: 62, seed: 42))
+        #expect(settings == SongSettings(bpm: 128, genre: .house, keyRoot: 62, seed: 42, variety: 0))
     }
 
     @Test func settingsRoundTripWithHarmony() throws {

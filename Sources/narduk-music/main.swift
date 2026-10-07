@@ -3,7 +3,7 @@ import NardukMusicCore
 import NardukMusicDSP
 import NardukMusicRender
 
-// narduk-music render --scenario <file.json> [--seconds 30] [--genre dubstep] [--seed 24301] [--bpm 140]
+// narduk-music render --scenario <file.json> [--seconds 30] [--genre dubstep] [--seed 24301] [--bpm 140] [--variety 0.75] [--varied]
 //                     --out <file.wav | file.m4a> [--json]
 //
 // Renders a scenario offline: no audio device, nothing on the speakers. Exit codes: 0 rendered, 64 bad usage,
@@ -19,7 +19,7 @@ func log(_ message: String) {
 
 let usage = """
     usage: narduk-music render --scenario <file.json> --out <file.wav|file.m4a>
-                               [--seconds N] [--genre NAME] [--seed N] [--bpm N] [--json]
+                               [--seconds N] [--genre NAME] [--seed N] [--bpm N] [--variety 0...1] [--varied] [--json]
     genres: \(Genre.allCases.map(\.rawValue).joined(separator: ", "))
     scenario "notes" play an instrument directly: {"time": 1.5, "instrument": "strum", "pitch": 45, "chord": "minor"}
     note instruments: \(Instrument.allCases.filter { $0.synthCode >= 14 }.map(\.rawValue).joined(separator: ", "))
@@ -69,6 +69,14 @@ func main() -> Int32 {
         }
         scenario.bpm = bpm
     }
+    if let text = value("--variety", in: arguments) {
+        guard let variety = Double(text), (0...1).contains(variety) else {
+            log("--variety needs a number from 0 to 1")
+            return 64
+        }
+        scenario.variety = variety
+    }
+    if arguments.contains("--varied") { scenario.varied = true }
     var seconds = scenario.seconds ?? 30
     if let text = value("--seconds", in: arguments) {
         guard let parsed = Double(text), parsed > 0, parsed <= 3_600 else {

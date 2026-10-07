@@ -31,6 +31,13 @@ about itself, and the products around it land.
 - Band genres: `rock`, `folk` and `funk` (`Genre.family == .band`). Each has its own tempo range, drum grammar and
   progressions; the guitars carry the part (power-chord 8ths, the folk strum with a fingerpicked hook, muted 16th
   scratch) over a bass guitar, with no wobble, sub or pad.
+- `SongSettings.variety` (0 ... 1, default 0.75; settings saved without it decode as 0, the original songs) and
+  `SongSettings.varied(genre:seed:)`: a new seed now writes new chord progressions, hook motifs, drum kits (the genre
+  keeps its backbeat), per-song drum tuning (the kick, snare and hat voices take a tune from the note's `formant`),
+  wider patch parameters (formant, drive, vowel, keys timbre) and its own section lengths. `varied` also draws the
+  tempo from the genre's range (`Genre.tempoRange`). `narduk-music render` takes `--variety` and `--varied`; scenarios
+  take `variety` and `varied` (absent: 0, so existing scenarios render as before). Songs with `variety` 0 are bit for
+  bit the ones before.
 - `DropEngine.makeSoundSource()`, the iOS audio session, interruptions and a longer lookahead.
 
 ### Deprecated

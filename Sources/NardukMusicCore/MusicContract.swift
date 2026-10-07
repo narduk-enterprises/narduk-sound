@@ -123,11 +123,17 @@ public struct SongSettings: Sendable, Hashable, Codable {
     public var voicing: ChordVoicing?
     /// A chord layer (strum, stabs, arpeggio, held chords) over the arrangement; nil leaves it to the family.
     public var comping: CompingPattern?
+    /// 0 ... 1: how far a song's seed reaches beyond the genre's hand-written banks (narduk-libs#1617). Each axis the
+    /// generators cover (chord progression, hook motif, and as they land drum grammar, arrangement and timbre) draws
+    /// generated material with this probability, from a stream derived from the seed that never disturbs the
+    /// original draw order. 0 is the original single-template-per-genre song, bit for bit; settings saved before this
+    /// field existed decode as 0.
+    public var variety: Double = 0.75
 
     public init(
         bpm: Double = 140, genre: Genre = .dubstep, keyRoot: Int = 65, stepsPerBar: Int = 16, barsPerPhrase: Int = 8,
         seed: UInt64 = 0x5EED, family: GenreFamily = .electronic, mode: HarmonyMode? = nil,
-        voicing: ChordVoicing? = nil, comping: CompingPattern? = nil
+        voicing: ChordVoicing? = nil, comping: CompingPattern? = nil, variety: Double = 0.75
     ) {
         self.bpm = bpm
         self.genre = genre
@@ -139,6 +145,7 @@ public struct SongSettings: Sendable, Hashable, Codable {
         self.mode = mode
         self.voicing = voicing
         self.comping = comping
+        self.variety = min(1, max(0, variety.isFinite ? variety : 0))
     }
 
     /// Settings saved before the harmony fields existed decode with those fields unset.
@@ -154,7 +161,8 @@ public struct SongSettings: Sendable, Hashable, Codable {
             family: try container.decodeIfPresent(GenreFamily.self, forKey: .family) ?? .electronic,
             mode: try container.decodeIfPresent(HarmonyMode.self, forKey: .mode),
             voicing: try container.decodeIfPresent(ChordVoicing.self, forKey: .voicing),
-            comping: try container.decodeIfPresent(CompingPattern.self, forKey: .comping))
+            comping: try container.decodeIfPresent(CompingPattern.self, forKey: .comping),
+            variety: try container.decodeIfPresent(Double.self, forKey: .variety) ?? 0)
     }
 
     /// A seed for a new play session, from the wall clock, so two sessions write different songs.

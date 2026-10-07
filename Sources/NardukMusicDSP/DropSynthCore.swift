@@ -242,19 +242,21 @@ struct SynthState {
         case 0:  // kick
             kicks[nextKick].steal()
             nextKick = (nextKick + 1) % SynthState.kickCount
-            kicks[nextKick].trigger(velocity: velocity, c)
+            kicks[nextKick].trigger(velocity: velocity, tune: e.formant >= 0 ? e.formant : 0.5, c)
             sidechainAttacking = true
         case 1:  // snare
             // Round-robin so roll tails overlap naturally.
             nextSnare = (nextSnare + 1) % SynthState.snareCount
-            snares[nextSnare].trigger(velocity: velocity, c)
+            snares[nextSnare].trigger(velocity: velocity, tune: e.formant >= 0 ? e.formant : 0.5, c)
         case 2, 3:  // hat, openHat
             let open = e.instrument == 3
             if !open {
                 for i in 0..<SynthState.hatCount where hats[i].active && hats[i].isOpen { hats[i].steal() }
             }
             nextHat = (nextHat + 1) % SynthState.hatCount
-            hats[nextHat].trigger(open: open, velocity: velocity * (open ? 0.85 : 0.7), pan: e.pan + 0.15, c)
+            hats[nextHat].trigger(
+                open: open, velocity: velocity * (open ? 0.85 : 0.7), pan: e.pan + 0.15,
+                tune: e.formant >= 0 ? e.formant : 0.5, c)
         case 4:  // wobble
             wobble.noteOn(
                 pitch: e.pitch, gateSamples: gateSamples(e), cyclesPerBeat: e.cyclesPerBeat,

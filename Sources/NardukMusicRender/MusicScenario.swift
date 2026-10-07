@@ -121,6 +121,10 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     public var bpm: Double?
     /// The kind of music (nil: electronic, as before). `ambient` swaps the genre's arrangement for the swell and settle one.
     public var family: GenreFamily?
+    /// How far the seed reaches beyond the genre's banks (nil: 0, the original songs). See `SongSettings.variety`.
+    public var variety: Double?
+    /// True takes the tempo from the seed, inside the genre's range (`SongSettings.varied`); `bpm` still wins.
+    public var varied: Bool?
     /// Default length when the caller gives none.
     public var seconds: Double?
     /// Build and drop thresholds, when the source's level scale wants different ones from the defaults.
@@ -136,7 +140,7 @@ public struct MusicScenario: Sendable, Hashable, Codable {
 
     public init(
         name: String? = nil, seed: UInt64? = nil, genre: Genre? = nil, bpm: Double? = nil, family: GenreFamily? = nil,
-        seconds: Double? = nil,
+        variety: Double? = nil, varied: Bool? = nil, seconds: Double? = nil,
         buildThreshold: Double? = nil, dropThreshold: Double? = nil, signals: [MusicSignal]? = nil,
         segments: [Segment]? = nil, actions: [Action]? = nil, notes: [Note]? = nil,
         conductor: Bool? = nil
@@ -146,6 +150,8 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         self.genre = genre
         self.bpm = bpm
         self.family = family
+        self.variety = variety
+        self.varied = varied
         self.seconds = seconds
         self.buildThreshold = buildThreshold
         self.dropThreshold = dropThreshold
@@ -164,8 +170,13 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     /// The song settings the scenario asks for, over `base`.
     public func settings(base: SongSettings = SongSettings()) -> SongSettings {
         var settings = base
+        // Scenarios predate variety: unless one asks, the song is the original one for its seed.
+        settings.variety = min(1, max(0, variety ?? 0))
         if let seed { settings.seed = seed }
         if let genre { settings.genre = genre }
+        if varied == true {
+            settings.bpm = SongSettings.varied(genre: settings.genre, seed: settings.seed).bpm
+        }
         if let bpm { settings.bpm = bpm }
         if let family { settings.family = family }
         return settings

@@ -68,6 +68,11 @@ public struct SynthCoefficients: Sendable, Hashable {
     }
 }
 
+/// A song's drum tuning (narduk-libs#1617): a 0 ... 1 knob where 0.5 leaves the voice exactly as it was.
+enum DrumTune {
+    static func multiplier(_ tune: Float) -> Float { 1 + (min(max(tune, 0), 1) - 0.5) * 0.8 }
+}
+
 /// Sine kick with a two-stage pitch envelope (≈470 → 150 → 45 Hz), a noise click and a soft clip.
 public struct KickVoice: Sendable, Hashable {
     public private(set) var active = false
@@ -80,12 +85,15 @@ public struct KickVoice: Sendable, Hashable {
     private var pitchSlow: Float = 0
     private var amp: Float = 0
     private var click: Float = 0
+    private var tuning: Float = 1
     private var clickFilter = OnePole()
     private var noise = NoiseSource(seed: 0x9E37_79B9)
 
     public init() {}
 
-    public mutating func trigger(velocity: Float, _ c: SynthCoefficients) {
+    /// `tune` is 0 ... 1 with 0.5 the standard kick: below it the body sits lower, above it higher.
+    public mutating func trigger(velocity: Float, tune: Float = 0.5, _ c: SynthCoefficients) {
+        tuning = DrumTune.multiplier(tune)
         active = true
         fading = false
         fade = 1
@@ -106,7 +114,7 @@ public struct KickVoice: Sendable, Hashable {
         guard active else { return 0 }
         pitchFast *= c.kickPitchFast
         pitchSlow *= c.kickPitchSlow
-        let frequency = 45 + 105 * pitchSlow + 320 * pitchFast
+        let frequency = (45 + 105 * pitchSlow + 320 * pitchFast) * tuning
         phase += frequency * c.invSampleRate
         if phase >= 1 { phase -= 1 }
         if age >= c.kickHold { amp *= age >= c.kickTailStart ? c.kickTail : c.kickDecay }
@@ -140,6 +148,7 @@ public struct SnareVoice: Sendable, Hashable {
     private var body: Float = 0
     private var noiseEnvelope: Float = 0
     private var snap: Float = 0
+    private var tuning: Float = 1
     private var filter = SVF()
     private var noise: NoiseSource
 
@@ -147,7 +156,9 @@ public struct SnareVoice: Sendable, Hashable {
         noise = NoiseSource(seed: seed)
     }
 
-    public mutating func trigger(velocity: Float, _ c: SynthCoefficients) {
+    /// `tune` is 0 ... 1 with 0.5 the standard snare: the body and the noise band move together.
+    public mutating func trigger(velocity: Float, tune: Float = 0.5, _ c: SynthCoefficients) {
+        tuning = DrumTune.multiplier(tune)
         active = true
         fading = false
         fade = 1
@@ -157,7 +168,7 @@ public struct SnareVoice: Sendable, Hashable {
         body = 1
         noiseEnvelope = 1
         snap = 1
-        filter.set(cutoff: 2_300, resonance: 0.25, sampleRate: c.sampleRate)
+        filter.set(cutoff: 2_300 * tuning, resonance: 0.25, sampleRate: c.sampleRate)
     }
 
     public mutating func steal() { if active { fading = true } }
@@ -168,7 +179,7 @@ public struct SnareVoice: Sendable, Hashable {
         body *= c.snareBody
         noiseEnvelope *= c.snareNoise
         snap *= c.snareSnap
-        phase += (185 + 70 * pitch) * c.invSampleRate
+        phase += (185 + 70 * pitch) * tuning * c.invSampleRate
         if phase >= 1 { phase -= 1 }
         let tone = sinf(DSP.twoPi * phase) * body
         let filtered = filter.process(noise.next())
@@ -206,7 +217,9 @@ public struct HatVoice: Sendable, Hashable {
         noise = NoiseSource(seed: seed)
     }
 
-    public mutating func trigger(open: Bool, velocity: Float, pan: Float, _ c: SynthCoefficients) {
+    /// `tune` is 0 ... 1 with 0.5 the standard hat: the noise bands move up or down together.
+    public mutating func trigger(open: Bool, velocity: Float, pan: Float, tune: Float = 0.5, _ c: SynthCoefficients) {
+        let tuning = DrumTune.multiplier(tune)
         active = true
         fading = false
         fade = 1
@@ -214,8 +227,8 @@ public struct HatVoice: Sendable, Hashable {
         self.velocity = velocity
         envelope = 1
         multiplier = open ? c.hatOpen : c.hatClosed
-        high.set(cutoff: 7_200, resonance: 0.1, sampleRate: c.sampleRate)
-        band.set(cutoff: 10_500, resonance: 0.45, sampleRate: c.sampleRate)
+        high.set(cutoff: 7_200 * tuning, resonance: 0.1, sampleRate: c.sampleRate)
+        band.set(cutoff: 10_500 * tuning, resonance: 0.45, sampleRate: c.sampleRate)
         (left, right) = DSP.pan(pan)
     }
 

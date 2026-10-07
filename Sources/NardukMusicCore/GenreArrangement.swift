@@ -370,6 +370,7 @@ enum GenreArrangement {
         func add(_ instrument: Instrument, _ velocity: Double, _ params: NoteParams = NoteParams()) {
             var params = params
             if params.delay == nil { params.delay = c.swing(pos) }
+            if params.formant == nil { params.formant = c.track.drumTune(instrument) }
             out.append(
                 ScheduledNote(
                     step: c.step, instrument: instrument, velocity: min(1, max(0, velocity * p.gain)), params: params))
@@ -516,10 +517,14 @@ enum GenreArrangement {
 
     private static func drums(
         _ genre: Genre, _ c: StepContext, pos: Int, fill: (kind: Fill, from: Int)?,
-        add: (Instrument, Double, NoteParams) -> Void
+        add emit: (Instrument, Double, NoteParams) -> Void
     ) {
-        let bank = Banks.drums(genre)
-        let variant = bank[(c.section == .drop2 ? c.track.drums2 : c.track.drums) % bank.count]
+        func add(_ instrument: Instrument, _ velocity: Double, _ params: NoteParams) {
+            var params = params
+            if params.formant == nil { params.formant = c.track.drumTune(instrument) }
+            emit(instrument, velocity, params)
+        }
+        let variant = c.track.kit(drop2: c.section == .drop2)
         let level = c.level
         let soft = genre == .chill || genre == .lofi || genre == .folk
         let driving = genre == .house || genre == .techno

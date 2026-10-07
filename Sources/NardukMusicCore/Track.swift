@@ -145,6 +145,12 @@ struct Track: Sendable, Hashable {
     var drive = 0.5
     var drums = 0
     var drums2 = 0
+    /// Kits written for this song (narduk-libs#1617): the drop's, then DROP2's. Empty plays the bank's `drums`.
+    var kits: [DrumVariant] = []
+    /// 0 ... 1 per drum voice, 0.5 the standard one: this song's kick, snare and hat tuning.
+    var kickTune = 0.5
+    var snareTune = 0.5
+    var hatTune = 0.5
     /// 0 ... 0.4 of a step the off-16ths sound late.
     var swing = 0.0
     var ghostDensity = 0.5
@@ -160,6 +166,25 @@ struct Track: Sendable, Hashable {
     var vowel = 0
     var outro: Outro = .drumBridge
     var name = "Untitled"
+
+    /// The kit the song plays in a section.
+    func kit(drop2: Bool) -> DrumVariant {
+        if kits.count == 2 { return kits[drop2 ? 1 : 0] }
+        let bank = Banks.drums(genre)
+        return bank[(drop2 ? drums2 : drums) % bank.count]
+    }
+
+    /// The tune a drum hit carries, or nil for the standard voice.
+    func drumTune(_ instrument: Instrument) -> Double? {
+        let tune: Double =
+            switch instrument {
+            case .kick: kickTune
+            case .snare: snareTune
+            case .hat, .openHat: hatTune
+            default: 0.5
+            }
+        return tune == 0.5 ? nil : tune
+    }
 
     var keyName: String { "\(Self.noteNames[keyRoot % 12]) \(mode.name)" }
 
@@ -222,7 +247,7 @@ enum TrackGenerator {
     /// the session seed, the track number, the genre and the input character, steered away from `previous`.
     static func make(
         number: Int, genre: Genre, character: MusicCharacter, sessionSeed: UInt64, bpm: Double,
-        topApp: String?, previous: Track?, mode pinned: Mode? = nil
+        topApp: String?, previous: Track?, mode pinned: Mode? = nil, variety: Double = 0
     ) -> Track {
         let seed =
             sessionSeed ^ (UInt64(truncatingIfNeeded: number) &* 0x9E37_79B9_7F4A_7C15)
@@ -316,6 +341,8 @@ enum TrackGenerator {
             t.drop2Length = 1 + pick(3)
             t.dropBudget = 2 + t.drop2Length + pick(2)
         }
+        // Variety draws from streams of its own, after every banked draw, so variety 0 leaves the track untouched.
+        Variety.apply(to: &t, variety: variety, previous: previous)
         t.name = name(t, topApp: topApp, rng: &rng)
         return t
     }
