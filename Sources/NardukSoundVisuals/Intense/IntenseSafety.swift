@@ -95,14 +95,20 @@ extension IntenseDrive {
     }
 }
 
-/// The two intense visualizers (narduk-libs#1615).
+/// The intense visualizers (narduk-libs#1615).
 public enum IntenseKind: String, Sendable, CaseIterable, Hashable {
     case hyperspaceLasers, fluidGlitch
+    /// A Mandelbrot dive: bass pushes the zoom, section changes turn the picture and shift the colour.
+    case fractalDive
+    /// A neon grid terrain under a striped sun: the spectrum raises the hills, the drop lifts off.
+    case synthwaveFlyover
 
     public var title: String {
         switch self {
         case .hyperspaceLasers: "Hyperspace + lasers"
         case .fluidGlitch: "Fluid + glitch"
+        case .fractalDive: "Fractal dive"
+        case .synthwaveFlyover: "Synthwave flyover"
         }
     }
 }

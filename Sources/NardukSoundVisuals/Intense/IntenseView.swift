@@ -74,6 +74,7 @@
             private var calm = false
             private var uniforms = IntenseUniforms()
             private var limiter = IntenseFlashLimiter()
+            private var motion = IntenseMotion()
             private var surface: FeedbackSurface?
             private let inFlight = OSAllocatedUnfairLock(initialState: 0)
             static let maxInFlight = 2
@@ -82,7 +83,10 @@
                 kind: IntenseKind, state: SoundVisualState, input: @escaping @MainActor () -> SoundVisualInput,
                 calm: Bool
             ) {
-                if kind != self.kind { surface = nil }
+                if kind != self.kind {
+                    surface = nil
+                    motion = IntenseMotion()
+                }
                 self.kind = kind
                 self.state = state
                 self.input = input
@@ -112,9 +116,10 @@
 
                 state.update(input(), now: CACurrentMediaTime(), options: SoundVisualOptions(calm: calm))
                 let drive = IntenseDrive(state: state, limiter: &limiter)
+                motion.advance(kind, state: state, intensity: drive.intensity)
                 renderer.encode(
                     kind, buffer: buffer, target: drawable.texture, state: state, drive: drive, uniforms: &uniforms,
-                    surface: surface)
+                    surface: surface, motion: motion)
                 inFlight.withLock { $0 += 1 }
                 let inFlight = self.inFlight
                 buffer.addCompletedHandler { _ in inFlight.withLock { $0 -= 1 } }

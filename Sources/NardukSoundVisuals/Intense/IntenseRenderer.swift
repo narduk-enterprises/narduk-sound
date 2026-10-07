@@ -32,14 +32,18 @@
         private let hyperspace: any MTLRenderPipelineState
         private let fluid: any MTLRenderPipelineState
         private let glitch: any MTLRenderPipelineState
+        private let fractal: any MTLRenderPipelineState
+        private let synthwave: any MTLRenderPipelineState
         private let screenPass = MTLRenderPassDescriptor()
         private let fluidPass = MTLRenderPassDescriptor()
 
         init?(device: (any MTLDevice)? = MTLCreateSystemDefaultDevice()) {
             let options = MTLCompileOptions()
             options.mathMode = .fast
-            let source = [IntenseShaderCommon.source, HyperspaceShader.source, FluidGlitchShader.source].joined(
-                separator: "\n")
+            let source = [
+                IntenseShaderCommon.source, HyperspaceShader.source, FluidGlitchShader.source,
+                FractalDiveShader.source, SynthwaveShader.source,
+            ].joined(separator: "\n")
             guard let device, let queue = device.makeCommandQueue(),
                 let library = try? device.makeLibrary(source: source, options: options),
                 let vertex = library.makeFunction(name: "intenseVertex")
@@ -53,25 +57,35 @@
                 return try? device.makeRenderPipelineState(descriptor: descriptor)
             }
             guard let hyperspace = pipeline("hyperspaceFragment"), let fluid = pipeline("fluidFragment"),
-                let glitch = pipeline("glitchFragment")
+                let glitch = pipeline("glitchFragment"),
+                let fractal = pipeline("fractalDiveFragment"), let synthwave = pipeline("synthwaveFragment")
             else { return nil }
             self.device = device
             self.queue = queue
             self.hyperspace = hyperspace
             self.fluid = fluid
             self.glitch = glitch
+            self.fractal = fractal
+            self.synthwave = synthwave
         }
 
         /// Draws one frame of `kind` into `target` through `buffer`. `surface` is required for `.fluidGlitch`: the
         /// fluid pass reads last frame's texture and writes this frame's, and the glitch pass presents it.
         func encode(
             _ kind: IntenseKind, buffer: any MTLCommandBuffer, target: any MTLTexture, state: SoundVisualState,
-            drive: IntenseDrive, uniforms: inout IntenseUniforms, surface: FeedbackSurface?
+            drive: IntenseDrive, uniforms: inout IntenseUniforms, surface: FeedbackSurface?,
+            motion: IntenseMotion = IntenseMotion()
         ) {
             uniforms.fill(size: CGSize(width: target.width, height: target.height), state: state, drive: drive)
             switch kind {
             case .hyperspaceLasers:
                 draw(hyperspace, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil)
+            case .fractalDive:
+                draw(fractal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil, motion: motion)
+            case .synthwaveFlyover:
+                draw(
+                    synthwave, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    motion: motion)
             case .fluidGlitch:
                 guard let surface else { return }
                 if surface.isFresh {  // nothing to advect yet: start from black
@@ -90,7 +104,8 @@
 
         private func draw(
             _ pipeline: any MTLRenderPipelineState, to target: any MTLTexture, buffer: any MTLCommandBuffer,
-            state: SoundVisualState, uniforms: inout IntenseUniforms, input: (any MTLTexture)?
+            state: SoundVisualState, uniforms: inout IntenseUniforms, input: (any MTLTexture)?,
+            motion: IntenseMotion? = nil
         ) {
             let pass = screenPass
             pass.colorAttachments[0].texture = target
@@ -106,6 +121,12 @@
             }
             if let base = state.waveform.baseAddress {
                 encoder.setFragmentBytes(base, length: state.waveform.count * MemoryLayout<Float>.stride, index: 2)
+            }
+            if let motion {
+                var packed = motion.packed
+                withUnsafeBytes(of: &packed) { bytes in
+                    if let base = bytes.baseAddress { encoder.setFragmentBytes(base, length: bytes.count, index: 3) }
+                }
             }
             if let input { encoder.setFragmentTexture(input, index: 0) }
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -132,13 +153,15 @@
             let surface = kind == .fluidGlitch ? FeedbackSurface(device: device, width: width, height: height) : nil
             if kind == .fluidGlitch, surface == nil { return nil }
             var uniforms = IntenseUniforms()
+            var motion = IntenseMotion()
             var pixels = [UInt8](repeating: 0, count: width * height * 4)
             for index in 0..<max(frames, 1) {
                 guard let buffer = queue.makeCommandBuffer() else { return nil }
                 let drive = IntenseDrive(state: state, limiter: &limiter)
+                motion.advance(kind, state: state, intensity: drive.intensity)
                 encode(
                     kind, buffer: buffer, target: texture, state: state, drive: drive, uniforms: &uniforms,
-                    surface: surface)
+                    surface: surface, motion: motion)
                 #if os(macOS)
                     if !device.hasUnifiedMemory, let blit = buffer.makeBlitCommandEncoder() {
                         blit.synchronize(resource: texture)
