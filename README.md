@@ -180,6 +180,24 @@ values in schema order -> StreamSonifier.ingest -> StreamFrame -> signal(frames,
   builds); an event builds its label strings, and `signal(_:time:)` builds a
   `MusicSignal`, so call it once per tick.
 
+## Describe a song (SongRecipe)
+
+`SongRecipe` in `NardukMusicCore` is a song in a few plain fields (genre, mode,
+tempo, key, chord voicing and comping, a plan of sections with an intensity
+each), the shape a language model or a person can fill in. It maps, with no
+randomness, onto what the conductor takes:
+
+- `settings()` gives the `SongSettings` (genre, family, mode, tempo, key, chord
+  feel, seed).
+- `script()` gives a `SongRecipe.Script`: one `MusicSignal` every quarter second
+  whose `level` traces the plan's energy curve (`energy(at:)`), a character hint
+  per section, and the times a drop is queued.
+- `validated()` clamps everything that arrives from outside (a model's output, a
+  JSON file) into a playable range, so nothing downstream sees a bad value.
+
+`SongRecipeTests` pin the mapping and the clamping; `SongRecipeGoldenTests`
+render a fixture recipe to a fixed fingerprint per platform.
+
 ## Guarantees and their tests
 
 - **Golden render.** `GoldenRenderTests` renders the 30 s scenario and compares
