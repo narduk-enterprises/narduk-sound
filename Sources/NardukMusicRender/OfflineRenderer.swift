@@ -5,8 +5,9 @@ import NardukMusicDSP
 /// The conductor and the synth on a virtual clock: no audio device, faster than real time, and deterministic.
 ///
 /// It mirrors the real-time engine tick for tick (`NardukMusicEngine.DropEngine`): every 1/60 s it works out the step
-/// the listener hears, asks the conductor for notes 100 ms ahead of the render position, follows tempo changes once
-/// they are audible, then renders the tick's samples. So an offline render sounds like a live run of the same
+/// the listener hears, asks the conductor for notes 100 ms ahead of the render position, sends a tempo switch to the
+/// synth as soon as it is written (so it lands on the switch bar, as `ConductorDriver` does), then renders the tick's
+/// samples. So an offline render sounds like a live run of the same
 /// signals, and the same seed and signals give the same samples, bit for bit.
 public final class OfflineRenderer {
     /// Ticks per second of the virtual clock (the live engine's analysis and note-pump rate).
@@ -138,18 +139,24 @@ public final class OfflineRenderer {
             for note in written where conductorNoteFilter?(note) ?? true { core.schedule(note) }
         }
         scheduledThrough = through
+        followSwitch()
     }
 
-    /// Follows a tempo change once its step is audible, as the live engine does, and publishes the snapshot.
-    private func publishSnapshot() {
-        if let change = conductor.lastSwitch, change.step != appliedSwitchStep, currentStep >= change.step {
-            appliedSwitchStep = change.step
-            settings.genre = change.genre
-            if settings.bpm != change.bpm {
-                settings.bpm = change.bpm
-                core.setTempo(change.bpm)
-            }
+    /// Sends a tempo switch the conductor just wrote to the synth. The switch step is a bar line inside the look-ahead,
+    /// so the synth is still rendering the bar before it and `StepClock` lands the change on the switch bar itself.
+    /// (Sent once the step was audible, it landed a bar late: the new genre's first bar played at the old tempo.)
+    private func followSwitch() {
+        guard let change = conductor.lastSwitch, change.step != appliedSwitchStep else { return }
+        appliedSwitchStep = change.step
+        settings.genre = change.genre
+        if settings.bpm != change.bpm {
+            settings.bpm = change.bpm
+            core.setTempo(change.bpm)
         }
+    }
+
+    /// Publishes the snapshot at the audible step.
+    private func publishSnapshot() {
         var next = conductor.snapshot
         next.step = currentStep
         snapshot = next

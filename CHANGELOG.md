@@ -75,6 +75,11 @@ shipped on narduk-libs tags.
   - `SampleVoice` breath noise is band-limited to 2.4–7 kHz and fades in over 40 ms. It was flat to 22 kHz and gated hard per note, which read as crackle.
   - Goldens moved: chill, folk, funk, house, rock, synthwave, techno, tropicalHouse, ukGarage and the recipe fixture. Their Linux values come from the next Linux CI run.
 - Long sets repeat themselves less. Drop phrases end on the track's own fills and the genre's fill bank; only a measured lull in the flow (not the default idle of a level-only source or a pinned hint) still forces a kick drop (it ended 100% of drop phrases before). Each next track's tempo walks across the genre's whole `tempoRange` by seed, 3 BPM to 8% from the last one, instead of sitting within a few BPM of the default.
+### Fixed
+
+- `OfflineRenderer` sends a tempo switch to the synth when it is written, so it
+  lands on the switch bar; it used to land a bar late, playing the new genre's
+  first bar at the old tempo.
 
 ## 0.5.0 (2026-10-07)
 
