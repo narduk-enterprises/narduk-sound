@@ -22,7 +22,10 @@ struct GalleryView: View {
     @State private var overlayTick = 0
     @FocusState private var stageFocused: Bool
 
-    private let tiles = GalleryTile.all
+    private let builtInTiles = GalleryTile.all
+    /// The drop-in `.metal` visualizers (narduk-libs#1665): watched, so a save updates the running gallery.
+    @State private var plugins = IntensePluginLibrary()
+    private var tiles: [GalleryTile] { builtInTiles + plugins.entries.map(GalleryTile.plugin) }
 
     /// The hero's tile: the first one, shown large above the grid instead of in it.
     private var hero: GalleryTile { tiles[0] }
@@ -58,6 +61,7 @@ struct GalleryView: View {
             }
         }
         .task {
+            plugins.start()
             // `-autoplay demo|microphone` or `-autofile <path>` starts a source at launch, for smoke runs and screenshots;
             // `-song <style id>` (genre-techno, guitars, ...) picks the demo song and `-fullscreen <tile id>` opens a tile.
             let defaults = UserDefaults.standard
@@ -110,9 +114,11 @@ struct GalleryView: View {
             } else {
                 showcase
                     .sheet(isPresented: $sheetOpen) {
-                        ScrollView { ControlStrip(model: model, importing: $importing, showsTransport: false) }
-                            .background(GalleryPalette.background)
-                            .presentationDetents([.medium, .large])
+                        ScrollView {
+                            ControlStrip(model: model, importing: $importing, plugins: plugins, showsTransport: false)
+                        }
+                        .background(GalleryPalette.background)
+                        .presentationDetents([.medium, .large])
                     }
             }
         }
@@ -123,7 +129,7 @@ struct GalleryView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Sound Gallery").font(GalleryTheme.title)
                     .padding([.horizontal, .top], GalleryTheme.Space.m)
-                ControlStrip(model: model, importing: $importing)
+                ControlStrip(model: model, importing: $importing, plugins: plugins)
             }
         }
         .frame(width: GalleryTheme.sidebarWidth)
@@ -286,7 +292,7 @@ struct GalleryView: View {
                 .transition(.opacity)
             }
             if controlsOpen {
-                ScrollView { ControlStrip(model: model, importing: $importing, spaceShortcut: false) }
+                ScrollView { ControlStrip(model: model, importing: $importing, plugins: plugins, spaceShortcut: false) }
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: GalleryTheme.cardRadius))
                     .frame(maxWidth: 420, maxHeight: 520)
                     .transition(.opacity)

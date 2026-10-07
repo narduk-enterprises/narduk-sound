@@ -5,7 +5,7 @@
     import SwiftUI
     import os
 
-    /// An intense visualizer (hyperspace + lasers, or fluid + glitch) in an `MTKView`. It follows the wobble tunnel's
+    /// An intense visualizer (a built-in or a drop-in plugin) in an `MTKView`. It follows the wobble tunnel's
     /// rules: shares its settled, reduced-resolution drawable (`TunnelMTKView`), polls `input` from its own draw loop,
     /// runs at the budget in `\.soundFramesPerSecond` (0 pauses on the last frame), skips a frame instead of queueing
     /// when the GPU is behind, and allocates nothing per frame once the fluid surface exists. Every full-screen flash
@@ -76,6 +76,9 @@
             private var limiter = IntenseFlashLimiter()
             private var motion = IntenseMotion()
             private var surface: FeedbackSurface?
+            /// Plugin tiles only: the scene texture and luma readback, and the watchdog fed from them.
+            private var watched: WatchedSurface?
+            private var watchdog = IntenseLumaWatchdog()
             private let inFlight = OSAllocatedUnfairLock(initialState: 0)
             static let maxInFlight = 2
 
@@ -86,6 +89,7 @@
                 if kind != self.kind {
                     surface = nil
                     motion = IntenseMotion()
+                    if kind.id != self.kind.id { watchdog = IntenseLumaWatchdog() }
                 }
                 self.kind = kind
                 self.state = state
@@ -105,7 +109,7 @@
                     let buffer = renderer.queue.makeCommandBuffer()
                 else { return }
 
-                if kind == .fluidGlitch {
+                if kind.usesFeedback {
                     let size = view.drawableSize
                     if surface == nil || surface?.width != Int(size.width) || surface?.height != Int(size.height) {
                         surface = FeedbackSurface(
@@ -117,9 +121,23 @@
                 state.update(input(), now: CACurrentMediaTime(), options: SoundVisualOptions(calm: calm))
                 let drive = IntenseDrive(state: state, limiter: &limiter)
                 motion.advance(kind, state: state, intensity: drive.intensity)
-                renderer.encode(
-                    kind, buffer: buffer, target: drawable.texture, state: state, drive: drive, uniforms: &uniforms,
-                    surface: surface, motion: motion)
+                if kind.isPlugin {
+                    let size = view.drawableSize
+                    if watched == nil || watched?.width != Int(size.width) || watched?.height != Int(size.height) {
+                        watched = WatchedSurface(
+                            device: renderer.device, width: Int(size.width), height: Int(size.height))
+                    }
+                    if let watched {
+                        let gain = watchdog.observe(luma: watched.luma, time: state.time)
+                        renderer.encodeWatched(
+                            kind, buffer: buffer, target: drawable.texture, state: state, drive: drive,
+                            uniforms: &uniforms, motion: motion, surface: watched, gain: gain)
+                    }
+                } else {
+                    renderer.encode(
+                        kind, buffer: buffer, target: drawable.texture, state: state, drive: drive,
+                        uniforms: &uniforms, surface: surface, motion: motion)
+                }
                 inFlight.withLock { $0 += 1 }
                 let inFlight = self.inFlight
                 buffer.addCompletedHandler { _ in inFlight.withLock { $0 -= 1 } }

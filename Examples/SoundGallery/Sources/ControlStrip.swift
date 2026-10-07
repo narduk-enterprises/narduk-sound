@@ -1,3 +1,4 @@
+import NardukSoundVisuals
 import SwiftUI
 
 extension GalleryModel {
@@ -70,6 +71,8 @@ struct TransportControls: View {
 struct ControlStrip: View {
     @Bindable var model: GalleryModel
     @Binding var importing: Bool
+    /// The drop-in `.metal` visualizers (narduk-libs#1665), for the folder row.
+    var plugins: IntensePluginLibrary?
     /// False on an iPhone, where the header carries the transport and the sheet must not repeat it.
     var showsTransport = true
     /// Binds the space bar to play and pause. Off in the full-screen overlay, where the stage handles the key itself.
@@ -89,6 +92,7 @@ struct ControlStrip: View {
             if model.input == .demo { section("Song") { songControls } }
             section("Look") { PaletteControls(model: model) }
             if model.input == .demo { section("Describe a song") { PromptView(model: model) } }
+            if let plugins { section("Plugins") { pluginFolderRow(plugins) } }
         }
         .padding(GalleryTheme.Space.m)
     }
@@ -98,6 +102,20 @@ struct ControlStrip: View {
             TransportControls(model: model, importing: $importing, spaceShortcut: spaceShortcut)
             Text(model.status).font(.footnote).foregroundStyle(.secondary).lineLimit(3)
         }
+    }
+
+    /// Where a `.metal` visualizer is dropped, with the count of what loaded.
+    private func pluginFolderRow(_ plugins: IntensePluginLibrary) -> some View {
+        HStack(spacing: GalleryTheme.Space.s) {
+            Image(systemName: "puzzlepiece.extension")
+            Text("\(plugins.entries.count) in \(plugins.directory.path)").lineLimit(1).truncationMode(.middle)
+            #if os(macOS)
+                Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([plugins.directory]) }
+            #endif
+            Spacer(minLength: 0)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {

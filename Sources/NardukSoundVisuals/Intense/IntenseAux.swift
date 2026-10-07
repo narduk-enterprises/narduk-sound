@@ -211,21 +211,6 @@
 
     extension IntenseKind {
         /// The aux buffers this kind reads (none for the original looks).
-        var auxNeeds: IntenseAux.Needs {
-            switch self {
-            case .spectrumMetal: [.scalars]
-            case .vortexMetal: [.scalars]
-            case .haloMetal: [.scalars]
-            case .scopeMetal: [.scalars, .history]
-            case .wobbleMeterMetal: [.scalars]
-            case .padsMetal: [.scalars]
-            case .mirrorMetal: [.scalars]
-            case .phosphorMetal: [.scalars, .history]
-            case .pianoRollMetal: [.scalars, .roll]
-            case .pitchWheelMetal: [.scalars]
-            case .audioTerrainMetal: [.scalars, .history]
-            default: []
-            }
-        }
+        var auxNeeds: IntenseAux.Needs { IntenseAux.Needs(rawValue: auxMask) }
     }
 #endif

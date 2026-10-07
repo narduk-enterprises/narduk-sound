@@ -54,6 +54,9 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         LSApplicationCategoryType: public.app-category.music
+        # The Documents folder shows in Files, so a .metal visualizer can be dropped in or AirDropped (#1665).
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nardukenterprises.soundgallery
