@@ -16,12 +16,20 @@ struct TileContext {
 /// Metal tile takes its rate from `context.framesPerSecond`. Adding a visualizer to the gallery is adding a tile here.
 struct GalleryTile: Identifiable {
     let id: String
+    /// A Metal tile (drawn on the GPU) rather than a Canvas one: the card's kind badge.
+    var isMetal = false
     /// The card's height in the grid; full screen ignores it.
     var gridHeight: CGFloat = 160
     let content: @MainActor (TileContext) -> AnyView
 
+    var metal: GalleryTile {
+        var copy = self
+        copy.isMetal = true
+        return copy
+    }
+
     static var all: [GalleryTile] {
-        [tunnel] + spectacle + intense
+        ([tunnel] + spectacle + intense).map(\.metal)
             + Visualizer.all.map { visualizer in
                 GalleryTile(id: visualizer.id) { context in
                     let palette = context.model.cardPalette

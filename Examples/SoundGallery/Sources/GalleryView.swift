@@ -10,16 +10,31 @@ import UniformTypeIdentifiers
 struct GalleryView: View {
     @Bindable var model: GalleryModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var importing = false
     @State private var pickedFile: URL?
     /// The tile shown alone, edge to edge; nil shows the grid.
     @State private var fullscreenID: String?
     @State private var overlayVisible = true
     @State private var controlsOpen = false
+    /// The iPhone's controls sheet; a Mac or iPad shows the strip as a sidebar instead.
+    @State private var sheetOpen = false
     @State private var overlayTick = 0
     @FocusState private var stageFocused: Bool
 
     private let tiles = GalleryTile.all
+
+    /// The hero's tile: the first one, shown large above the grid instead of in it.
+    private var hero: GalleryTile { tiles[0] }
+
+    /// A sidebar on a Mac and a regular-width iPad; an iPhone (compact) gets a sheet.
+    private var usesSidebar: Bool {
+        #if os(macOS)
+            true
+        #else
+            sizeClass == .regular
+        #endif
+    }
 
     /// The render budget: 60 fps while the app is on screen and playing, nothing otherwise.
     private var isDrawing: Bool {
@@ -85,36 +100,107 @@ struct GalleryView: View {
     // MARK: Grid
 
     private var grid: some View {
-        VStack(spacing: 0) {
-            controls
-            // One timeline polls one frame per tick for every card; a card polling for itself would run the analyzer
-            // (and its smoothing) once per card.
-            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isDrawing)) { timeline in
-                let context = TileContext(
-                    model: model, frame: model.poll(at: timeline.date),
-                    framesPerSecond: isDrawing ? SoundRenderBudget.normal : 0,
-                    tick: timeline.date.timeIntervalSinceReferenceDate)
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12)], spacing: 12) {
-                        ForEach(tiles) { tile in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(tile.id).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                tile.content(context)
-                                    .frame(height: tile.gridHeight)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .padding(10)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
-                            .contentShape(RoundedRectangle(cornerRadius: 12))
-                            .onTapGesture { fullscreenID = tile.id }
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityHint("Shows this visualizer full screen")
-                        }
-                    }
-                    .padding(12)
+        Group {
+            if usesSidebar {
+                HStack(spacing: 0) {
+                    sidebar
+                    Divider().overlay(GalleryTheme.edge)
+                    showcase
                 }
+            } else {
+                showcase
+                    .sheet(isPresented: $sheetOpen) {
+                        ScrollView { ControlStrip(model: model, importing: $importing, showsTransport: false) }
+                            .background(GalleryPalette.background)
+                            .presentationDetents([.medium, .large])
+                    }
             }
         }
+    }
+
+    private var sidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Sound Gallery").font(GalleryTheme.title)
+                    .padding([.horizontal, .top], GalleryTheme.Space.m)
+                ControlStrip(model: model, importing: $importing)
+            }
+        }
+        .frame(width: GalleryTheme.sidebarWidth)
+        .background(Color.black.opacity(0.25))
+    }
+
+    /// The hero and the card grid on one timeline: it polls one frame per tick for every card (a card polling for itself
+    /// would run the analyzer and its smoothing once per card).
+    private var showcase: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isDrawing)) { timeline in
+            let context = TileContext(
+                model: model, frame: model.poll(at: timeline.date),
+                framesPerSecond: isDrawing ? SoundRenderBudget.normal : 0,
+                tick: timeline.date.timeIntervalSinceReferenceDate)
+            ScrollView {
+                VStack(alignment: .leading, spacing: GalleryTheme.Space.l) {
+                    if !usesSidebar { compactHeader }
+                    heroCard(context)
+                    Text("Visualizers").font(GalleryTheme.sectionTitle).foregroundStyle(.secondary)
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 260), spacing: GalleryTheme.Space.m)],
+                        spacing: GalleryTheme.Space.m
+                    ) {
+                        ForEach(tiles.dropFirst()) { tile in
+                            TileCard(tile: tile, context: context)
+                                .onTapGesture { fullscreenID = tile.id }
+                        }
+                    }
+                }
+                .padding(GalleryTheme.Space.l)
+            }
+        }
+    }
+
+    /// The iPhone's top row: the title, play or stop, and the controls sheet.
+    private var compactHeader: some View {
+        HStack(spacing: GalleryTheme.Space.m) {
+            Text("Sound Gallery").font(GalleryTheme.title)
+            Spacer(minLength: 0)
+            TransportControls(model: model, importing: $importing, compact: true)
+            Button {
+                sheetOpen = true
+            } label: {
+                Label("Controls", systemImage: "slider.horizontal.3").labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    /// The now-playing hero: the first tile large, with the state over it. While nothing plays it says how to start.
+    private func heroCard(_ context: TileContext) -> some View {
+        ZStack(alignment: .topLeading) {
+            hero.content(context)
+                .frame(height: GalleryTheme.heroHeight)
+                .clipShape(RoundedRectangle(cornerRadius: GalleryTheme.cardRadius))
+            LinearGradient(
+                colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .center
+            )
+            .clipShape(RoundedRectangle(cornerRadius: GalleryTheme.cardRadius))
+            .allowsHitTesting(false)
+            VStack(alignment: .leading, spacing: GalleryTheme.Space.xs) {
+                GalleryBadge(
+                    text: model.isRunning ? "Now playing" : "Ready",
+                    tint: model.isRunning ? GalleryPalette.low : .white)
+                Text(model.isRunning ? model.status : "Press Play to start the music.")
+                    .font(.footnote).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
+            }
+            .padding(GalleryTheme.Space.m)
+        }
+        .frame(height: GalleryTheme.heroHeight)
+        .overlay(RoundedRectangle(cornerRadius: GalleryTheme.cardRadius).stroke(GalleryTheme.edge, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: GalleryTheme.cardRadius))
+        .onTapGesture { fullscreenID = hero.id }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(hero.id), now playing")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Shows this visualizer full screen")
     }
 
     // MARK: Full screen
@@ -200,9 +286,9 @@ struct GalleryView: View {
                 .transition(.opacity)
             }
             if controlsOpen {
-                controls
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .frame(maxWidth: 520)
+                ScrollView { ControlStrip(model: model, importing: $importing, spaceShortcut: false) }
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: GalleryTheme.cardRadius))
+                    .frame(maxWidth: 420, maxHeight: 520)
                     .transition(.opacity)
             }
         }
@@ -235,62 +321,5 @@ struct GalleryView: View {
             guard let window = NSApp.keyWindow ?? NSApp.windows.first else { return }
             if on != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
         #endif
-    }
-
-    // MARK: Controls
-
-    private var controls: some View {
-        VStack(spacing: 8) {
-            Picker("Source", selection: $model.input) {
-                ForEach(GalleryInput.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .disabled(model.isRunning)
-            if model.input == .demo { songControls }
-            PaletteControls(model: model)
-            if model.input == .demo { PromptView(model: model) }
-            HStack {
-                Button(playTitle) {
-                    if model.isRunning {
-                        model.togglePause()
-                    } else if model.input == .file {
-                        importing = true
-                    } else {
-                        Task { await model.start() }
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.space, modifiers: [])
-                if model.isRunning { Button("Stop") { model.stop() } }
-                Text(model.status).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(12)
-    }
-
-    private var playTitle: String {
-        if model.isRunning { return model.isPaused ? "Resume" : "Pause" }
-        return model.input == .file ? "Choose file…" : "Play"
-    }
-
-    /// The demo song's style (every genre, the guitars, the ambient family) and a new seed.
-    private var songControls: some View {
-        HStack {
-            Picker("Song", selection: $model.song.style) {
-                ForEach(GallerySongStyle.all) { style in
-                    Text(style.title).tag(style)
-                }
-                if case .recipe = model.song.style {
-                    Text(model.song.style.title).tag(model.song.style)
-                }
-            }
-            .labelsHidden()
-            .disabled(model.isRunning)
-            Button("New song") { model.newSong() }
-                .disabled(model.isRunning || model.song.style == .demo)
-            Spacer(minLength: 0)
-        }
     }
 }
