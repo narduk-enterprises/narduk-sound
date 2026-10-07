@@ -7,6 +7,7 @@ shipped on narduk-libs tags.
 
 ### Added
 
+- `DropConductor.requestNextTrack(genre:)`: a smooth hand-over. The phrase plays out, its last bar carries the track's outro, and the new track (in the requested genre, if any) starts on the next phrase line. `setGenre` still cuts in at the next bar line.
 - `NardukMusicPlayback` (Darwin): `NowPlayingBridge` publishes Now Playing info and maps play, pause, toggle and
   next track from the lock screen and HomePods to a `NowPlayingTransport`; `AirPlayPicker` wraps `AVRoutePickerView`.
   `docs/now-playing.md` has the `UIBackgroundModes: audio` requirement (narduk-sound#8).
