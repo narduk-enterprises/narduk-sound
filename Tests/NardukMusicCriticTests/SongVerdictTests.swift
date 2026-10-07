@@ -17,21 +17,36 @@ import Testing
                 blocks: 100, budgetMs: 16.7, worstMs: 30, meanMs: 1, overBudget: 2, worstAt: 3, worstPumpMs: 0.1))
     }
 
-    static let good = SongScore(melody: 0.6, repetition: 0.5, arc: 0.9, events: 0.7, seconds: 120, total: 65)
+    static let good = SongScore(melody: 0.6, repetition: 0.65, arc: 0.9, events: 0.7, seconds: 120, total: 65)
 
     @Test func aCleanGoodSongIsKept() {
         let verdict = SongVerdict(score: Self.good, audio: Self.report())
         #expect(verdict.keep)
         #expect(verdict.reasons.isEmpty)
+        #expect(verdict.notes.isEmpty)
+    }
+
+    @Test func repetitionIsReportedButNeverDropsASong() {
+        // A loop song: the hook repeats bar for bar, so repetition is 0 and the four-part total is low.
+        let loop = SongScore(
+            melody: 0.6, repetition: 0, arc: 0.9, events: 0.7, seconds: 120,
+            total: SongScore.total(melody: 0.6, repetition: 0, arc: 0.9, events: 0.7))
+        #expect(loop.total < 44)
+        #expect(loop.totalWithoutRepetition == Self.good.totalWithoutRepetition)
+        var thresholds = SongVerdict.Thresholds()
+        thresholds.minPart = 0.5
+        let verdict = SongVerdict(score: loop, audio: Self.report(), thresholds: thresholds)
+        #expect(verdict.keep, "\(verdict.reasons)")
+        #expect(verdict.notes == ["repetition 0.00 is the weakest part (reported, not judged)"])
     }
 
     @Test func eachLimitGivesItsReason() {
         var weak = Self.good
-        weak.total = 10
+        weak.melody = 0.05
         let verdict = SongVerdict(score: weak, audio: Self.report(clicks: 3, rmsDB: -40, drumMs: 12))
         #expect(!verdict.keep)
         #expect(verdict.reasons.count == 4, "\(verdict.reasons)")
-        #expect(verdict.reasons.contains { $0.hasPrefix("score 10") })
+        #expect(verdict.reasons.contains("score 23 (without repetition) under 44"))
         #expect(verdict.reasons.contains("3 clicks"))
         #expect(verdict.reasons.contains { $0.hasPrefix("too quiet") })
         #expect(verdict.reasons.contains { $0.hasPrefix("drums off by 12.0 ms") })
@@ -42,9 +57,9 @@ import Testing
         thresholds.maxClicks = nil
         #expect(SongVerdict(score: Self.good, audio: Self.report(clicks: 9), thresholds: thresholds).keep)
         thresholds.maxOverBudgetShare = 0.01
-        thresholds.minPart = 0.55
+        thresholds.minPart = 0.65
         let verdict = SongVerdict(score: Self.good, audio: Self.report(), thresholds: thresholds)
-        #expect(verdict.reasons == ["repetition 0.50 under 0.55", "2 of 100 blocks over budget (worst 30.0 ms)"])
+        #expect(verdict.reasons == ["melody 0.60 under 0.65", "2 of 100 blocks over budget (worst 30.0 ms)"])
     }
 
     @Test func aJudgedSongIsTheSameEveryTime() {
@@ -98,8 +113,10 @@ import Testing
 struct SongVerdictTable {
     @Test func table() {
         let seconds = Double(ProcessInfo.processInfo.environment["NARDUK_CRITIC_SECONDS"] ?? "") ?? 180
-        print("| Genre | Total | Weakest | Clips | Clicks | Worst drum ms | Worst render ms | Keep | Reasons |")
-        print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        print(
+            "| Genre | Total | Judged (no repetition) | Weakest | Clips | Clicks | Worst drum ms | Worst render ms | Keep"
+                + " | Reasons |")
+        print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         let only = ProcessInfo.processInfo.environment["NARDUK_CRITIC_GENRES"]?.split(separator: ",").map(String.init)
         for genre in Genre.allCases where only?.contains(genre.rawValue) ?? true {
             let settings = SongSettings(bpm: genre.defaultBPM, genre: genre, seed: 3)
@@ -108,7 +125,8 @@ struct SongVerdictTable {
             let elapsed = Date().timeIntervalSince(start)
             let audio = verdict.audio
             let cells = [
-                genre.rawValue, String(Int(verdict.score.total)), verdict.score.weakest, String(audio.clippedSamples),
+                genre.rawValue, String(Int(verdict.score.total)), String(Int(verdict.score.totalWithoutRepetition)),
+                verdict.score.weakest, String(audio.clippedSamples),
                 String(audio.clicks), String(format: "%.2f", audio.drums?.worstOffsetMs ?? -1),
                 String(format: "%.1f at %.0f s", audio.cost?.worstMs ?? -1, audio.cost?.worstAt ?? -1),
                 verdict.keep ? "yes" : "no",

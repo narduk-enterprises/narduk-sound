@@ -52,6 +52,19 @@ public struct SongScore: Sendable, Hashable, Codable {
     /// The weakest part, for a one-line verdict.
     public var weakest: String { parts.min { $0.value < $1.value }?.name ?? "" }
 
+    /// The total without `repetition`, 0 ... 100: the weighted geometric mean of melody, arc and events (their weights
+    /// shared out in proportion), with the same length factor as `total`. A verdict judges this, because the conductor
+    /// repeats its hook bar for bar and `repetition` is 0 for most loop songs: it is reported, never a reason to drop
+    /// a song (Logan, 2026-10-07).
+    public var totalWithoutRepetition: Double {
+        let judged = Self.weights.filter { $0.name != "repetition" }
+        let sum = judged.reduce(0) { $0 + $1.weight }
+        let values = ["melody": melody, "arc": arc, "events": events]
+        var logSum = 0.0
+        for part in judged { logSum += part.weight / sum * log(max(0.02, values[part.name] ?? 0)) }
+        return (100 * exp(logSum) * (raw["lengthFactor"] ?? 1)).rounded()
+    }
+
     /// The weighted geometric mean of the parts, 0 ... 100 (a part is floored at 0.02 so one zero does not erase the
     /// rest).
     public static func total(melody: Double, repetition: Double, arc: Double, events: Double) -> Double {

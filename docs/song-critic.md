@@ -9,7 +9,8 @@ such as Forever Loop can drop the poor ones. It has two halves and a verdict:
 - **Audio** (`AudioCheck`, `AudioReport`): what a meter hears in a render:
   clipping, clicks, silence, loudness, drum timing and render cost.
 - **Verdict** (`SongVerdict`): both, against one `Thresholds` struct, as
-  `keep` plus the reasons it was dropped.
+  `keep` plus the reasons it was dropped. `repetition` is reported (in the
+  score and in `notes`) but never drops a song.
 
 ```swift
 import NardukMusicCritic
@@ -17,7 +18,7 @@ import NardukMusicCritic
 let settings = SongSettings(bpm: 140, genre: .dubstep, seed: 3)
 let quick = SongCritic.score(settings: settings, bars: 64)   // notes only
 let verdict = SongCritic.judge(settings: settings, seconds: 180)
-if !verdict.keep { print(verdict.reasons) }                  // ["3 clicks"]
+if !verdict.keep { print(verdict.reasons) }  // ["score 36 (without repetition) under 44"]
 ```
 
 ## Where it came from
@@ -99,16 +100,25 @@ meters any `RenderedAudio` (no drum timing or cost).
 
 All in `SongVerdict.Thresholds`; nil switches a check off.
 
-| Threshold             | Default | Why                                                                                               |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `minTotal`            | 22      | Drops about the bottom quarter of conductor songs (30 seeds a genre, 90 bars: medians 25 ... 40). |
-| `minPart`             | off     | `repetition` is 0 for over half of all songs (below), so a per-part floor would drop most genres. |
-| `maxClippedSamples`   | 0       | The limiter should never let one through.                                                         |
-| `maxClicks`           | 0       | A click is an audible fault.                                                                      |
-| `maxSilenceGaps`      | 0       | A bar of nothing in a song is a dropout.                                                          |
-| `minRMSDB`/`maxRMSDB` | −30/−6  | Every genre measured −10.6 ... −18.8 dBFS.                                                        |
-| `maxDrumOffsetMs`     | 5       | Offline renders measure under 0.2 ms; 5 ms is well under a flam.                                  |
-| `maxOverBudgetShare`  | off     | Depends on the machine and build (debug is ~30 times slower); set it where the song will play.    |
+`repetition` is reported but never judged (Logan, 2026-10-07: "report it,
+don't drop for it"). The conductor repeats its hook bar for bar, so the part is
+0 for most loop songs (see Limits). `minTotal` therefore holds
+`SongScore.totalWithoutRepetition`, the weighted geometric mean of melody, arc
+and events with the same length factor; `minPart` never applies to
+`repetition`; and when `repetition` is the weakest part the verdict says so in
+`notes`, not in `reasons`. `SongScore.total` keeps all four parts, as Data
+Beats scores it.
+
+| Threshold             | Default | Why                                                                                                                                                                          |
+| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `minTotal`            | 44      | On `totalWithoutRepetition`: drops about the bottom quarter of conductor songs (30 seeds a genre, 90 bars: 10th percentile 37, 25th 44, median 52; genre medians 45 ... 60). |
+| `minPart`             | off     | For melody, arc and events only.                                                                                                                                             |
+| `maxClippedSamples`   | 0       | The limiter should never let one through.                                                                                                                                    |
+| `maxClicks`           | 0       | A click is an audible fault.                                                                                                                                                 |
+| `maxSilenceGaps`      | 0       | A bar of nothing in a song is a dropout.                                                                                                                                     |
+| `minRMSDB`/`maxRMSDB` | −30/−6  | Every genre measured −10.6 ... −18.8 dBFS.                                                                                                                                   |
+| `maxDrumOffsetMs`     | 5       | Offline renders measure under 0.2 ms; 5 ms is well under a flam.                                                                                                             |
+| `maxOverBudgetShare`  | off     | Depends on the machine and build (debug is ~30 times slower); set it where the song will play.                                                                               |
 
 ## What the first measurements say (2026-10-07, seed 3, three minutes)
 
@@ -117,14 +127,39 @@ All in `SongVerdict.Thresholds`; nil switches a check off.
   the conductor asks for: up to 67 ms late in lo-fi, 51 ms in chill, 37 ms in UK
   garage. If "drums off" is heard live, it is that swing or the live engine's
   pump, not the synth.
-- **Clicks come from `cut`.** Dubstep's three and synthwave's two sit on a
-  master `cut` (stutter/gate) note; the slice edges are not smoothed.
+- **Clicks came from the `cut` stutter, and are fixed.** Every click (three in
+  dubstep, two in DnB, two in synthwave) was a one-sample jump of 0.6 ... 1.0
+  inside a master `cut` stutter whose amount pitches the repeat up: the sped-up
+  read wraps back to the slice's start partway through each slice, and only
+  the slice's own edges were faded. `MasterCut` now fades over each wrap too
+  (a millisecond, like a slice edge); at rate 1 the sound is unchanged, and no
+  golden render moved. After the fix every genre at seed 3 has zero clicks.
 - **Render cost is small and its spikes are the machine.** Release renders run
   0.3 ... 0.6 ms a block (3% of budget) on a Mac15,10 MacBook Pro. 17 ... 104 ms
   spikes appeared only while other builds loaded the machine, at different
   times on each run; run alone the worst block was 0.4 ... 1.7 ms. A debug build
   is roughly 30 times slower, which explains a 32 ms tick in a debug run.
 - **Folk seed 3 has a 3.1 s silence** in its arrangement.
+
+The verdicts after the cut fix (release, the machine otherwise quiet; every
+genre has 0 clipped samples and 0 clicks, its worst drum within 0.15 ms and
+its worst render block within 1.5 ms):
+
+| Genre       | Total | Judged | Weakest    | Keep | Reason            |
+| ----------- | ----- | ------ | ---------- | ---- | ----------------- |
+| dubstep     | 58    | 52     | melody     | yes  |                   |
+| riddim      | 30    | 69     | repetition | yes  |                   |
+| drumAndBass | 51    | 52     | melody     | yes  |                   |
+| trap        | 32    | 36     | melody     | no   | score 36 under 44 |
+| house       | 33    | 79     | repetition | yes  |                   |
+| chill       | 50    | 48     | melody     | yes  |                   |
+| techno      | 24    | 51     | repetition | yes  |                   |
+| ukGarage    | 35    | 47     | repetition | yes  |                   |
+| synthwave   | 26    | 42     | repetition | no   | score 42 under 44 |
+| lofi        | 27    | 59     | repetition | yes  |                   |
+| rock        | 26    | 48     | repetition | yes  |                   |
+| folk        | 26    | 56     | repetition | no   | 3.1 s silence     |
+| funk        | 26    | 57     | repetition | yes  |                   |
 
 ## Limits
 
@@ -133,7 +168,7 @@ All in `SongVerdict.Thresholds`; nil switches a check off.
 - **`repetition` punishes loop music.** The conductor repeats its two-bar hook
   bar for bar, so exact copies run 50 ... 90% and the part is 0 for most rock,
   folk, funk, house, techno and lo-fi songs. That is Data Beats' penalty, kept
-  as ported; loosening it for loop music is an open choice.
+  as ported in the score; the verdict does not judge it (above).
 - Drum timing is measured offline, where notes always arrive early. It cannot
   see late notes from a stalled main-thread pump on a device.
 - Render cost is wall time on whatever runs the check, so it varies with load.

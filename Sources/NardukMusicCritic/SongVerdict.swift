@@ -1,20 +1,22 @@
 import Foundation
 import NardukMusicCore
 
-/// Whether a song is worth playing: its note score, its audio report, and the reasons it was dropped (empty when kept).
+/// Whether a song is worth playing: its note score, its audio report, the reasons it was dropped (empty when kept),
+/// and notes on what is reported but never drops a song (its `repetition`).
 public struct SongVerdict: Sendable, Hashable, Codable {
     public var score: SongScore
     public var audio: AudioReport
     public var keep: Bool
     public var reasons: [String]
+    /// Reported, never a reason to drop: `repetition` when it is the weakest part (Logan, 2026-10-07).
+    public var notes: [String]
 
     /// The limits a song must stay inside to be kept. Every check is here, with its default; nil switches one off.
     public struct Thresholds: Sendable, Hashable, Codable {
-        /// The lowest `SongScore.total` (0 ... 100) kept. 22 drops about the bottom quarter of conductor songs (30 seeds
-        /// a genre, 90 bars; the medians run 25 ... 40).
-        public var minTotal: Double? = 22
-        /// The lowest any one part (0 ... 1) may score. Off by default: the conductor repeats its hook bar for bar, so
-        /// `repetition` is 0 for over half of all songs (see `docs/song-critic.md`).
+        /// The lowest `SongScore.totalWithoutRepetition` (0 ... 100) kept. 44 drops about the bottom quarter of
+        /// conductor songs (30 seeds a genre, 90 bars; the genre medians run 45 ... 60).
+        public var minTotal: Double? = 44
+        /// The lowest melody, arc or events part (0 ... 1) may score; `repetition` is never held to it. Off by default.
         public var minPart: Double?
         /// Clipped samples allowed.
         public var maxClippedSamples: Int? = 0
@@ -32,7 +34,7 @@ public struct SongVerdict: Sendable, Hashable, Codable {
         public var maxOverBudgetShare: Double?
 
         public init(
-            minTotal: Double? = 22, minPart: Double? = nil, maxClippedSamples: Int? = 0, maxClicks: Int? = 0,
+            minTotal: Double? = 44, minPart: Double? = nil, maxClippedSamples: Int? = 0, maxClicks: Int? = 0,
             maxSilenceGaps: Int? = 0, minRMSDB: Double? = -30, maxRMSDB: Double? = -6, maxDrumOffsetMs: Double? = 5,
             maxOverBudgetShare: Double? = nil
         ) {
@@ -54,11 +56,11 @@ public struct SongVerdict: Sendable, Hashable, Codable {
         self.audio = audio
         var reasons: [String] = []
         func format(_ value: Double) -> String { String(format: "%.1f", value) }
-        if let limit = thresholds.minTotal, score.total < limit {
-            reasons.append("score \(Int(score.total)) under \(Int(limit))")
+        if let limit = thresholds.minTotal, score.totalWithoutRepetition < limit {
+            reasons.append("score \(Int(score.totalWithoutRepetition)) (without repetition) under \(Int(limit))")
         }
         if let limit = thresholds.minPart {
-            for part in score.parts where part.value < limit {
+            for part in score.parts where part.name != "repetition" && part.value < limit {
                 reasons.append("\(part.name) \(String(format: "%.2f", part.value)) under \(limit)")
             }
         }
@@ -87,6 +89,9 @@ public struct SongVerdict: Sendable, Hashable, Codable {
         }
         self.reasons = reasons
         keep = reasons.isEmpty
+        notes =
+            score.weakest == "repetition"
+            ? ["repetition \(String(format: "%.2f", score.repetition)) is the weakest part (reported, not judged)"] : []
     }
 }
 

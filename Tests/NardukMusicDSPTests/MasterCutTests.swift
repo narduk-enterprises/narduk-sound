@@ -48,7 +48,8 @@ import Testing
     /// Runs `MasterCut` alone over a deterministic noise signal, as the core does: write the dry sample into the ring,
     /// then let the cut replace it. Returns the dry and wet signals.
     static func harness(
-        _ mode: CutMode, slice: Int, length: Int, startAt: Int, total: Int, amount: Float = 0, seed: UInt32 = 1
+        _ mode: CutMode, slice: Int, length: Int, startAt: Int, total: Int, amount: Float = 0, seed: UInt32 = 1,
+        signal: ((Int) -> Float)? = nil
     ) -> (dry: [Float], wet: [Float]) {
         let size = 1 << 16
         let ringLeft = UnsafeMutablePointer<Float>.allocate(capacity: size)
@@ -64,7 +65,7 @@ import Testing
         var dry: [Float] = []
         var wet: [Float] = []
         for n in 0..<total {
-            let x = noise.next()
+            let x = signal?(n) ?? noise.next()
             ringLeft[n & (size - 1)] = x
             ringRight[n & (size - 1)] = x
             if n == startAt {
@@ -101,6 +102,18 @@ import Testing
             .stutter, slice: 3_000, length: 24_000, startAt: 10_000, total: 40_000, amount: 1)
         #expect(rising[10_000 + 3_000 * 4 + 100] == rising[10_000 + 3_000 * 4 + 100], "stays finite")
         #expect(rising[10_100...34_000].allSatisfy { $0.isFinite && abs($0) <= 1 })
+    }
+
+    @Test func aPitchedUpStutterFadesOverEachWrap() {
+        // A smooth 110 Hz tone (a sample-to-sample move of at most 0.012, twice that read an octave up), stuttered: the
+        // read jumps back to the slice's start partway through every slice and must fade there as at a slice edge.
+        let tone: (Int) -> Float = { 0.8 * Float(sin(2 * Double.pi * 110 * Double($0) / 48_000)) }
+        for amount: Float in [0.5, 1] {
+            let (_, wet) = Self.harness(
+                .stutter, slice: 6_000, length: 48_000, startAt: 10_000, total: 60_000, amount: amount, signal: tone)
+            let jump = zip(wet, wet.dropFirst()).reduce(Float(0)) { max($0, abs($1.1 - $1.0)) }
+            #expect(jump < 0.05, "amount \(amount): largest jump \(jump)")
+        }
     }
 
     @Test func aGateOpensOncePerSliceAndClosesBetween() {
