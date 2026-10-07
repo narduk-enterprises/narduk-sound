@@ -18,6 +18,16 @@ struct FlowCharacterizer: Sendable {
     var hint: MusicCharacter?
     private var candidateSeconds = 0.0
     private var elapsed = 0.0
+    /// Whether any flow (bytes, connections or errors) has been observed. Without it `.idle` is only the default: a
+    /// source that sends levels alone, or nothing, never measured a lull.
+    private(set) var heardFlow = false
+
+    /// The current reading is idle because the flow was measured and found quiet, not because there is no flow input
+    /// or a source pinned it.
+    var measuredLull: Bool { current == .idle && hint == nil && heardFlow }
+
+    /// The character to lean on, or nil while it is only the default: no flow heard and no hint pinned.
+    var heard: MusicCharacter? { hint == nil && !heardFlow ? nil : current }
 
     private(set) var inRate = 0.0
     private(set) var outRate = 0.0
@@ -40,6 +50,7 @@ struct FlowCharacterizer: Sendable {
     mutating func observe(bytesIn: Double, bytesOut: Double, connections: Double, errors: Double, seconds: Double) {
         guard seconds > 0 else { return }
         elapsed += seconds
+        if bytesIn > 0 || bytesOut > 0 || connections > 0 || errors > 0 { heardFlow = true }
         // Faster averages for the first seconds of a session, so the first track already hears the room.
         let tau = min(Self.memory, max(2, elapsed))
         let k = 1 - exp(-seconds / tau)

@@ -21,6 +21,10 @@ shipped on narduk-libs tags.
   on a slow screen. Beat Blaster's My Songs shares with it (beat-blaster
   `docs/video-share.md` has the measurements).
 
+### Changed
+
+- Long sets repeat themselves less. Drop phrases end on the track's own fills and the genre's fill bank; only a measured lull in the flow (not the default idle of a level-only source or a pinned hint) still forces a kick drop (it ended 100% of drop phrases before). Each next track's tempo walks across the genre's whole `tempoRange` by seed, 3 BPM to 8% from the last one, instead of sitting within a few BPM of the default.
+
 ## 0.5.0 (2026-10-07)
 
 ### Changed

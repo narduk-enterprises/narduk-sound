@@ -310,14 +310,15 @@ public struct DropConductor: Sendable {
     private var nextTrackRequested = false
     private var nextTrackGenre: Genre?
     private var trackStartStep = -1
-    /// The tempo later tracks vary around: the session's, the genre's, or the one the user set.
+    /// The tempo the next track's walk starts from: the last track's, the genre's after a switch, or the one the user
+    /// set.
     private var baseBPM: Double
     private var settingTempo = false
 
     // Arrangement state
     private var wobbleRate: WobbleRate = .quarter
     private var voice = 0
-    private var plan = PhrasePlan()
+    private(set) var plan = PhrasePlan()
     private var riserFired = false
     private var outroFired = false
     private var sectionJustStarted = false
@@ -487,7 +488,7 @@ public struct DropConductor: Sendable {
             quantizer.newPhrase()
             plan = PhrasePlanner.plan(
                 track: track, section: sections.section, phraseInTrack: trackPhrases - 1,
-                live: characterizer.current, roll: rng.next())
+                live: characterizer.current, lull: characterizer.measuredLull, roll: rng.next())
             riserFired = false
             outroFired = false
             applySectionSound()
@@ -552,7 +553,8 @@ public struct DropConductor: Sendable {
             case .genre: activeGenre.defaultBPM
             case .next:
                 TrackGenerator.tempo(
-                    base: baseBPM, genre: activeGenre, character: live, seed: settings.seed &+ UInt64(number))
+                    previous: baseBPM, genre: activeGenre, character: characterizer.heard,
+                    seed: settings.seed &+ UInt64(number))
             }
         let previous: Track? = reason == .next || reason == .genre ? track : nil
         track = TrackGenerator.make(
@@ -576,6 +578,8 @@ public struct DropConductor: Sendable {
             trackDropPhrases = 0
             hookStated = false
             trackStartStep = step
+            // The set walks: the next track's tempo steps on from this one's.
+            baseBPM = bpm
         case .genre:
             // Mid-phrase: the phrase in progress counts for the new track, and its hook starts right away.
             trackPhrases = 1
@@ -583,7 +587,8 @@ public struct DropConductor: Sendable {
             hookStated = true
             trackStartStep = step
             plan = PhrasePlanner.plan(
-                track: track, section: sections.section, phraseInTrack: 0, live: live, roll: rng.next())
+                track: track, section: sections.section, phraseInTrack: 0, live: live,
+                lull: characterizer.measuredLull, roll: rng.next())
             applySectionSound()
         }
         snapshot.track = track.info

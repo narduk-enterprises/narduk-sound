@@ -360,21 +360,45 @@ enum TrackGenerator {
         return t
     }
 
-    /// Tempo for a track the DJ flow picks (not the first, nor one a genre switch starts): the base tempo nudged by
-    /// the input and the seed, inside the genre's range.
-    static func tempo(base: Double, genre: Genre, character: MusicCharacter, seed: UInt64) -> Double {
-        let nudge: Double =
-            switch character {
-            case .idle: -4
-            case .steady: -2
-            case .busy: 1
-            case .surge: 4
-            case .chaos: 6
-            }
-        let jitter = Double(Int(seed % 5) - 2)
+    /// The largest tempo change a hand-over makes, as a share of the outgoing tempo: the mix stays smooth.
+    static let maxTempoStep = 0.08
+    /// The smallest: the next track is audibly a new one.
+    static let minTempoStep = 3.0
+
+    /// Tempo for a track the DJ flow picks (not the first, nor one a genre switch starts). The seed draws a target
+    /// anywhere in the genre's range, leaning low for a quiet input and high for a surge (no lean while the character
+    /// is only the default); the set walks towards it,
+    /// at least `minTempoStep` BPM and at most `maxTempoStep` of `previous` away, so a session wanders across the whole
+    /// range one smooth hand-over at a time. A `previous` outside the range (a tempo set from outside) comes back
+    /// inside it.
+    static func tempo(previous: Double, genre: Genre, character: MusicCharacter?, seed: UInt64) -> Double {
         let range = Self.tempoRange(genre)
-        let target = min(range.upperBound, max(range.lowerBound, base + nudge + jitter))
-        return min(base + 8, max(base - 8, target)).rounded()
+        let span = range.upperBound - range.lowerBound
+        let lean: Double =
+            switch character {
+            case nil: 0
+            case .idle: -0.2
+            case .steady: -0.1
+            case .busy: 0
+            case .surge: 0.15
+            case .chaos: 0.2
+            }
+        var rng = MusicRNG(seed: seed ^ StableHash.fnv1a("tempo/" + genre.rawValue))
+        let position = min(1, max(0, rng.unit() + lean))
+        let target = (range.lowerBound + position * span).rounded()
+        let from = min(range.upperBound, max(range.lowerBound, previous))
+        let reach = max(Self.minTempoStep, (previous * Self.maxTempoStep).rounded(.down))
+        var next = from + min(reach, max(-reach, target - from))
+        if abs(next - previous) < Self.minTempoStep {
+            // Too close to call a new track: step the minimum away, towards the side with more room.
+            let up = from + Self.minTempoStep
+            let down = from - Self.minTempoStep
+            let roomUp = range.upperBound - from
+            let roomDown = from - range.lowerBound
+            next = roomUp >= roomDown ? up : down
+            if !range.contains(next) { next = roomUp >= roomDown ? down : up }
+        }
+        return min(range.upperBound, max(range.lowerBound, next.rounded()))
     }
 
     static func tempoRange(_ genre: Genre) -> ClosedRange<Double> {
