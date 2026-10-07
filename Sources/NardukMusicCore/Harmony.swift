@@ -243,8 +243,8 @@ public enum CompingPattern: String, Sendable, Hashable, Codable, CaseIterable {
 // MARK: - Families
 
 /// The kind of music a genre belongs to. A family may change a song's shape, not only its tempo and patterns. The ten
-/// first genres are `electronic`; rock, folk and funk are `band` (their guitars are the chord layer, so a band genre
-/// needs no `SongSettings.comping`); `ambient` has no genres of its own yet.
+/// first genres and tropical house are `electronic`; rock, folk and funk are `band` (their guitars are the chord
+/// layer, so a band genre needs no `SongSettings.comping`); `ambient` has no genres of its own yet.
 public enum GenreFamily: String, Sendable, Hashable, Codable, CaseIterable {
     case electronic, band, ambient
 

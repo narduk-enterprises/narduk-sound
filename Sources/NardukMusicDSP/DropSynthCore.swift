@@ -86,6 +86,8 @@ struct SynthState {
     // Sidechain
     var sidechain: Float = 0
     var sidechainAttacking = false
+    /// The pumping pads' sidechain: the kick's envelope with a slower release (`KeysVoice.pumpPad`).
+    var pump: Float = 0
 
     // Mixer
     var busGains: (Float, Float, Float) = (1, 1, 1)
@@ -563,6 +565,7 @@ struct SynthState {
             } else {
                 sidechain *= c.sidechainRelease
             }
+            pump = max(pump * c.pumpRelease, sidechain)
 
             // Drums
             var drumsL: Float = 0
@@ -593,10 +596,21 @@ struct SynthState {
             // FX (ducked gently)
             var fxL: Float = 0
             var fxR: Float = 0
+            // Pumping pads sum apart and join after the fx duck, on their own deeper, slower one; a song without
+            // them never touches the fx sum.
+            var pumpL: Float = 0
+            var pumpR: Float = 0
+            var pumping = false
             for i in 0..<SynthState.fxCount {
                 let f = fx[i].next(c)
-                fxL += f.0
-                fxR += f.1
+                if fx[i].pumps {
+                    pumpL += f.0
+                    pumpR += f.1
+                    pumping = true
+                } else {
+                    fxL += f.0
+                    fxR += f.1
+                }
             }
             // Guitar strings share the existing buses (the bass guitar the bass bus, every other string the FX bus), and
             // are only touched while one is sounding, so a song without them renders bit for bit as it did before.
@@ -667,6 +681,11 @@ struct SynthState {
             let fxDuck = 1 - 0.5 * sidechain
             fxL *= fxDuck
             fxR *= fxDuck
+            if pumping {
+                let pumpDuck = 1 - 0.85 * pump
+                fxL += pumpL * pumpDuck
+                fxR += pumpR * pumpDuck
+            }
 
             if ambientTail > 0 {
                 ambientTail -= 1

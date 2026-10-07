@@ -39,7 +39,8 @@ import Testing
     // MARK: Every genre
 
     @Test func everyGenreHasItsOwnTempoAndPlays() {
-        #expect(Genre.allCases.map(\.defaultBPM) == [140, 140, 174, 140, 124, 88, 132, 132, 108, 80, 124, 96, 104])
+        #expect(
+            Genre.allCases.map(\.defaultBPM) == [140, 140, 174, 140, 124, 88, 132, 132, 108, 80, 124, 96, 104, 106])
         for genre in Genre.allCases {
             let settings = SongSettings(genre: genre)
             #expect(settings.genre == genre && settings.bpm == genre.defaultBPM)

@@ -231,6 +231,12 @@ public enum DropArranger {
         case .drumAndBass: b.breakRoll = true
         case .trap: b.hatRoll = true
         case .house, .techno: b.fourOnFloor = true
+        case .tropicalHouse:
+            // A gentle drop: the pluck lands over the groove, no impact and no grit.
+            b.fourOnFloor = true
+            b.impact = 0
+            b.drive = 0
+            b.gain = 0.85
         case .ukGarage: b.impact = 0.8
         case .chill, .lofi:
             b.impact = 0

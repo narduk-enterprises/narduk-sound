@@ -105,7 +105,7 @@ import Testing
         let band: [Genre] = [.rock, .folk, .funk]
         #expect(GenreFamily.band.genres == band)
         #expect(GenreFamily.electronic.genres == Genre.allCases.filter { !band.contains($0) })
-        #expect(Genre.allCases.filter { $0.family == .electronic }.count == 10)
+        #expect(Genre.allCases.filter { $0.family == .electronic }.count == 11)  // the first ten and tropical house
         #expect(GenreFamily.electronic.shape == FamilyShape())
         #expect(GenreFamily.band.shape.comping != nil)
     }

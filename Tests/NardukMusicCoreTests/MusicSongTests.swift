@@ -308,6 +308,32 @@ import Testing
         #expect(hooks[.surge]!.bpm >= hooks[.steady]!.bpm)
     }
 
+    @Test func tropicalHouseDropsOnTheMarimbaAtItsTempo() {
+        let genre = Genre.tropicalHouse
+        let range = TrackGenerator.tempoRange(genre)
+        #expect(range == 100...112 && range.contains(genre.defaultBPM) && genre.shortName == "Tropical House")
+        let p = Self.perform(genre: genre, seed: 3, segments: [Segment(character: .busy, seconds: 90)])
+        #expect(p.bpm.allSatisfy { range.contains($0) }, "tempos \(Set(p.bpm).sorted())")
+        for track in p.distinctTracks {
+            #expect(track.genre == genre && range.contains(track.bpm), "\(track.genre) at \(track.bpm)")
+            #expect(track.keysVoice == KeysVoice.marimba && track.hookDescription.hasSuffix("marimba hook"))
+            #expect([.ionian, .lydian, .mixolydian, .dorian].contains(track.mode), "\(track.mode)")
+        }
+        // The drop is the pluck over the full groove: the marimba hook, the kick on every beat, the pad pumping.
+        let drop = p.notes.filter { p.sections[$0.step].isDrop }
+        let plucks = drop.filter { $0.instrument == .keys && $0.params.voice == KeysVoice.marimba }
+        #expect(plucks.count >= 16, "\(plucks.count) marimba notes in the drops")
+        #expect(plucks.allSatisfy { ($0.params.lengthSteps ?? 99) <= 6 }, "the pluck is short")
+        #expect(
+            plucks.allSatisfy { note in
+                let track = p.tracks[note.step]
+                return track.mode.contains(semitones: (note.params.pitch ?? 0) - track.keyRoot)
+            }, "every pluck is in key")
+        #expect(drop.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.pumpPad })
+        // No wobble lead: the bass stays a round off-beat sub with a soft, closed wub.
+        #expect(drop.filter { $0.instrument == .wobble }.allSatisfy { $0.velocity <= 0.5 })
+    }
+
     @Test func genresSoundLikeThemselves() {
         var hooks: [Genre: Hook] = [:]
         for genre in Genre.allCases {
@@ -318,8 +344,8 @@ import Testing
             #expect(range.contains(track.bpm), "\(genre) at \(track.bpm)")
             let dropBars = (0..<(p.steps / 16)).filter { p.sections[$0 * 16].isDrop && $0 % 8 != 7 && $0 % 8 != 3 }
             #expect(!dropBars.isEmpty, "\(genre) never dropped")
-            // Chill's, folk's, lo-fi's and techno's backbeats are soft; everyone else's lands hard.
-            let loudest = [.chill, .lofi, .techno, .folk].contains(genre) ? 0.5 : 0.9
+            // Chill's, folk's, lo-fi's, techno's and tropical house's backbeats are soft; everyone else's lands hard.
+            let loudest = [.chill, .lofi, .techno, .folk, .tropicalHouse].contains(genre) ? 0.5 : 0.9
             func hits(_ instrument: Instrument, _ bar: Int, loud: Bool = true) -> [Int] {
                 p.notes.filter {
                     $0.instrument == instrument && $0.step / 16 == bar && (!loud || $0.velocity >= loudest)
@@ -336,6 +362,10 @@ import Testing
                 case .house, .techno:
                     #expect(
                         Set([0, 4, 8, 12]).isSubset(of: Set(hits(.kick, bar, loud: false))), "house four-to-the-floor")
+                case .tropicalHouse:
+                    #expect(
+                        Set([0, 4, 8, 12]).isSubset(of: Set(hits(.kick, bar, loud: false))), "tropical floor \(bar)")
+                    #expect(hits(.snare, bar) == [4, 12], "tropical clap bar \(bar)")
                 }
             }
             let notes = p.notes.filter { p.sections[$0.step].isDrop }
@@ -364,6 +394,11 @@ import Testing
                         && !notes.contains { $0.instrument == .wobble || $0.instrument == .sub })
             case .folk:
                 #expect(notes.contains { $0.instrument == .strum } && notes.contains { $0.instrument == .bassGuitar })
+            case .tropicalHouse:
+                #expect(
+                    notes.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.marimba }
+                        && notes.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.pumpPad }
+                        && notes.contains { $0.instrument == .sub })
             case .funk:
                 #expect(
                     notes.contains { $0.instrument == .electricStrum && [2, 3].contains($0.params.voice) }

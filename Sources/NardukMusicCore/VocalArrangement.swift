@@ -40,10 +40,14 @@ struct VocalPlan: Sendable, Hashable {
 
     var isEmpty: Bool { !pad && !chop && !cuts && !line }
 
-    static func padGenre(_ genre: Genre) -> Bool { genre == .chill || genre == .house || genre == .synthwave }
-    static func chopGenre(_ genre: Genre) -> Bool {
-        genre == .dubstep || genre == .trap || genre == .ukGarage || genre == .house
+    static func padGenre(_ genre: Genre) -> Bool {
+        genre == .chill || genre == .house || genre == .synthwave || genre == .tropicalHouse
     }
+    static func chopGenre(_ genre: Genre) -> Bool {
+        genre == .dubstep || genre == .trap || genre == .ukGarage || genre == .house || genre == .tropicalHouse
+    }
+    /// The feel a genre's chops are sung in: tropical house's are airy, every other genre's the classic voice.
+    static func chopFeel(_ genre: Genre) -> VocalFeel { genre == .tropicalHouse ? .airy : .classic }
 }
 
 extension Variety {
@@ -78,6 +82,8 @@ extension Variety {
         plan.harmony = Int(lineRng.next() % 4)
         plan.radio = lineRng.unit() < 0.5
         plan.lineDraw = lineRng.unit()
+        // Tropical house sings breathy, whatever the draw (the draw above still happens, so the stream stays put).
+        if track.genre == .tropicalHouse { plan.character = .airy }
         let grids: [[Int]] = [[0, 8], [4, 12], [0, 6, 8], [2, 8, 12], [0, 4, 10]]
         plan.chopGrid = grids[Int(lineRng.next() % UInt64(grids.count))]
         plan.chopSlices = [lineRng.unit() * 0.45, 0.5 + lineRng.unit() * 0.45]
@@ -131,7 +137,9 @@ enum VocalArrangement {
                         .vocalChop, 0.3 + 0.35 * level,
                         NoteParams(
                             pitch: tones[rung] + 12, lengthSteps: 1, formant: plan.register, drive: plan.breath,
-                            voice: NoteParams.vocalVoice(plan.chopVowels[(pos / 2) % plan.chopVowels.count]),
+                            voice: NoteParams.vocalVoice(
+                                plan.chopVowels[(pos / 2) % plan.chopVowels.count],
+                                feel: VocalPlan.chopFeel(c.track.genre)),
                             pan: pos % 4 == 0 ? -0.3 : 0.3))
                 }
             }
@@ -144,7 +152,9 @@ enum VocalArrangement {
                         NoteParams(
                             pitch: tones[degreeLift % tones.count] + 12, lengthSteps: index % 2 == 0 ? 1 : 2,
                             formant: plan.register, drive: plan.breath,
-                            voice: NoteParams.vocalVoice(plan.chopVowels[index % plan.chopVowels.count]),
+                            voice: NoteParams.vocalVoice(
+                                plan.chopVowels[index % plan.chopVowels.count],
+                                feel: VocalPlan.chopFeel(c.track.genre)),
                             pan: index % 2 == 0 ? -0.35 : 0.35))
                 }
             }

@@ -209,6 +209,7 @@ struct Track: Sendable, Hashable {
             case .rock, .funk: "electric guitar"
             case .folk: "acoustic guitar"
             case .dubstep, .riddim: "wobble"
+            case .tropicalHouse: "marimba"
             }
         return "\(hook.contour) \(hook.notes.count)-note \(carrier) hook"
     }
@@ -313,6 +314,8 @@ enum TrackGenerator {
             bigBase + BassPatches.count
             * ((variant + 1 + pick(BassPatches.variantCount - 1)) % BassPatches.variantCount)
         t.keysVoice = Self.keysVoice(genre)
+        // Tropical house's kick sits a little lower: softer and rounder than house's.
+        if genre == .tropicalHouse { t.kickTune = 0.4 }
         let ladder = Banks.rateLadder(genre)
         let rung = min(
             ladder.count - 1, max(0, Self.rateRung(genre, character, ladder: ladder) + (chance(0.3) ? 1 : 0)))
@@ -389,6 +392,7 @@ enum TrackGenerator {
         case .rock: 112...136
         case .folk: 84...108
         case .funk: 96...114
+        case .tropicalHouse: 100...112
         }
     }
 
@@ -403,6 +407,9 @@ enum TrackGenerator {
         case (.rock, _): character == .chaos ? [.aeolian, .phrygian] : [.aeolian, .mixolydian, .dorian, .aeolian]
         case (.folk, _): [.ionian, .mixolydian, .aeolian, .ionian]
         case (.funk, _): [.dorian, .mixolydian, .dorian, .aeolian]
+        // Major or bright: mostly major, a mixolydian or lydian lift, dorian as the one minor colour.
+        case (.tropicalHouse, _):
+            character == .chaos ? [.dorian, .mixolydian] : [.ionian, .ionian, .mixolydian, .lydian, .dorian]
         case (.house, _), (.chill, _): character == .chaos ? [.aeolian, .phrygian] : [.dorian, .dorian, .aeolian]
         case (_, .chaos): [.phrygian, .harmonicMinor]
         case (_, .surge): [.phrygian, .aeolian]
@@ -426,6 +433,7 @@ enum TrackGenerator {
         case .synthwave: [1]  // reese, as a saw bass
         case .lofi: [2]  // soft square
         case .rock, .folk, .funk: [2]  // unused: the bass is a guitar
+        case .tropicalHouse: [2]  // soft square, closed down to a round pulse
         }
     }
 
@@ -434,6 +442,7 @@ enum TrackGenerator {
         case .dubstep, .riddim, .trap: 0
         case .house, .techno: 1
         case .chill, .drumAndBass, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk: 2
+        case .tropicalHouse: KeysVoice.marimba
         }
     }
 
@@ -458,6 +467,7 @@ enum TrackGenerator {
             case (.synthwave, _): .quarter
             case (.lofi, _): .half
             case (.rock, _), (.folk, _), (.funk, _): .quarter
+            case (.tropicalHouse, _): .quarter
             }
         return ladder.firstIndex(of: want) ?? 0
     }
@@ -493,6 +503,7 @@ enum TrackGenerator {
             case .rock: (0.5, 0.8)
             case .folk: (0.5, 0.05)
             case .funk: (0.5, 0.2)
+            case .tropicalHouse: (0.15 + 0.25 * formant, 0.15)
             }
         return (base.0, min(1, max(0, base.1 + lift)))
     }
@@ -506,6 +517,7 @@ enum TrackGenerator {
         case .lofi: character == .chaos ? 0.25 : 0.36
         case .folk: 0.08
         case .funk: character == .chaos ? 0.2 : 0.14
+        case .tropicalHouse: character == .chaos ? 0.12 : 0.08
         case .dubstep, .riddim, .trap, .techno, .synthwave, .rock: 0
         }
     }
@@ -525,6 +537,7 @@ enum TrackGenerator {
         case .rock: [.snareRoll, .kickDrop, .tripletRoll]
         case .folk: [.kickDrop, .halfTime]
         case .funk: [.snareRoll, .kickDrop, .halfTime]
+        case .tropicalHouse: [.kickDrop, .snareRoll]
         }
     }
 
@@ -540,6 +553,7 @@ enum TrackGenerator {
         case .synthwave: [.filterSweep, .tapeStop]
         case .lofi: [.tapeStop, .filterSweep]
         case .rock, .folk, .funk: [.drumBridge]
+        case .tropicalHouse: [.filterSweep]
         }
     }
 
@@ -563,6 +577,7 @@ enum TrackGenerator {
         case .rock: [-1, 1, 2, -2, 3, 4, 0]
         case .folk: [-1, 1, -2, 2, 1, -1, 3]
         case .funk: [0, 0, 1, -1, 2, -2, 3]
+        case .tropicalHouse: [1, -1, 2, -2, 1, 3, 4]
         }
     }
 

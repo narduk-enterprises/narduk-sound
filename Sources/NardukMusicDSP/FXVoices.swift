@@ -32,6 +32,8 @@ public struct FXVoice: Sendable, Hashable {
     private var holdCounter = 0
     // Keys: which timbre, and the sample where the key is released.
     private var timbre = 0
+    /// A pumping pad (`KeysVoice.pumpPad`): the mixer ducks it on a slower sidechain of its own.
+    public private(set) var pumps = false
     private var gateEnd = 0
     // Vox vowel: first two formants as start + sweep over the note.
     private var f1Start: Float = 450, f1Sweep: Float = 300, f2Start: Float = 800, f2Sweep: Float = 350
@@ -47,6 +49,7 @@ public struct FXVoice: Sendable, Hashable {
     ) {
         let sr = c.sampleRate
         self.kind = kind
+        pumps = false
         active = true
         fading = false
         fade = 1
@@ -97,8 +100,10 @@ public struct FXVoice: Sendable, Hashable {
             baseHz = 1_600
             length = Int(0.07 * sr)
         case .keys:
-            // voice picks the timbre: 0 bell pluck, 1 house stab, 2 electric piano, 3 pad.
-            timbre = max(voice, 0) % 4
+            // voice picks the timbre: 0 bell pluck, 1 house stab, 2 electric piano, 3 pad, 4 marimba; 5 is the pad
+            // on the pumping sidechain.
+            pumps = voice == KeysVoice.pumpPad
+            timbre = voice == KeysVoice.marimba ? 4 : pumps ? 3 : max(voice, 0) % 4
             baseHz = DSP.midiToHz(foldPitch(pitch < 0 ? 72 : pitch, low: 48, high: 88))
             let gate = Float(lengthSamples)
             let (minimum, maximum, ampDecay, toneDecay, release): (Float, Float, Float, Float, Float) =
@@ -106,8 +111,13 @@ public struct FXVoice: Sendable, Hashable {
                 case 0: (0.2, 1.2, 0.38, 0.07, 0.09)
                 case 1: (0.06, 0.5, 0.2, 0.06, 0.05)
                 case 2: (0.2, 2.5, 1.1, 0.03, 0.22)
+                case 4: (0.12, 0.7, 0.3, 0.05, 0.07)
                 default: (0.4, 4.0, 60, 1, 0.45)
                 }
+            if timbre == 4 {
+                env3 = 1
+                mul3 = DSP.decay(seconds: 0.012, sampleRate: sr)  // the mallet knock
+            }
             gateEnd = Int(min(max(gate, minimum * sr), maximum * sr))
             length = gateEnd + Int(release * 6 * sr)
             env1 = 1
@@ -236,6 +246,16 @@ public struct FXVoice: Sendable, Hashable {
                     (sinf(DSP.twoPi * phaseA) + 0.18 * sinf(2 * DSP.twoPi * phaseA) + 0.3 * env2
                         * sinf(DSP.twoPi * phaseB))
                     * env1 * tremolo * 0.26
+            case 4:
+                // Marimba: a sine bar, its fourth-partial overtone (a tuned bar's second mode) dying fast, and a short
+                // inharmonic knock from the mallet. A 1 ms ramp keeps the onset soft.
+                phaseB = DSP.wrap(phaseB + dt * 4)
+                phaseC = DSP.wrap(phaseC + dt * 9.8)
+                env3 *= mul3
+                let attack = min(seconds * 1_000, 1)
+                y =
+                    (sinf(DSP.twoPi * phaseA) + 0.45 * env2 * sinf(DSP.twoPi * phaseB) + 0.2 * env3
+                        * sinf(DSP.twoPi * phaseC)) * env1 * attack * 0.3
             default:
                 // Pad: two detuned saws, a slow attack and a gently moving lowpass.
                 phaseB = DSP.wrap(phaseB + dt * 1.006)

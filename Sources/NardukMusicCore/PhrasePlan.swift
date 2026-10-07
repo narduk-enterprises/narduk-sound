@@ -66,7 +66,8 @@ enum PhrasePlanner {
         plan.seed = roll
         plan.variants = track.variants(section: section, live: live)
         switch live {
-        case .chaos where track.genre != .chill && track.genre != .lofi: plan.fill = .bassStutter
+        case .chaos where track.genre != .chill && track.genre != .lofi && track.genre != .tropicalHouse:
+            plan.fill = .bassStutter
         case .idle: plan.fill = .kickDrop
         default: plan.fill = track.fills[phraseInTrack % track.fills.count]
         }
@@ -122,7 +123,7 @@ enum Banks {
         switch genre {
         case .dubstep, .trap, .drumAndBass: darkProgressions
         case .riddim: riddimProgressions
-        case .house, .chill, .ukGarage, .lofi: liftProgressions
+        case .house, .chill, .ukGarage, .lofi, .tropicalHouse: liftProgressions
         case .rock: rockProgressions
         case .folk: folkProgressions
         case .funk: funkProgressions
@@ -223,6 +224,14 @@ enum Banks {
         [0, 1, 2, 1, 6, 2, 8, 1, 11, 2, 16, 1, 18, 1, 22, 2, 24, 1, 27, 2],
     ]
 
+    /// Tropical house: a marimba pluck, short notes skipping across the 8ths with a 16th pickup or two.
+    static let tropicalHooks: [[Int]] = [
+        [0, 2, 3, 2, 6, 2, 8, 2, 10, 2, 12, 4, 16, 2, 19, 2, 22, 2, 24, 2, 26, 4],
+        [0, 3, 3, 3, 6, 2, 10, 2, 12, 2, 14, 2, 16, 3, 19, 3, 22, 4, 28, 2],
+        [2, 2, 4, 2, 6, 2, 10, 2, 12, 4, 18, 2, 20, 2, 22, 2, 26, 2, 28, 4],
+        [0, 2, 2, 1, 3, 3, 6, 2, 8, 4, 16, 2, 18, 1, 19, 3, 22, 2, 24, 6],
+    ]
+
     static func hookRhythms(_ genre: Genre) -> [[Int]] {
         switch genre {
         case .dubstep: dubstepHooks
@@ -238,6 +247,7 @@ enum Banks {
         case .rock: rockHooks
         case .folk: folkHooks
         case .funk: funkHooks
+        case .tropicalHouse: tropicalHooks
         }
     }
 
@@ -325,6 +335,13 @@ enum Banks {
         DrumVariant([0, 10, 11], [0, 6, 10, 14], snares: [4, 12], ghosts: [2, 9, 13], openHats: [14]),
     ]
 
+    /// Tropical house: a soft four on the floor, a light clap on 2 and 4, open hats on the off-beats.
+    static let tropicalDrums: [DrumVariant] = [
+        DrumVariant([0, 4, 8, 12], [0, 4, 8, 12], snares: [4, 12], ghosts: [15], openHats: [2, 10]),
+        DrumVariant([0, 4, 8, 12], [0, 4, 8, 12], snares: [4, 12], ghosts: [7], openHats: [6, 14]),
+        DrumVariant([0, 4, 8, 12], [0, 4, 8, 12, 14], snares: [4, 12], ghosts: [11], openHats: [2, 10]),
+    ]
+
     static func drums(_ genre: Genre) -> [DrumVariant] {
         switch genre {
         case .dubstep: dubstepDrums
@@ -340,6 +357,7 @@ enum Banks {
         case .rock: rockDrums
         case .folk: folkDrums
         case .funk: funkDrums
+        case .tropicalHouse: tropicalDrums
         }
     }
 
@@ -358,6 +376,7 @@ enum Banks {
         case .synthwave: [.quarter]
         case .lofi: [.half, .quarter]
         case .rock, .folk, .funk: [.quarter]
+        case .tropicalHouse: [.quarter, .eighth]
         }
     }
 }

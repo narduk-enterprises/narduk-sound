@@ -18,6 +18,8 @@ public enum Genre: String, Sendable, Hashable, Codable, CaseIterable {
     /// The band family (narduk-libs#1578): the guitars carry the part over a live-drummer kit and a bass guitar.
     /// Rock drives power chords, folk strums and picks an acoustic, funk scratches muted 16ths over a popping bass.
     case rock, folk, funk
+    /// Tropical house: a soft four-on-the-floor at 100 ... 112 BPM, a marimba pluck hook, pumping pads and airy chops.
+    case tropicalHouse
 }
 
 public enum Instrument: String, Sendable, Hashable, Codable, CaseIterable {
