@@ -95,6 +95,8 @@ struct SynthState {
     let analysis: UnsafeMutablePointer<Float>
     var analysisWritten = 0
     var hits: UInt32 = 0
+    /// Monotonic per-instrument hit counters (lane = `Instrument.index`), bumped where `hits` is set.
+    var hitCounts = SIMD32<UInt32>(repeating: 0)
 
     init(sampleRate: Double, bpm: Double, stepsPerBar: Int) {
         c = SynthCoefficients(sampleRate: sampleRate)
@@ -288,9 +290,11 @@ struct SynthState {
         }
         if e.flags & SynthEvent.StrumFlags.string == 0 {
             hits |= 1 << UInt32(e.instrument)
+            hitCounts[Int(e.instrument)] &+= 1
         } else if e.flags & SynthEvent.StrumFlags.lead != 0 {
             let strum = e.flags & SynthEvent.StrumFlags.electric != 0 ? Instrument.electricStrum : .strum
             hits |= 1 << UInt32(strum.synthCode)
+            hitCounts[Int(strum.synthCode)] &+= 1
         }
     }
 
@@ -560,6 +564,8 @@ public final class DropSynthCore: @unchecked Sendable {
     private let stepPositionBits = Atomic<UInt64>(Double(0).bitPattern)
     private let lastFrames = Atomic<Int>(0)
     private let hitsMask = Atomic<UInt32>(0)
+    /// `HitCounters.laneCount` relaxed counters the render thread stores into after each buffer (synthCode == lane).
+    private let hitLanes: UnsafeMutablePointer<Atomic<UInt32>>
     private let wobblePhaseBits = Atomic<UInt32>(0)
     private let wobbleCutoffBits = Atomic<UInt32>(0)
     private let analysisWritten = Atomic<Int>(0)
@@ -571,9 +577,13 @@ public final class DropSynthCore: @unchecked Sendable {
         state = .allocate(capacity: 1)
         state.initialize(to: SynthState(sampleRate: sampleRate, bpm: bpm, stepsPerBar: stepsPerBar))
         bpmMilli = Atomic<Int>(StepClock.milliBPM(bpm))
+        hitLanes = .allocate(capacity: HitCounters.laneCount)
+        for lane in 0..<HitCounters.laneCount { (hitLanes + lane).initialize(to: Atomic<UInt32>(0)) }
     }
 
     deinit {
+        hitLanes.deinitialize(count: HitCounters.laneCount)
+        hitLanes.deallocate()
         state.pointee.deallocate()
         state.deinitialize(count: 1)
         state.deallocate()
@@ -648,6 +658,14 @@ public final class DropSynthCore: @unchecked Sendable {
         Instrument.set(fromMask: hitsMask.exchange(0, ordering: .acquiringAndReleasing))
     }
 
+    /// Per-instrument monotonic hit counters since this core was created. Unlike `takeHits()` nothing is cleared, so
+    /// a consumer that polls slower than the render rate diffs against the value it last saw and loses no hit.
+    public var hitCounters: HitCounters {
+        var out = HitCounters()
+        for lane in 0..<HitCounters.laneCount { out.lanes[lane] = hitLanes[lane].load(ordering: .relaxed) }
+        return out
+    }
+
     public var wobblePhase: Float { Float(bitPattern: wobblePhaseBits.load(ordering: .relaxed)) }
     public var wobbleCutoff: Float { Float(bitPattern: wobbleCutoffBits.load(ordering: .relaxed)) }
 
@@ -704,6 +722,8 @@ public final class DropSynthCore: @unchecked Sendable {
         if s.pointee.hits != 0 {
             hitsMask.bitwiseOr(s.pointee.hits, ordering: .releasing)
             s.pointee.hits = 0
+            let counts = s.pointee.hitCounts
+            for lane in 0..<HitCounters.laneCount { hitLanes[lane].store(counts[lane], ordering: .relaxed) }
         }
         wobblePhaseBits.store(s.pointee.wobble.lfoPhase.bitPattern, ordering: .relaxed)
         let cutoff: Float = s.pointee.wobble.active ? s.pointee.wobble.normalizedCutoff : 0

@@ -1,8 +1,18 @@
 import NardukMusicCore
+import NardukSoundAnalysis
 
 // MARK: - Visualizer feed
 
 /// Audio analysis the engine publishes for the visualizers (~60 Hz), off the render thread.
+///
+/// Deprecated in 0.4.0, kept for one minor version: the engine now publishes a `SoundFrame` (what any sound is doing)
+/// and a `MusicContext` (what the music knows about itself), and this type is built from the two. Migrate by reading
+/// `DropEngine.latestSound` and `DropEngine.latestMusic`; hits become `HitCounters` you diff, so skipped frames lose
+/// nothing (docs/sound-contract.md sections 2 and 4).
+@available(
+    *, deprecated,
+    message: "Read DropEngine.latestSound (SoundFrame) and latestMusic (MusicContext) instead; removed after 0.4.x."
+)
 public struct VisualizerFrame: Sendable, Hashable {
     /// Log-spaced magnitude bands, 0 ... 1 (64 bands).
     public var spectrum: [Float]
@@ -33,5 +43,15 @@ public struct VisualizerFrame: Sendable, Hashable {
         self.hits = hits
         self.step = step
         self.section = section
+    }
+
+    /// The adapter: a frame built from the contract types. `previousHits` is the counters of the frame before, so
+    /// `hits` holds the instruments whose counter moved since then, as `takeHits()` used to.
+    public init(sound: SoundFrame, music: MusicContext, previousHits: HitCounters = HitCounters()) {
+        let moved = music.hitCounts.delta(since: previousHits)
+        self.init(
+            spectrum: sound.spectrum, waveform: sound.waveform, wobblePhase: music.wobblePhase,
+            wobbleCutoff: music.wobbleCutoff, peakDB: sound.peakDB, rmsDB: sound.rmsDB,
+            hits: Set(Instrument.allCases.filter { moved[$0] != 0 }), step: music.step, section: music.section)
     }
 }

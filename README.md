@@ -12,12 +12,14 @@ cues), and the conductor builds, drops and changes tracks to match.
 | `NardukMusicCore`     | macOS, iOS, Linux | `DropConductor`, the song model and the `MusicSignal` input. Pure and clock-free.                                                                                                                                                 |
 | `NardukMusicDSP`      | macOS, iOS, Linux | `DropSynthCore`, the instruments and the limiter (`SpectrumAnalyzer` and `SPSCRing` forward to NardukSoundAnalysis).                                                                                                              |
 | `NardukSoundAnalysis` | macOS, iOS, Linux | Any audio to a `SoundFrame` (spectrum, waveform, loudness): `SoundAnalyzer`, `SPSCRing`, `SampleRing`, ring and recent-sample sources, and (Apple only) `AudioTapSource` for a mic, mixer or file through `AVAudioEngine`. No UI. |
+| `NardukSonify`        | macOS, iOS, Linux | `StreamSonifier`: a stream of numbers to the `MusicSignal`s the conductor plays, online and in bounded memory.                                                                                                                    |
+| `NardukSoundVisuals`  | macOS, iOS, Linux | `SoundVisualState`, the render budget and the palette contract: what a visualizer reads each frame, from a `SoundFrame` and an optional `MusicContext`. No drawing.                                                               |
 | `NardukMusicRender`   | macOS, iOS, Linux | `OfflineRenderer`, JSON scenarios and WAV / M4A writing.                                                                                                                                                                          |
-| `NardukMusicEngine`   | macOS, iOS        | `DropEngine`: the real-time AVAudioEngine host and the recorder; `makeSoundSource()` adapts its output for analysis.                                                                                                              |
+| `NardukMusicEngine`   | macOS, iOS        | `DropEngine`: the real-time AVAudioEngine host and the recorder. It publishes `latestSound` (a `SoundFrame`) and `latestMusic` (a `MusicContext`); `makeSoundSource()` adapts its output for analysis.                            |
 | `narduk-music`        | macOS, Linux      | A CLI that renders a scenario to a WAV.                                                                                                                                                                                           |
 
 ```swift
-.package(url: "https://github.com/narduk-enterprises/narduk-libs", exact: "0.3.0")
+.package(url: "https://github.com/narduk-enterprises/narduk-libs", exact: "0.4.0")
 ```
 
 Then add `.product(name: "NardukMusicEngine", package: "narduk-libs")` (or
@@ -31,6 +33,25 @@ demo song, the microphone or an audio file through `NardukSoundAnalysis` into
 four Canvas visualizers side by side (`xcodegen generate`, then build the
 `SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch).
 It is unsigned and local only; CI builds it for macOS and the iOS simulator.
+
+## Reading the engine
+
+`DropEngine` publishes two values about 60 times a second, and a visualizer
+polls them on its own `TimelineView` or `MTKView` clock (never observe them:
+that re-runs SwiftUI bodies at 60 Hz).
+
+- `latestSound`: a `SoundFrame`, what any sound is doing (spectrum, waveform,
+  peak and RMS). `sequence != last` is the "is this new?" test.
+- `latestMusic`: a `MusicContext`, what the music knows about itself: the step,
+  section, the beat clock, the wobble, and per-instrument `HitCounters`. Keep
+  the counters you last saw and take `delta(since:)`: a consumer that skips
+  frames (the iOS thermal cap) loses no hit, and two hits in one poll count as
+  two. The render thread bumps the counters without allocating.
+- Energy, the build and drop thresholds and `dropQueued` are the conductor's:
+  copy `DropConductor`'s snapshot into `engine.conductor` and they ride along.
+
+`VisualizerFrame` and `DropEngine.latestFrame` still build, with a deprecation
+warning, for one minor version. They are an adapter over the two values above.
 
 ## Make your own source
 

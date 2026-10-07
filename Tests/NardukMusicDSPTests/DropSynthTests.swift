@@ -183,6 +183,44 @@ import Testing
         #expect(core.takeHits().isEmpty)
     }
 
+    /// The hit counters share `Instrument.index` lanes with the synth's codes, and every instrument has a lane.
+    @Test func hitCounterLanesMatchTheSynthCodes() {
+        #expect(Instrument.allCases.count <= HitCounters.laneCount)
+        #expect(Set(Instrument.allCases.map(\.index)).count == Instrument.allCases.count)
+        for instrument in Instrument.allCases { #expect(Int(instrument.synthCode) == instrument.index) }
+    }
+
+    /// Counters are monotonic and keep multiplicity: two kicks in one poll are two, and polling clears nothing.
+    @Test func hitCountersCountEveryHitAndClearNothing() {
+        let core = DropSynthCore(sampleRate: 48_000, bpm: 140)
+        for step in [0, 4, 8] { core.schedule(ScheduledNote(step: step, instrument: .kick, velocity: 1)) }
+        core.schedule(ScheduledNote(step: 4, instrument: .snare, velocity: 1))
+        let frames = 48_000
+        let left = UnsafeMutablePointer<Float>.allocate(capacity: 256)
+        let right = UnsafeMutablePointer<Float>.allocate(capacity: 256)
+        defer {
+            left.deallocate()
+            right.deallocate()
+        }
+        #expect(core.hitCounters == HitCounters())
+        var rendered = 0
+        var seen = HitCounters()
+        var kicks: UInt32 = 0
+        while rendered < frames {
+            core.render(frames: 256, left: left, right: right)
+            rendered += 256
+            let now = core.hitCounters
+            kicks += now.delta(since: seen)[.kick]
+            seen = now
+        }
+        #expect(kicks == 3)
+        #expect(core.hitCounters[.kick] == 3 && core.hitCounters[.snare] == 1)
+        #expect(core.hitCounters[.hat] == 0)
+        #expect(core.hitCounters == core.hitCounters)
+        #expect(core.takeHits() == [.kick, .snare])
+        #expect(core.hitCounters[.kick] == 3)
+    }
+
     @Test func spectrumAnalyzerFindsASine() {
         let analyzer = SpectrumAnalyzer(sampleRate: 48_000)
         let samples = (0..<2_048).map { 0.5 * sinf(DSP.twoPi * 1_000 * Float($0) / 48_000) }

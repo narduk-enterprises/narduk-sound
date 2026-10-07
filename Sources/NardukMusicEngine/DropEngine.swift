@@ -36,7 +36,7 @@ public enum DropEngineError: LocalizedError {
 /// `AVAudioSourceNode`, and publishes analysis for the visualizers.
 ///
 /// Main actor side: a ~60 Hz timer asks `noteProvider` for notes ~100 ms ahead of the
-/// render position, pushes them through a lock-free ring, and publishes `latestFrame`.
+/// render position, pushes them through a lock-free ring, and publishes `latestSound` and `latestMusic`.
 /// Render side: the source node calls `DropSynthCore.render`, which never allocates or locks.
 /// Steps restart at 0 on every `start()`.
 @MainActor @Observable public final class DropEngine {
@@ -48,11 +48,28 @@ public enum DropEngineError: LocalizedError {
     public private(set) var isRunning = false
     /// The step currently audible (output-latency compensated).
     public private(set) var currentStep = 0
-    /// Updated ~60 Hz on the main actor. Not observed: visualizers poll it on their own frame clock, so publishing a
-    /// frame never invalidates a SwiftUI body or Canvas (Wirewatcher #65: that was 50+ invalidations a second).
-    @ObservationIgnored public private(set) var latestFrame = VisualizerFrame()
+    /// What the sound is doing, updated ~60 Hz on the main actor (`sequence` advances once per publish). Not
+    /// observed: visualizers poll it on their own frame clock, so publishing a frame never invalidates a SwiftUI body
+    /// or Canvas (Wirewatcher #65: that was 50+ invalidations a second).
+    @ObservationIgnored public private(set) var latestSound = SoundFrame()
+    /// What the music knows about itself, published with `latestSound`. Hits are monotonic counters: keep the
+    /// `hitCounts` you last saw and take `delta(since:)`, so a consumer that skips frames loses no hit.
+    @ObservationIgnored public private(set) var latestMusic = MusicContext()
+    /// Conductor state the controller owns (energy, thresholds, a queued drop); echoed into `latestMusic`.
+    @ObservationIgnored public var conductor = ConductorSnapshot()
     /// Set by the controller and echoed into frames.
     public var section: SongSection = .intro
+    @ObservationIgnored private var previousHits = HitCounters()
+    /// Each `start()` builds a new synth whose counters begin at 0; the published counters add them to this base, so
+    /// they stay monotonic across restarts and a consumer's wrapping `delta` never sees a jump back.
+    @ObservationIgnored private var hitBase = HitCounters()
+
+    /// The pre-0.4.0 frame, built from `latestSound` and `latestMusic`; its `hits` are the instruments that fired since
+    /// the previous publish.
+    @available(*, deprecated, message: "Read latestSound (SoundFrame) and latestMusic (MusicContext) instead.")
+    public var latestFrame: VisualizerFrame {
+        VisualizerFrame(sound: latestSound, music: latestMusic, previousHits: previousHits)
+    }
     /// Called on the main actor every ~17 ms; returns the notes for all steps up to `throughStep`.
     @ObservationIgnored public var noteProvider: (@MainActor (_ throughStep: Int) -> [ScheduledNote])?
     /// 0 ... 1
@@ -81,7 +98,7 @@ public enum DropEngineError: LocalizedError {
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private var sourceNode: AVAudioSourceNode?
     @ObservationIgnored private var core: DropSynthCore?
-    @ObservationIgnored private var analyzer: SpectrumAnalyzer?
+    @ObservationIgnored private var analyzer: SoundAnalyzer?
     @ObservationIgnored private var analysisScratch = [Float](repeating: 0, count: SpectrumAnalyzer.fftSize)
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var scheduledThrough = -1
@@ -148,9 +165,10 @@ public enum DropEngineError: LocalizedError {
 
         self.core = core
         sourceNode = node
-        if analyzer?.sampleRate != sampleRate { analyzer = SpectrumAnalyzer(sampleRate: sampleRate) }
+        if analyzer?.sampleRate != sampleRate { analyzer = SoundAnalyzer(sampleRate: sampleRate) }
         scheduledThrough = -1
         currentStep = 0
+        hitBase = latestMusic.hitCounts
         pumpNotes()  // fill the first look-ahead window before the first render callback
 
         do {
@@ -178,7 +196,8 @@ public enum DropEngineError: LocalizedError {
             try? await Task.sleep(for: .milliseconds(80))
             guard let self, !Task.isCancelled, !self.isRunning else { return }
             self.engine.stop()
-            self.latestFrame = VisualizerFrame(step: self.currentStep, section: self.section)
+            self.latestSound = SoundFrame(sequence: self.latestSound.sequence &+ 1, time: self.latestSound.time)
+            self.latestMusic = self.musicContext(core: nil, hitCounts: self.latestMusic.hitCounts)
         }
     }
 
@@ -248,33 +267,25 @@ public enum DropEngineError: LocalizedError {
 
     private func publishFrame(core: DropSynthCore) {
         guard let analyzer else { return }
-        let count = analysisScratch.count
+        let time = Double(core.renderedSampleCount) / core.sampleRate
         analysisScratch.withUnsafeMutableBufferPointer { core.copyRecentSamples(into: $0) }
-        let spectrum = analysisScratch.withUnsafeBufferPointer { analyzer.process($0) }
-        let waveform = Array(analysisScratch[(count - 512)...])
+        latestSound = analysisScratch.withUnsafeBufferPointer { analyzer.analyze($0, time: time) }
+        previousHits = latestMusic.hitCounts
+        var counts = core.hitCounters
+        counts.lanes &+= hitBase.lanes
+        latestMusic = musicContext(core: core, hitCounts: counts)
+    }
 
-        // Peak / RMS over the last frame interval (~800 samples at 48 kHz).
-        let window = min(Int(core.sampleRate * DropEngine.frameInterval), count)
-        var peak: Float = 0
-        var sum: Float = 0
-        for i in (count - window)..<count {
-            let x = analysisScratch[i]
-            peak = max(peak, abs(x))
-            sum += x * x
-        }
-        let rms = (sum / Float(max(window, 1))).squareRoot()
-
-        latestFrame = VisualizerFrame(
-            spectrum: spectrum,
-            waveform: waveform,
-            wobblePhase: core.wobblePhase,
-            wobbleCutoff: core.wobbleCutoff,
-            peakDB: DSP.decibels(peak),
-            rmsDB: DSP.decibels(rms),
-            hits: core.takeHits(),
-            step: currentStep,
-            section: section
-        )
+    /// The music's side of a frame. `core` is nil once stopped: the clock and counters hold, the wobble rests.
+    private func musicContext(core: DropSynthCore?, hitCounts: HitCounters) -> MusicContext {
+        let stepsPerPhrase = max(settings.stepsPerPhrase, 1)
+        return MusicContext(
+            hitCounts: hitCounts, step: currentStep, section: section, energy: Float(conductor.energy),
+            wobblePhase: core?.wobblePhase ?? 0, wobbleCutoff: core?.wobbleCutoff ?? 0, isRunning: core != nil,
+            secondsPerStep: settings.secondsPerStep, stepsPerBar: settings.stepsPerBar, stepsPerPhrase: stepsPerPhrase,
+            phraseProgress: Float(currentStep % stepsPerPhrase) / Float(stepsPerPhrase),
+            buildThreshold: Float(conductor.buildThreshold), dropThreshold: Float(conductor.dropThreshold),
+            dropQueued: conductor.dropQueued)
     }
 
     // MARK: Device changes
