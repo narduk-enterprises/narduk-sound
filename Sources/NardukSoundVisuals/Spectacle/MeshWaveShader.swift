@@ -109,7 +109,12 @@
                     gv.x += sin(hit.z * 16.0 + time * 2.4) * highs * 0.045;
                     gv.y += sin(hit.x * 16.0 - time * 2.0) * highs * 0.045;
                     gv *= 7.1;
-                    float2 fw = max(fwidth(gv), float2(1e-3));
+                    // The grid's pixel footprint, from the ray's spread at the hit (one pixel is 1/height of q,
+                    // and the ray divides q by 2.05), stretched where the mesh is seen edge-on. Not fwidth: a
+                    // derivative inside this per-pixel branch is undefined and drew different pixels per run on
+                    // a virtual GPU (CI's macOS runner).
+                    float footprint = 7.1 * hitT / (2.05 * max(u.resTime.y, 1.0));
+                    float2 fw = float2(max(footprint / max(abs(dot(n, rd)), 0.15), 1e-3));
                     float2 cell = min(fract(gv), 1.0 - fract(gv));
                     float line = min(cell.x / fw.x, cell.y / fw.y);
                     float core = exp(-line * line * 1.45);
