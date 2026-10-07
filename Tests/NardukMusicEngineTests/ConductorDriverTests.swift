@@ -268,11 +268,11 @@ final class PumpedSynth {
         feed.pump(driver, into: core)  // the engine primes the first look-ahead before the first buffer
         let pump = LivePump(wake: wake) { feed.pump(driver, into: core) }
         defer { pump.cancel() }
-        let block = DropEngine.makeRenderBlock(core, wake: wake)
         let frames = 512
         let behind = Atomic<Int>(0)
 
         let render = Thread {
+            let block = DropEngine.makeRenderBlock(core, wake: wake)
             let buffers = AudioBufferList.allocate(maximumBuffers: 2)
             let left = UnsafeMutablePointer<Float>.allocate(capacity: frames)
             let right = UnsafeMutablePointer<Float>.allocate(capacity: frames)
