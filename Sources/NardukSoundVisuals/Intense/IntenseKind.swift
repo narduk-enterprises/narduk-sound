@@ -98,9 +98,46 @@ public struct IntenseKind: Sendable, Hashable, Identifiable {
         id: "kaleidoscope", title: "Beat kaleidoscope", fragment: "kaleidoscopeMetalFragment")
 
     /// The built-ins, in gallery order. Plugins are loaded at run time and are not listed here.
+    /// A translucent 3-D moon jelly in the deep: the beat swims it, the spectrum lights its canals.
+    public static let jellyfish = IntenseKind(id: "jellyfish", title: "Jellyfish", fragment: "jellyfishFragment")
+    /// Luminous 3-D glass blossoms in a night garden: the beat opens them, the spectrum lights their veins.
+    public static let flower = IntenseKind(id: "flower", title: "Flower", fragment: "flowerFragment")
+    /// A flame-wreathed sun: wavy fire tendrils, a veined disc and drifting embers.
+    public static let flameSun = IntenseKind(id: "flameSun", title: "Flame sun", fragment: "flameSunFragment")
+    /// A night beach whose breakers glow: one wave breaks per beat, plankton sparks in the swash.
+    public static let bioluminescentSea = IntenseKind(
+        id: "bioluminescentSea", title: "Bioluminescent sea", fragment: "bioSeaFragment")
+    /// A lensed black hole: a swirling accretion disk arching over the shadow, a photon ring and drop-fired jets.
+    public static let blackHole = IntenseKind(id: "blackHole", title: "Black hole", fragment: "blackHoleFragment")
+    /// A checkered polygon tunnel, a fractal core re-seeded each beat and counter-spinning polygon rings.
+    public static let geometricChaos = IntenseKind(
+        id: "geometricChaos", title: "Geometric chaos", fragment: "chaosFragment")
+    /// A lit molecular double helix in a field of cells; the kick expands it and the snare opens its rungs.
+    public static let amberHelix = IntenseKind(id: "amberHelix", title: "Amber helix", fragment: "amberHelixFragment")
+    /// A thought engine tearing out of its casing: fractured chrome, molten cores and snapping nerve cables.
+    public static let astraUnbound = IntenseKind(
+        id: "astraUnbound", title: "Astra unbound", fragment: "astraUnboundFragment")
+    /// Liquid-metal ribbons weaving through the dark, lit and twisted by the spectrum.
+    public static let mercuryLoom = IntenseKind(
+        id: "mercuryLoom", title: "Mercury loom", fragment: "mercuryLoomFragment")
+    /// A little robot dancing between two speakers: it bobs on the beat and its chest shows the spectrum.
+    public static let pocketAutomaton = IntenseKind(
+        id: "pocketAutomaton", title: "Pocket automaton", fragment: "pocketAutomatonFragment")
+    /// Nerve filaments firing around a pulsing star-shaped gate.
+    public static let synapticGate = IntenseKind(
+        id: "synapticGate", title: "Synaptic gate", fragment: "synapticGateFragment")
+    /// A banded planet over rippling rings that the bass sets rolling.
+    public static let tidalObservatory = IntenseKind(
+        id: "tidalObservatory", title: "Tidal observatory", fragment: "tidalObservatoryFragment")
+    /// A vaulted hall rushing past one bay per beat, with spectrum-raised stone blocks and swinging keystones.
+    public static let vaultedEngine = IntenseKind(
+        id: "vaultedEngine", title: "Vaulted engine", fragment: "vaultedEngineFragment")
+
     public static let allCases: [IntenseKind] = [
         .hyperspaceLasers, .fluidGlitch, .fractalDive, .synthwaveFlyover, .liquidSplash, .sun,
         .spectrum, .vortex, .halo, .scope, .wobbleMeter, .pads, .mirror, .phosphor, .pianoRoll, .pitchWheel,
-        .audioTerrain, .particleField, .kaleidoscope,
+        .audioTerrain, .particleField, .kaleidoscope, .jellyfish, .flower, .flameSun, .bioluminescentSea, .blackHole,
+        .geometricChaos, .amberHelix, .astraUnbound, .mercuryLoom, .pocketAutomaton, .synapticGate,
+        .tidalObservatory, .vaultedEngine,
     ]
 }
