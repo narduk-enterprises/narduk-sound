@@ -67,7 +67,7 @@ import Testing
         .rock: ["darwin-arm64": 0xf948_6473_5ceb_5d30],
         .folk: ["darwin-arm64": 0x7fcb_638f_cf1d_9f04],
         .funk: ["darwin-arm64": 0x2d0b_5ed3_b7e1_6455],
-        .tropicalHouse: ["darwin-arm64": 0x676a_7cd5_aa47_a626],
+        .tropicalHouse: ["darwin-arm64": 0xa939_293e_72ea_7e86],
     ]
 
     @Test(arguments: Genre.allCases)

@@ -221,6 +221,8 @@ public enum DropArranger {
         var breakRoll = false
         /// Everything in the drop is softer by this factor.
         var gain = 1.0
+        /// The riser that charges under the build; false leaves it out (tropical house: no whomps).
+        var riser = true
     }
 
     static func bias(_ genre: Genre) -> Bias {
@@ -237,6 +239,7 @@ public enum DropArranger {
             b.impact = 0
             b.drive = 0
             b.gain = 0.85
+            b.riser = false
         case .ukGarage: b.impact = 0.8
         case .chill, .lofi:
             b.impact = 0
@@ -281,7 +284,7 @@ public enum DropArranger {
             ScheduledNote(step: step, instrument: instrument, velocity: min(1, velocity), params: params)
         }
 
-        if heldSteps == 0 {
+        if heldSteps == 0, bias.riser {
             // The riser sweeps two octaves up from the tonic's pitch class, so it ends on the tonic.
             add(
                 make(

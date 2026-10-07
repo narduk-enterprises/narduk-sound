@@ -561,7 +561,7 @@ enum TrackGenerator {
         case .rock: [.snareRoll, .kickDrop, .tripletRoll]
         case .folk: [.kickDrop, .halfTime]
         case .funk: [.snareRoll, .kickDrop, .halfTime]
-        case .tropicalHouse: [.kickDrop, .snareRoll]
+        case .tropicalHouse: [.kickDrop]  // no snare roll: no heavy fills
         }
     }
 

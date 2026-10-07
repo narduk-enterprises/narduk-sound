@@ -8,6 +8,16 @@ shipped on narduk-libs tags.
 ### Added
 
 - `Genre.tropicalHouse` ("Tropical House", 100 ... 112 BPM): a soft four-on-the-floor with an off-beat shaker and a light clap, a round off-beat sub, a marimba pluck hook (new `KeysVoice.marimba`) over pads that pump on their own slower sidechain (`KeysVoice.pumpPad`), airy vocal chops, and a gentle drop with no impact bias or grit. First version for listening.
+- Library keys voices, for any genre (`KeysVoice`, played on `.keys`):
+  - `panFlute`: a breathy pan flute, a soft sine under a band of breath that chiffs at the onset, with a delayed vibrato.
+  - `steelDrum`: a steel pan, a bright FM strike settling into the octave and a sharp twelfth over an inharmonic ring.
+  - `saxLead`: a sax-like lead, a breath-opened saw through two vowel formants, with a soft onset and a delayed vibrato.
+  - `softPiano`: a warm soft piano for chords, round detuned sine partials, a felt hammer and a slow 25 ms attack.
+  The melodic library voices (these and `marimba`) duck about 3 dB under the kick instead of the effects' 6 dB.
+- Tropical House, take two: no whomps. The soft wobble under the off-beat sub, the drop impact, risers, tape stops,
+  build snare rolls, the low vox chop and vox lead are gone; the sub no longer glides; `pumpPad` ducks about 3.7 dB
+  instead of 16 dB; a `voice` cue answers with an airy pitched vocal chop; drums are softer (drop velocity ~22 % under
+  house on the same seeds).
 - `DropConductor.requestNextTrack(genre:)`: a smooth hand-over. The phrase plays out, its last bar carries the track's outro, and the new track (in the requested genre, if any) starts on the next phrase line. `setGenre` still cuts in at the next bar line.
 - `NardukMusicPlayback` (Darwin): `NowPlayingBridge` publishes Now Playing info and maps play, pause, toggle and
   next track from the lock screen and HomePods to a `NowPlayingTransport`; `AirPlayPicker` wraps `AVRoutePickerView`.
