@@ -119,6 +119,8 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     public var seed: UInt64?
     public var genre: Genre?
     public var bpm: Double?
+    /// The kind of music (nil: electronic, as before). `ambient` swaps the genre's arrangement for the swell and settle one.
+    public var family: GenreFamily?
     /// Default length when the caller gives none.
     public var seconds: Double?
     /// Build and drop thresholds, when the source's level scale wants different ones from the defaults.
@@ -133,7 +135,8 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     public var conductor: Bool?
 
     public init(
-        name: String? = nil, seed: UInt64? = nil, genre: Genre? = nil, bpm: Double? = nil, seconds: Double? = nil,
+        name: String? = nil, seed: UInt64? = nil, genre: Genre? = nil, bpm: Double? = nil, family: GenreFamily? = nil,
+        seconds: Double? = nil,
         buildThreshold: Double? = nil, dropThreshold: Double? = nil, signals: [MusicSignal]? = nil,
         segments: [Segment]? = nil, actions: [Action]? = nil, notes: [Note]? = nil,
         conductor: Bool? = nil
@@ -142,6 +145,7 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         self.seed = seed
         self.genre = genre
         self.bpm = bpm
+        self.family = family
         self.seconds = seconds
         self.buildThreshold = buildThreshold
         self.dropThreshold = dropThreshold
@@ -163,6 +167,7 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         if let seed { settings.seed = seed }
         if let genre { settings.genre = genre }
         if let bpm { settings.bpm = bpm }
+        if let family { settings.family = family }
         return settings
     }
 

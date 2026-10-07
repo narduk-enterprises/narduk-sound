@@ -1,0 +1,49 @@
+{
+  "name": "ambient-swell",
+  "seed": 7311,
+  "genre": "chill",
+  "family": "ambient",
+  "bpm": 96,
+  "seconds": 150,
+  "buildThreshold": 0.45,
+  "dropThreshold": 0.32,
+  "segments": [
+    {
+      "from": 0,
+      "to": 30,
+      "every": 0.5,
+      "level": [0.05, 0.2],
+      "levelLabel": "signal",
+      "character": "idle"
+    },
+    {
+      "from": 30,
+      "to": 70,
+      "every": 0.5,
+      "level": [0.2, 0.9],
+      "levelLabel": "signal",
+      "cues": [
+        { "gesture": "spark", "label": "ping" },
+        { "gesture": "sparkle", "label": "drift" }
+      ],
+      "cueEvery": 6,
+      "character": "busy"
+    },
+    {
+      "from": 70,
+      "to": 90,
+      "every": 0.5,
+      "level": [0.9, 0.7],
+      "levelLabel": "signal",
+      "character": "surge"
+    },
+    {
+      "from": 90,
+      "to": 150,
+      "every": 0.5,
+      "level": [0.7, 0.05],
+      "levelLabel": "signal",
+      "character": "idle"
+    }
+  ]
+}

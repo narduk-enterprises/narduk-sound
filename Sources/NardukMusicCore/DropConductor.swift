@@ -666,7 +666,10 @@ public struct DropConductor: Sendable {
                 ScheduledNote(step: step, instrument: instrument, velocity: min(1, max(0, velocity)), params: params))
         }
 
-        if dropComing {
+        // The ambient family has no risers, snare rolls, impacts or tape stops: its sections swell and settle.
+        let ambient = settings.family == .ambient
+
+        if dropComing, !ambient {
             // The last bar: a riser that ends exactly on the drop, and a snare roll that speeds up into it.
             if !riserFired {
                 riserFired = true
@@ -681,7 +684,7 @@ public struct DropConductor: Sendable {
         }
 
         // The hand-over to the next track: a tape stop into the bar line, or a riser over a bridge or a closing filter.
-        if let outro, !outroFired {
+        if let outro, !outroFired, !ambient {
             if outro == .tapeStop, barStep >= half, quantizer.canSpend(.instrument(.tapeStop), bar: bar) {
                 outroFired = true
                 add(.tapeStop, 0.9, NoteParams(lengthSteps: perBar - barStep))
@@ -696,7 +699,7 @@ public struct DropConductor: Sendable {
             }
         }
 
-        if barStep == 0, switched || (section.isDrop && sectionJustStarted) {
+        if barStep == 0, !ambient, switched || (section.isDrop && sectionJustStarted) {
             add(.impact, section.isDrop ? 1.0 : 0.85)
             quantizer.spend(.instrument(.impact), bar: bar)
         }
@@ -708,6 +711,13 @@ public struct DropConductor: Sendable {
             dropComing: dropComing, outro: outro,
             introHook: section == .intro && trackPhrases >= 2,
             voicing: settings.effectiveVoicing, comping: settings.effectiveComping)
+        if ambient {
+            out += AmbientArrangement.notes(context)
+            if barStep == 0, barInPhrase == 0 {
+                note(legend: "ambient · \(section.label(in: .ambient))", replacingPrefix: "ambient ·")
+            }
+            return
+        }
         out += section.isDrop ? GenreArrangement.drop(genre, context) : GenreArrangement.bed(genre, context)
         if let comping = context.comping {
             // Held back until the event cues have taken their places, so the chord layer never moves a cue.
@@ -833,6 +843,14 @@ public struct DropConductor: Sendable {
                 Placement(
                     note: ScheduledNote(step: step, instrument: instrument, velocity: min(1, velocity), params: params),
                     budget: budget, legend: legend))
+        }
+
+        if settings.family == .ambient {
+            // No drums here: a signal event rings as one soft bell on a chord tone, at most a few a bar.
+            guard quantizer.canSpend(.sparkle, bar: bar) else { return .discard }
+            let tone = Int(StableHash.fnv1a(cue.hashKey) % 4)
+            let params = NoteParams(pitch: track.keyRoot + 24 + chordTone(tone), lengthSteps: 6, voice: 0)
+            return make(.keys, 0.3, budget: .sparkle, params: params, legend: "bell ← \(cue.label)")
         }
 
         switch cue.gesture {
