@@ -159,8 +159,15 @@ public enum DropEngineError: LocalizedError {
             sourceNode = nil
         }
 
-        let hardware = engine.outputNode.outputFormat(forBus: 0)
-        let sampleRate = hardware.sampleRate > 0 ? hardware.sampleRate : 48_000
+        let sampleRate: Double
+        if let offline = offlineFormat {
+            // Tests: the graph is pulled by `renderOffline(frames:)`, so no output device is needed or touched.
+            try engine.enableManualRenderingMode(.offline, format: offline, maximumFrameCount: Self.offlineSliceFrames)
+            sampleRate = offline.sampleRate
+        } else {
+            let hardware = engine.outputNode.outputFormat(forBus: 0)
+            sampleRate = hardware.sampleRate > 0 ? hardware.sampleRate : 48_000
+        }
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else {
             throw DropEngineError.noOutputFormat
         }
@@ -229,6 +236,36 @@ public enum DropEngineError: LocalizedError {
 
     /// The main mixer's output volume, for tests.
     var hardwareVolume: Float { engine.mainMixerNode.outputVolume }
+
+    /// Set before `start()` to run the graph in manual offline rendering, pulled by `renderOffline(frames:)`
+    /// instead of an output device, so a test is the same on a laptop and a CI runner with no live audio.
+    @ObservationIgnored var offlineFormat: AVAudioFormat?
+    static let offlineSliceFrames: AVAudioFrameCount = 1_024
+
+    /// Renders `frames` through the whole graph (main mixer output, so `mutesHardwareOutput` applies), running the
+    /// note pump and analysis between slices as the timer would. Returns what the speaker would have received.
+    func renderOffline(frames: Int) throws -> AVAudioPCMBuffer {
+        guard offlineFormat != nil, isRunning else { throw DropEngineError.notRunning }
+        let format = engine.manualRenderingFormat
+        guard
+            let slice = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: Self.offlineSliceFrames),
+            let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))
+        else { throw DropEngineError.noOutputFormat }
+        while Int(output.frameLength) < frames {
+            tick()
+            let count = min(Self.offlineSliceFrames, AVAudioFrameCount(frames) - output.frameLength)
+            let status = try engine.renderOffline(count, to: slice)
+            guard status == .success else { throw DropEngineError.noOutputFormat }
+            for channel in 0..<Int(format.channelCount) {
+                guard let from = slice.floatChannelData?[channel], let to = output.floatChannelData?[channel] else {
+                    continue
+                }
+                (to + Int(output.frameLength)).update(from: from, count: Int(slice.frameLength))
+            }
+            output.frameLength += slice.frameLength
+        }
+        return output
+    }
 
     // MARK: Recording
 
