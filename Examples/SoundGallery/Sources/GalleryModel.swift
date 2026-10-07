@@ -18,6 +18,8 @@ enum GalleryInput: String, CaseIterable, Identifiable {
 /// observed (`source` is ignored by Observation), so a new frame never invalidates a view body by itself.
 @MainActor @Observable final class GalleryModel {
     var input: GalleryInput = .demo
+    /// What the demo source plays (the picker sets it; `newSong()` rerolls the seed).
+    var song = GallerySong()
     private(set) var isRunning = false
     private(set) var status = "Pick a source and press Play."
 
@@ -89,10 +91,22 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     // MARK: Sources
 
     private func startDemo() throws {
-        try drop.playDemo()
+        switch song.style {
+        case .demo, .ambient:
+            try drop.playDemo()
+            status = "Playing the NardukMusic demo song."
+        case .genre, .guitars:
+            drop.settings = song.settings
+            let player = SongPlayer(song: song, engine: drop)
+            drop.noteProvider = { [player] throughStep in player.notes(through: throughStep) }
+            try drop.start()
+            status = "Playing \(song.style.title.lowercased()), seed \(song.seed % 10_000)."
+        }
         source = drop.makeSoundSource()
-        status = "Playing the NardukMusic demo song."
     }
+
+    /// A new seed for the current style; takes effect on the next play.
+    func newSong() { song.reroll() }
 
     private func startMicrophone() async throws {
         guard await AVAudioApplication.requestRecordPermission() else {
