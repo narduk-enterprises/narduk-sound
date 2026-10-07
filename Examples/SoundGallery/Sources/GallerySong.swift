@@ -3,8 +3,8 @@ import NardukMusicCore
 import NardukMusicEngine
 
 /// What the "Demo song" source plays. `demo` is the built-in eight-bar loop; a genre is written live by the conductor
-/// from a scripted energy curve; `guitars` is a hand-written unplugged part for the B1 instruments; `ambient` is a slot
-/// for the ambient family (narduk-libs#1576), listed but not playable until that lands.
+/// from a scripted energy curve; `guitars` is a hand-written unplugged part for the B1 instruments; `ambient` is the
+/// ambient family (narduk-libs#1576): drones and pads that swell and settle with the energy curve.
 enum GallerySongStyle: Hashable, Identifiable {
     case demo
     case genre(Genre)
@@ -25,12 +25,17 @@ enum GallerySongStyle: Hashable, Identifiable {
         case .demo: "Classic demo loop"
         case .genre(let genre): genre.shortName
         case .guitars: "Guitars (unplugged to electric)"
-        case .ambient: "Ambient (coming soon)"
+        case .ambient: "Ambient (swell and settle)"
         }
     }
 
-    /// False for the ambient slot until the ambient family exists.
-    var isPlayable: Bool { self != .ambient }
+    /// Whether the conductor writes this style (every genre and the ambient family do).
+    var usesConductor: Bool {
+        switch self {
+        case .genre, .ambient: true
+        case .demo, .guitars: false
+        }
+    }
 
     /// Every entry the picker shows, in order.
     static var all: [GallerySongStyle] {
@@ -43,7 +48,8 @@ struct GallerySong: Hashable {
     var style: GallerySongStyle = .demo
     var seed: UInt64 = SongSettings.sessionSeed()
 
-    /// The song settings the engine runs. Each genre plays at its own tempo; the guitars sit at a relaxed 96.
+    /// The song settings the engine runs. Each genre plays at its own tempo; the guitars sit at a relaxed 96 and the
+    /// ambient family drifts at 72.
     var settings: SongSettings {
         switch style {
         case .genre(let genre):
@@ -55,7 +61,12 @@ struct GallerySong: Hashable {
             settings.bpm = 96
             settings.seed = seed
             return settings
-        case .demo, .ambient:
+        case .ambient:
+            var settings = SongSettings(genre: .chill, family: .ambient)
+            settings.bpm = 72
+            settings.seed = seed
+            return settings
+        case .demo:
             return SongSettings()
         }
     }

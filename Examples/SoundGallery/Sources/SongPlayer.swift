@@ -21,7 +21,7 @@ import NardukMusicEngine
     init(song: GallerySong, engine: DropEngine) {
         self.song = song
         self.engine = engine
-        if case .genre = song.style { conductor = DropConductor(settings: song.settings) }
+        if song.style.usesConductor { conductor = DropConductor(settings: song.settings) }
     }
 
     /// Energy 0 ... 1 `seconds` into the song: a build to 16 s, a hold, then a fall.
@@ -37,14 +37,14 @@ import NardukMusicEngine
             cursor = -1
             nextSignal = 0
             droppedInLoop = -1
-            if case .genre = song.style { conductor = DropConductor(settings: song.settings) }
+            if song.style.usesConductor { conductor = DropConductor(settings: song.settings) }
         }
         guard throughStep > cursor else { return [] }
         defer { cursor = throughStep }
         switch song.style {
-        case .genre: return conductorNotes(through: throughStep)
+        case .genre, .ambient: return conductorNotes(through: throughStep)
         case .guitars: return GuitarPart.notes(in: (cursor + 1)...throughStep, seed: song.seed)
-        case .demo, .ambient: return []
+        case .demo: return []
         }
     }
 

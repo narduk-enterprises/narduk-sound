@@ -251,12 +251,12 @@ struct GalleryView: View {
         .padding(12)
     }
 
-    /// The demo song's style (every genre, the guitars, the ambient slot) and a new seed.
+    /// The demo song's style (every genre, the guitars, the ambient family) and a new seed.
     private var songControls: some View {
         HStack {
             Picker("Song", selection: $model.song.style) {
                 ForEach(GallerySongStyle.all) { style in
-                    Text(style.title).tag(style).disabled(!style.isPlayable)
+                    Text(style.title).tag(style)
                 }
             }
             .labelsHidden()
