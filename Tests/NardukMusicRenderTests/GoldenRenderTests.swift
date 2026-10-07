@@ -67,7 +67,8 @@ import Testing
         .rock: ["darwin-arm64": 0xb2fc_c28c_9ff1_5d7c],
         .folk: ["darwin-arm64": 0x1e9c_66f6_83fa_1db1],
         .funk: ["darwin-arm64": 0x6f22_24d0_01ce_7450],
-        .tropicalHouse: ["darwin-arm64": 0x789a_6df0_c654_bc65],
+        // Tropical house moved again with its recorded instruments and call-and-answer drop (narduk-sound#34).
+        .tropicalHouse: ["darwin-arm64": 0xa71b_d751_1101_c9b2],
     ]
 
     @Test(arguments: Genre.allCases)

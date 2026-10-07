@@ -290,8 +290,11 @@ struct SampleVoice: @unchecked Sendable {
         }
     }
 
-    /// Fades out quickly so a new note can take the slot without a click.
-    mutating func steal(engineRate: Float) { stealStep = 1 / max(0.004 * engineRate, 1) }
+    /// Fades out over 4 ms (its gate ended, so it never swells back) so a new note can take the slot without a click.
+    mutating func steal(engineRate: Float) {
+        stealStep = 1 / max(0.004 * engineRate, 1)
+        gateLeft = 0
+    }
 
     private mutating func nextRandom() -> UInt32 {
         noise ^= noise << 13

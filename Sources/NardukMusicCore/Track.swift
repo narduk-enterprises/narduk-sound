@@ -213,7 +213,7 @@ struct Track: Sendable, Hashable {
             case .rock, .funk: "electric guitar"
             case .folk: "acoustic guitar"
             case .dubstep, .riddim: "wobble"
-            case .tropicalHouse: "marimba"
+            case .tropicalHouse: keysVoice == KeysVoice.sampledFlute ? "flute" : "steel drum"
             }
         return "\(hook.contour) \(hook.notes.count)-note \(carrier) hook"
     }
@@ -474,7 +474,7 @@ enum TrackGenerator {
         case .dubstep, .riddim, .trap: 0
         case .house, .techno: 1
         case .chill, .drumAndBass, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk: 2
-        case .tropicalHouse: KeysVoice.marimba
+        case .tropicalHouse: KeysVoice.sampledSteelDrum
         }
     }
 

@@ -29,6 +29,7 @@ struct SynthState {
     static let padCount = 8
     static let vocalCount = 16  // singers; a choir note takes up to five
     static let sampleCount = 10  // sampled singers
+    static let instrumentCount = 16  // recorded instrument notes, plus one tail slot where a stolen note fades out
     static let pendingCapacity = 2_048
     static let historySize = 1 << 18  // master history for stutter / tape stop (~5.4 s at 48 kHz)
     static let analysisSize = 1 << 13  // mono analysis ring
@@ -72,6 +73,12 @@ struct SynthState {
     // The vocal echo: tempo-synced throws from sampled notes that ask for one. It only runs while one is sounding.
     var vocalEcho: StereoDelay
     var vocalEchoTail = 0
+    // Recorded instruments (`KeysVoice.sampledPiano` ..., `PercussionVoice`): a pool over the shared instrument bank,
+    // untouched until such a note arrives. Slot `instrumentCount` is the tail slot: a stolen note finishes its fade
+    // there while the new note starts in its place.
+    let instrumentBank: InstrumentBank?
+    let instruments: UnsafeMutablePointer<InstrumentVoice>
+    var instrumentsLive = 0
     var wobble = WobbleVoice()
     var sub = SubVoice()
     var reverb: RoomReverb
@@ -122,7 +129,7 @@ struct SynthState {
     /// Monotonic per-instrument hit counters (lane = `Instrument.index`), bumped where `hits` is set.
     var hitCounts = SIMD32<UInt32>(repeating: 0)
 
-    init(sampleRate: Double, bpm: Double, stepsPerBar: Int) {
+    init(sampleRate: Double, bpm: Double, stepsPerBar: Int, instrumentBank bank: InstrumentBank? = InstrumentBank.shared) {
         c = SynthCoefficients(sampleRate: sampleRate)
         self.stepsPerBar = max(stepsPerBar, 1)
         clock = StepClock(sampleRate: Int(sampleRate.rounded()), bpm: bpm)
@@ -151,8 +158,12 @@ struct SynthState {
             (vocals + i).initialize(to: VocalVoice(seed: 0x7F4A_7C15 &+ UInt32(i) &* 2_654_435))
         }
         sampleBank = SampleBank.shared
-        samples = .allocate(capacity: SynthState.sampleCount)
-        samples.initialize(repeating: SampleVoice(), count: SynthState.sampleCount)
+        // One slot past the pool: a stolen singer's last 4 ms, faded out there while the new note takes its slot.
+        samples = .allocate(capacity: SynthState.sampleCount + 1)
+        samples.initialize(repeating: SampleVoice(), count: SynthState.sampleCount + 1)
+        instrumentBank = bank
+        instruments = .allocate(capacity: SynthState.instrumentCount + 1)
+        instruments.initialize(repeating: InstrumentVoice(), count: SynthState.instrumentCount + 1)
         vocalRoom = RoomReverb(sampleRate: sampleRate, size: 0.8)
         vocalRoom.feedback = 0.84
         vocalEcho = StereoDelay(sampleRate: sampleRate, seconds: 0.375, dampingHz: 3_000)
@@ -184,6 +195,7 @@ struct SynthState {
         vocals.deallocate()
         vocalEcho.deallocate()
         samples.deallocate()
+        instruments.deallocate()
         vocalRoom.deallocate()
         pads.deallocate()
         hall.deallocate()
@@ -298,6 +310,9 @@ struct SynthState {
     mutating func trigger(_ e: SynthEvent) {
         let velocity = e.velocity
         switch e.instrument {
+        case 1 where e.voice == Int32(PercussionVoice.snap) && startInstrument(.snap, e): break
+        case 2 where e.voice == Int32(PercussionVoice.shaker) && startInstrument(.shaker, e): break
+        case 3 where e.voice == Int32(PercussionVoice.tambourine) && startInstrument(.tambourine, e): break
         case 0:  // kick
             kicks[nextKick].steal()
             nextKick = (nextKick + 1) % SynthState.kickCount
@@ -346,7 +361,13 @@ struct SynthState {
             tapeReturn = 0
         case 12: startFX(.impact, e)
         case 13:
-            if let kind = AmbientKind(voice: Int(e.voice)) { startPad(kind, e) } else { startFX(.keys, e) }
+            if let kind = AmbientKind(voice: Int(e.voice)) {
+                startPad(kind, e)
+            } else if let instrument = SampledInstrument(keysVoice: Int(e.voice)) {
+                if !startInstrument(instrument, e) { startFallback(instrument, e) }
+            } else {
+                startFX(.keys, e)
+            }
         case 14, 15, 16:  // acoustic, electric, bass guitar (a strum's strings arrive as the first two)
             startString(StringKind(rawValue: e.instrument - 14) ?? .acoustic, e)
         case 19, 20: startVocal(e)
@@ -449,7 +470,8 @@ struct SynthState {
             if x.snap || x.formantShift != 0 { technique = .straight }
         }
         let clip = bank.lookup(
-            kind: kind, vowel: packed & 7, technique: technique, pitch: pitch, slice: e.formant < 0 ? 0 : e.formant)
+            kind: kind, vowel: packed & 7, technique: technique, pitch: pitch, slice: e.formant < 0 ? 0 : e.formant,
+            nearPitch: packed & (1 << 7) != 0)
         guard clip >= 0 else { return }
         let info = bank.clips[clip]
         let gate = gateSamples(e)
@@ -478,7 +500,12 @@ struct SynthState {
                 oldest = i
             }
         }
-        if slot < 0 { slot = oldest }
+        if slot < 0 {
+            // The oldest singer (the lowest slot on a tie) is stolen: it fades out in the tail slot, not mid-wave.
+            slot = oldest
+            samples[SynthState.sampleCount] = samples[slot]
+            samples[SynthState.sampleCount].steal(engineRate: c.sampleRate)
+        }
         var expression: VocalExpression?
         var morphClip = -1
         var morphRate = rate
@@ -506,6 +533,57 @@ struct SynthState {
             vocalEchoTail = max(vocalEchoTail, gate + Int(c.sampleRate * 5))
             vocalTail = max(vocalTail, vocalEchoTail)
         }
+    }
+
+    /// Starts a recorded instrument note; false (and nothing sounds) when the bank lacks the instrument. A free slot if
+    /// there is one; otherwise the oldest note (the lowest slot on a tie) moves to the tail slot and fades out there in
+    /// 5 ms while the new note takes its place.
+    mutating func startInstrument(_ instrument: SampledInstrument, _ e: SynthEvent) -> Bool {
+        guard let bank = instrumentBank, bank.has(instrument) else { return false }
+        let pitch = instrument.isPercussion ? (e.pitch < 0 ? 60 : e.pitch) : bank.fold(e.pitch < 0 ? 60 : e.pitch, instrument)
+        let clip = bank.lookup(instrument, pitch: pitch, velocity: e.velocity, round: e.step)
+        guard clip >= 0 else { return false }
+        let ratio = bank.sampleRate / Double(c.sampleRate)
+        let semitones = instrument.isPercussion ? 0 : min(max(Double(pitch - bank.clips[clip].root), -7), 7)
+        var slot = -1
+        var oldest = 0
+        var oldestAge = -1
+        for i in 0..<SynthState.instrumentCount {
+            if !instruments[i].active {
+                slot = i
+                break
+            }
+            if instruments[i].age > oldestAge {
+                oldestAge = instruments[i].age
+                oldest = i
+            }
+        }
+        if slot < 0 {
+            slot = oldest
+            instruments[SynthState.instrumentCount] = instruments[slot]
+            instruments[SynthState.instrumentCount].steal(engineRate: c.sampleRate)
+        }
+        instruments[slot].trigger(
+            instrument, bank: bank, clip: clip, rate: pow(2, semitones / 12) * ratio, gateSamples: gateSamples(e),
+            velocity: e.velocity, pan: e.pan, engineRate: c.sampleRate, timbre: timbrePatch(e))
+        instrumentsLive += 1
+        return true
+    }
+
+    /// A recorded keys instrument's synth stand-in, for a build whose bank is missing.
+    mutating func startFallback(_ instrument: SampledInstrument, _ e: SynthEvent) {
+        var stand = e
+        switch instrument {
+        case .piano: stand.voice = Int32(KeysVoice.softPiano)
+        case .steelDrum: stand.voice = Int32(KeysVoice.steelDrum)
+        case .flute: stand.voice = Int32(KeysVoice.panFlute)
+        case .sax: stand.voice = Int32(KeysVoice.saxLead)
+        case .nylonGuitar:
+            startString(.acoustic, e)
+            return
+        case .conga, .shaker, .tambourine, .snap: stand.voice = Int32(KeysVoice.marimba)
+        }
+        startFX(.keys, stand)
     }
 
     mutating func startPad(_ kind: AmbientKind, _ e: SynthEvent) {
@@ -638,6 +716,24 @@ struct SynthState {
                     fxR += f.1
                 }
             }
+            // Recorded instruments: hand percussion joins the drums, every other instrument the light-ducked melodic
+            // sum. Only touched while one is sounding, so a song without them renders bit for bit as before.
+            if instrumentsLive > 0 {
+                var live = 0
+                for i in 0...SynthState.instrumentCount where instruments[i].active {
+                    let v = instruments[i].next()
+                    if instruments[i].isPercussion {
+                        drumsL += v.0
+                        drumsR += v.1
+                    } else {
+                        lightL += v.0
+                        lightR += v.1
+                        light = true
+                    }
+                    if instruments[i].active { live += 1 }
+                }
+                instrumentsLive = live
+            }
             // Guitar strings share the existing buses (the bass guitar the bass bus, every other string the FX bus), and
             // are only touched while one is sounding, so a song without them renders bit for bit as it did before.
             if stringsLive > 0 {
@@ -682,7 +778,7 @@ struct SynthState {
                 var echoIn: Float = 0
                 if samplesLive > 0 {
                     var sampled = 0
-                    for i in 0..<SynthState.sampleCount where samples[i].active {
+                    for i in 0...SynthState.sampleCount where samples[i].active {
                         let v = samples[i].next()
                         vocalL += v.0
                         vocalR += v.1
@@ -841,10 +937,16 @@ public final class DropSynthCore: @unchecked Sendable {
     private let limiterGainBits = Atomic<UInt32>(Float(1).bitPattern)
     private let droppedCount = Atomic<Int>(0)
 
-    public init(sampleRate: Double, bpm: Double = 140, stepsPerBar: Int = 16) {
+    public convenience init(sampleRate: Double, bpm: Double = 140, stepsPerBar: Int = 16) {
+        self.init(sampleRate: sampleRate, bpm: bpm, stepsPerBar: stepsPerBar, instrumentBank: InstrumentBank.shared)
+    }
+
+    /// A core playing `instrumentBank`'s recordings (nil: every sampled voice plays its synth fallback).
+    init(sampleRate: Double, bpm: Double, stepsPerBar: Int, instrumentBank: InstrumentBank?) {
         self.sampleRate = sampleRate
         state = .allocate(capacity: 1)
-        state.initialize(to: SynthState(sampleRate: sampleRate, bpm: bpm, stepsPerBar: stepsPerBar))
+        state.initialize(
+            to: SynthState(sampleRate: sampleRate, bpm: bpm, stepsPerBar: stepsPerBar, instrumentBank: instrumentBank))
         bpmMilli = Atomic<Int>(StepClock.milliBPM(bpm))
         hitLanes = .allocate(capacity: HitCounters.laneCount)
         for lane in 0..<HitCounters.laneCount { (hitLanes + lane).initialize(to: Atomic<UInt32>(0)) }

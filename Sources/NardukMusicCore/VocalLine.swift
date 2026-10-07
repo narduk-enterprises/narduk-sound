@@ -153,14 +153,14 @@ enum VocalLine {
 
     /// The vocal line, the stack under it and the effects thrown from it, for this step.
     static func notes(_ c: StepContext, plan: VocalPlan) -> [ScheduledNote] {
-        guard plan.line, let pos = c.pos, c.outro != .drumBridge else { return [] }
+        guard plan.line || plan.chops, let pos = c.pos, c.outro != .drumBridge else { return [] }
         var out: [ScheduledNote] = []
         let level = min(1, max(0, c.level))
         let section = c.section
         let drop = section == .drop || section == .drop2
 
         // Granular pads under the build's first bar of each phrase: the chord, frozen and swelling into the next.
-        if section == .build, pos == 0, c.barInPhrase % 2 == 0 {
+        if plan.line, section == .build, pos == 0, c.barInPhrase % 2 == 0 {
             let tones = chordTones(c)
             if tones.count >= 3 {
                 for (n, pitch) in [tones[1], tones[2]].enumerated() {
@@ -174,7 +174,7 @@ enum VocalLine {
             }
         }
 
-        let line = bar(c, plan: plan).filter { $0.pos == pos }
+        let line = plan.line ? bar(c, plan: plan).filter { $0.pos == pos } : []
         for note in line {
             let velocity = (drop ? 0.62 : (section == .build ? 0.5 : (section == .intro ? 0.34 : 0.5))) + 0.18 * level
             let length = c.scaled(note.length)
@@ -195,8 +195,10 @@ enum VocalLine {
             }
         }
 
-        // A short syllable answer, on the beat: the drop's call-and-response in a chop, not a scatter.
-        if plan.chops, drop, c.barInPhrase % 2 == 1, !c.dropComing || pos < 8 {
+        // A short syllable answer, on the beat: the drop's call-and-response in a chop, not a scatter. Tropical house
+        // answers in the third bar of every four, after the pluck's two-bar call (`GenreArrangement.keys`).
+        let answerBar = c.track.genre == .tropicalHouse ? c.barInPhrase % 4 == 2 : c.barInPhrase % 2 == 1
+        if plan.chops, drop, answerBar, !c.dropComing || pos < 8 {
             if let index = plan.chopGrid.firstIndex(of: pos) {
                 let pool = chordTones(c)
                 if !pool.isEmpty {
@@ -207,7 +209,9 @@ enum VocalLine {
                             params: NoteParams(
                                 pitch: tone, lengthSteps: c.scaled(index == plan.chopGrid.count - 1 ? 3 : 2),
                                 formant: plan.chopSlices[index % plan.chopSlices.count], drive: 0.8,
-                                voice: NoteParams.sampleVoice(.ah, technique: .straight, kind: .chop),
+                                voice: NoteParams.sampleVoice(
+                                    .ah, technique: .straight, kind: .chop,
+                                    nearPitch: c.track.genre == .tropicalHouse),
                                 pan: index % 2 == 0 ? -0.3 : 0.3)))
                 }
             }

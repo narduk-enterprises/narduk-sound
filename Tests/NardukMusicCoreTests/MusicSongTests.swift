@@ -308,7 +308,7 @@ import Testing
         #expect(hooks[.surge]!.bpm >= hooks[.steady]!.bpm)
     }
 
-    @Test func tropicalHouseDropsOnTheMarimbaAtItsTempo() {
+    @Test func tropicalHouseDropsOnARecordedPluckAtItsTempo() {
         let genre = Genre.tropicalHouse
         let range = TrackGenerator.tempoRange(genre)
         #expect(range == 100...112 && range.contains(genre.defaultBPM) && genre.shortName == "Tropical House")
@@ -316,13 +316,30 @@ import Testing
         #expect(p.bpm.allSatisfy { range.contains($0) }, "tempos \(Set(p.bpm).sorted())")
         for track in p.distinctTracks {
             #expect(track.genre == genre && range.contains(track.bpm), "\(track.genre) at \(track.bpm)")
-            #expect(track.keysVoice == KeysVoice.marimba && track.hookDescription.hasSuffix("marimba hook"))
+            let pluck = [KeysVoice.sampledSteelDrum, KeysVoice.sampledFlute].contains(track.keysVoice)
+            #expect(pluck && track.hookDescription.hasSuffix(track.keysVoice == KeysVoice.sampledFlute ? "flute hook" : "steel drum hook"))
             #expect([.ionian, .lydian, .mixolydian, .dorian].contains(track.mode), "\(track.mode)")
         }
-        // The drop is the pluck over the full groove: the marimba hook, the kick on every beat, the pad pumping.
+        // The drop is the pluck over the full groove: the recorded hook, the kick on every beat, piano chords over
+        // the pad pumping.
         let drop = p.notes.filter { p.sections[$0.step].isDrop }
-        let plucks = drop.filter { $0.instrument == .keys && $0.params.voice == KeysVoice.marimba }
-        #expect(plucks.count >= 16, "\(plucks.count) marimba notes in the drops")
+        let plucks = drop.filter { $0.instrument == .keys && $0.params.voice == p.tracks[$0.step].keysVoice }
+        #expect(plucks.count >= 16, "\(plucks.count) pluck notes in the drops")
+        // Call and answer, four bars at a time: the pluck in the first two, the sampled chops in the third, the
+        // fourth left to the groove.
+        let sectionStart = { (step: Int) -> Int in
+            var s = step
+            while s > 0 && p.sections[s - 1] == p.sections[step] { s -= 1 }
+            return s
+        }
+        for note in plucks {
+            #expect((note.step - sectionStart(note.step)) / 16 % 4 < 2, "pluck in an answer bar at \(note.step)")
+        }
+        let chops = drop.filter { $0.instrument == .vocalSample }
+        for note in chops {
+            #expect((note.step - sectionStart(note.step)) / 16 % 4 == 2, "chop outside the answer bar at \(note.step)")
+        }
+        #expect(drop.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.sampledPiano })
         #expect(plucks.allSatisfy { ($0.params.lengthSteps ?? 99) <= 6 }, "the pluck is short")
         #expect(
             plucks.allSatisfy { note in
@@ -347,6 +364,15 @@ import Testing
         let whomps: Set<Instrument> = [.wobble, .impact, .tapeStop, .riser, .vox]
         let found = p.notes.filter { whomps.contains($0.instrument) }
         #expect(found.isEmpty, "seed \(seed): \(Set(found.map(\.instrument)))")
+        // One vocal role: sampled chops answering the pluck. No choir pad, synth chop, sung line or master cut.
+        let stacked = p.notes.filter { [.vocal, .vocalChop, .cut].contains($0.instrument) }
+        #expect(stacked.isEmpty, "seed \(seed): \(Set(stacked.map(\.instrument)))")
+        let sampled = p.notes.filter { $0.instrument == .vocalSample }
+        #expect(sampled.allSatisfy { SampleKind(voice: $0.params.voice ?? 0) == .chop }, "seed \(seed) sings a line")
+        // The drum kit's top is hand percussion: shaker, tambourine and finger snap.
+        let tops: [Instrument: Int] = [.hat: PercussionVoice.shaker, .openHat: PercussionVoice.tambourine, .snare: PercussionVoice.snap]
+        let synthTops = p.notes.filter { note in tops[note.instrument].map { note.params.voice != $0 } ?? false }
+        #expect(synthTops.isEmpty, "seed \(seed): \(synthTops.count) synth hats or snares")
         // The sub never glides: no glide amount, and each note ends before the next begins, so it starts fresh.
         let subs = p.notes.filter { $0.instrument == .sub }.sorted { $0.step < $1.step }
         #expect(subs.count > 32)
@@ -439,7 +465,7 @@ import Testing
                 #expect(notes.contains { $0.instrument == .strum } && notes.contains { $0.instrument == .bassGuitar })
             case .tropicalHouse:
                 #expect(
-                    notes.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.marimba }
+                    notes.contains { $0.instrument == .keys && $0.params.voice == p.tracks[$0.step].keysVoice }
                         && notes.contains { $0.instrument == .keys && $0.params.voice == KeysVoice.pumpPad }
                         && notes.contains { $0.instrument == .sub })
             case .funk:

@@ -451,6 +451,12 @@ public struct DropConductor: Sendable {
                 bytesIn: bytesIn, bytesOut: bytesOut, connections: connections, errors: errors, seconds: seconds)
             let first = notes.count
             process(step: step, into: &notes)
+            // Tropical house's drum tops play on hand percussion, whichever part of the arranger wrote them.
+            if track.genre == .tropicalHouse {
+                for i in first..<notes.count {
+                    notes[i].params = GenreArrangement.percussion(track.genre, notes[i].instrument, notes[i].params)
+                }
+            }
             if let timbre = track.timbre?.packed {
                 for i in first..<notes.count where notes[i].params.timbre == nil { notes[i].params.timbre = timbre }
             }
@@ -1021,14 +1027,9 @@ public struct DropConductor: Sendable {
             return make(.laser, 0.25, budget: .sparkle, params: params, legend: "sparkle ← \(cue.label)")
         case .voice:
             let voice = cue.variant.map { max(0, $0) % 4 } ?? Int(StableHash.fnv1a(cue.hashKey) % 4)
-            if GenreArrangement.profile(activeGenre).gentle {
-                // A gentle genre answers with an airy, pitched vocal chop on the chord, not the low formant vox.
-                let vowel = VocalVowel.allCases[voice % VocalVowel.allCases.count]
-                let params = NoteParams(
-                    pitch: track.keyRoot + 12 + chordTone(voice % 3), lengthSteps: 1,
-                    voice: NoteParams.vocalVoice(vowel, feel: .airy), pan: pan)
-                return make(.vocalChop, 0.45, params: params, legend: "vocal chop ← \(cue.label)")
-            }
+            // A gentle genre has one vocal role already (tropical house: sampled answers to the pluck), and the low
+            // formant vox reads as a whomp in it: the cue goes.
+            guard !GenreArrangement.profile(activeGenre).gentle else { return .discard }
             return make(.vox, 0.8, params: NoteParams(voice: voice), legend: "vox chop ← \(cue.label)")
         case .swell:
             guard !GenreArrangement.profile(activeGenre).gentle else { return .discard }

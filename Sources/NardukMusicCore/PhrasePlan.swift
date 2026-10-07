@@ -227,7 +227,7 @@ enum Banks {
         [0, 1, 2, 1, 6, 2, 8, 1, 11, 2, 16, 1, 18, 1, 22, 2, 24, 1, 27, 2],
     ]
 
-    /// Tropical house: a marimba pluck, short notes skipping across the 8ths with a 16th pickup or two.
+    /// Tropical house: a pluck, short notes skipping across the 8ths with a 16th pickup or two.
     static let tropicalHooks: [[Int]] = [
         [0, 2, 3, 2, 6, 2, 8, 2, 10, 2, 12, 4, 16, 2, 19, 2, 22, 2, 24, 2, 26, 4],
         [0, 3, 3, 3, 6, 2, 10, 2, 12, 2, 14, 2, 16, 3, 19, 3, 22, 4, 28, 2],

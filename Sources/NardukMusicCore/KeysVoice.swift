@@ -1,9 +1,9 @@
 import Foundation
 
 /// The `NoteParams.voice` values the `.keys` instrument understands. The conductor writes the first four (any other
-/// value below `marimba` or above `softPiano` plays `voice % 4`; `marimba` ... `softPiano` are matched exactly); the
-/// ambient voices sit well above them so no existing note changes sound. Every voice here is a library voice: any
-/// genre, scenario or app may play it.
+/// value below `marimba` or above `sampledConga` plays `voice % 4`; `marimba` ... `sampledConga` are
+/// matched exactly); the ambient voices sit well above them so no existing note changes sound. Every voice here is a
+/// library voice: any genre, scenario or app may play it.
 public enum KeysVoice {
     public static let bell = 0
     public static let stab = 1
@@ -25,6 +25,23 @@ public enum KeysVoice {
     /// A warm soft piano: round sine partials with a gentle hammer, a slow 25 ms attack and a long, mellow decay, made
     /// for chords (warmer and longer than `electricPiano`, which has a bright tine and a tremolo).
     public static let softPiano = 9
+    /// A recorded grand piano, played softly (Salamander Grand Piano, see `Resources/LICENSES/Instruments.md`). Falls
+    /// back to `softPiano` when the instrument bank is missing.
+    public static let sampledPiano = 10
+    /// A recorded steel pan from Trinidad (jSteelDrum). Falls back to `steelDrum`.
+    public static let sampledSteelDrum = 11
+    /// A recorded concert flute with vibrato (VSCO 2 Community Edition), held for the note's length. Falls back to
+    /// `panFlute`.
+    public static let sampledFlute = 12
+    /// A recorded alto saxophone with vibrato (University of Iowa), held for the note's length; soft notes play the
+    /// pianissimo recording. Falls back to `saxLead`.
+    public static let sampledSax = 13
+    /// A recorded nylon-string classical guitar, plucked (University of Iowa). Falls back to the acoustic guitar string.
+    public static let sampledNylonGuitar = 14
+    /// Recorded congas (Versilian Community Sample Library): hand percussion on the keys, so a conga answer can sit in
+    /// a phrase. Its pitch picks the drum: below middle C the low conga, from it up the high one. Falls back to the
+    /// marimba.
+    public static let sampledConga = 15
     /// A slow-attack pad of detuned saws with a moving lowpass; the ambient family's chords (NardukMusicDSP `PadVoice`).
     public static let ambientPad = 100
     /// A very slow, low drone: a detuned fifth-less stack under a sine sub, for the ambient family's bottom.

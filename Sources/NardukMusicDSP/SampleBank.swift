@@ -97,8 +97,41 @@ public final class SampleBank: @unchecked Sendable {
 
     /// The clip that plays `kind` in `vowel` and `technique` at `pitch`, and how many of its kind there are. A
     /// sustain is the nearest root; a chop is slice number `slice` (0 ... 1 across the set); a run is the one in this
-    /// vowel (or the first). A technique the set lacks falls back to a neighbour. Allocation free.
-    func lookup(kind: SampleKind, vowel: Int, technique: SampleTechnique, pitch: Float, slice: Float) -> Int {
+    /// vowel (or the first). A technique the set lacks falls back to a neighbour. `nearPitch` narrows a chop's set to
+    /// the syllables sung within four semitones of `pitch` (moved by octaves into the chops' range), when any are.
+    /// Allocation free.
+    func lookup(
+        kind: SampleKind, vowel: Int, technique: SampleTechnique, pitch: Float, slice: Float, nearPitch: Bool = false
+    ) -> Int {
+        if kind == .chop && nearPitch {
+            var low = Float.greatestFiniteMagnitude
+            var high = -Float.greatestFiniteMagnitude
+            for i in 0..<clipCount where clips[i].kind == .chop {
+                low = min(low, clips[i].root)
+                high = max(high, clips[i].root)
+            }
+            var p = pitch
+            if high - low >= 0 {
+                while p < low - 4 { p += 12 }
+                while p > high + 4 { p -= 12 }
+            }
+            for pass in 0..<2 {
+                // Pass 0 insists on the technique; pass 1 takes any.
+                var matching = 0
+                for i in 0..<clipCount where clips[i].kind == .chop && abs(clips[i].root - p) <= 4
+                    && (pass == 1 || clips[i].technique == technique) {
+                    matching += 1
+                }
+                guard matching > 0 else { continue }
+                let want = min(Int(max(min(slice, 0.999), 0) * Float(matching)), matching - 1)
+                var seen = 0
+                for i in 0..<clipCount where clips[i].kind == .chop && abs(clips[i].root - p) <= 4
+                    && (pass == 1 || clips[i].technique == technique) {
+                    if seen == want { return i }
+                    seen += 1
+                }
+            }
+        }
         let v = vowel == 5 ? 2 : vowel  // "mm" sings as "oo"
         var best = -1
         var bestScore = Float.greatestFiniteMagnitude
