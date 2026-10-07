@@ -29,6 +29,9 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     @ObservationIgnored private var fileAccess: URL?
     @ObservationIgnored private let clockOrigin = Date.timeIntervalSinceReferenceDate
 
+    /// The frame the last `poll` returned, for a view that draws on its own clock (the Metal tunnel).
+    var latestFrame: SoundFrame { latest }
+
     /// The latest frame at `date`; silence while nothing plays.
     func poll(at date: Date) -> SoundFrame {
         guard let source else { return SoundFrame() }

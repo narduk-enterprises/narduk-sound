@@ -1,4 +1,5 @@
 import NardukSoundAnalysis
+import NardukSoundVisuals
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -20,6 +21,7 @@ struct GalleryView: View {
                 let frame = model.poll(at: timeline.date)
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12)], spacing: 12) {
+                        TunnelCard(model: model, framesPerSecond: isDrawing ? SoundRenderBudget.normal : 0)
                         ForEach(Visualizer.all) { visualizer in
                             VisualizerCard(visualizer: visualizer, frame: frame)
                         }
