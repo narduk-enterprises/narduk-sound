@@ -21,7 +21,7 @@ struct GalleryTile: Identifiable {
     let content: @MainActor (TileContext) -> AnyView
 
     static var all: [GalleryTile] {
-        [tunnel]
+        [tunnel] + spectacle
             + Visualizer.all.map { visualizer in
                 GalleryTile(id: visualizer.id) { context in
                     AnyView(
