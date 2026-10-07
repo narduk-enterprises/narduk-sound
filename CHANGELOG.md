@@ -55,10 +55,26 @@ NardukMusic ships on the narduk-libs repository `vX.Y.Z` tags (SwiftPM), not on 
   floating peak beads, a mirror floor, a drifting echo row and dust. Bass and the kick swell the low tubes, highs
   stand tall, the snare throws a band of light up the tubes, the beat pulses the floor line, the drop widens them.
   Reads peaks through the new `IntenseAux` buffers.
+- `ShaderPackKind.meshWave` ("Mesh wave") in `NardukSoundVisuals` (narduk-libs#1569): a glowing wireframe
+  heightfield. Bass raises the swells and deepens the trough, mids roll travelling waves, highs ripple the grid,
+  and a kick sends a bounded ring plus a soft line glow. Calm slows the motion and drops the kick ripple.
+- `ShaderPackKind.solarFlare` ("Solar flare") in `NardukSoundVisuals` (narduk-libs#1569): a molten sun on a black
+  starfield. Bass swells the disc and pushes the corona out, mids curl the tendrils and churn the surface, highs
+  sharpen the strands and spark the embers, and a kick sends a flare along the tendrils.
+- `ShaderPackKind.oceanWaves` ("Ocean waves") in `NardukSoundVisuals` (narduk-libs#1569): layered Gerstner swells
+  seen low from the side. Bass lifts the crests until they break, mids set the speed and how many layers roll, highs
+  add glints and ripples, a kick pushes one swell through every layer, and a drop makes the sea steeper and foamier.
+- `ShaderPackKind.fireworks` ("Fireworks") in `NardukSoundVisuals` (narduk-libs#1569): a night-sky fireworks show.
+  Kicks launch shells whose size follows the bass; snare and hat crackle, highs twinkle, and mids pick the shell and
+  the colour. A drop fires a bounded finale volley. Calm keeps a few slow shells and no volley.
 - `SoundVisualizerKind.audioTerrain` ("Audio terrain") in `NardukSoundVisuals` (narduk-libs#1569): a neon wireframe
   landscape. Bass lifts the central ridges, mids the shoulders and highs the edge jitter; each older waveform-history
   row sits further away, and `travel` scrolls the grid. The beat lifts the nearest ridge; a drop brightens the palette
   and speeds the scroll.
+- `ShaderPackKind.bassBlobs` ("Bass blobs"): raymarched glossy liquid metaballs. Bass swells and merges them, mids set the orbit, highs ripple the surface, and the kick squashes the mass with a rim glow; calm slows the orbit to 0.4 and drops the squash.
+- Shader-pack look `aurora` ("Aurora curtains"): domain-warped light sheets and a starfield over a night sky (narduk-libs#1569).
+- Shader-pack look `ShaderPackKind.auroraWaves` ("Aurora waves", narduk-libs#1569): silky multi-strand ribbons with an
+  embedded equaliser over a night sky and a reflecting sea.
 
 ## 0.4.1
 

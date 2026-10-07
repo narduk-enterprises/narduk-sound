@@ -83,5 +83,47 @@ extension GalleryTile {
                     kind: .starfield, title: "Starfield", model: context.model, framesPerSecond: context.framesPerSecond
                 ))
         },
+        GalleryTile(id: "Bass blobs") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .bassBlobs, title: "Bass blobs", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
+        GalleryTile(id: "Aurora curtains") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .aurora, title: "Aurora curtains", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
+        GalleryTile(id: "Aurora waves") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .auroraWaves, title: "Aurora waves", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
+        GalleryTile(id: "Mesh wave") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .meshWave, title: "Mesh wave", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
+        GalleryTile(id: "Solar flare") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .solarFlare, title: "Solar flare", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
+        GalleryTile(id: "Ocean waves") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .oceanWaves, title: "Ocean waves", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
+        GalleryTile(id: "Fireworks") { context in
+            AnyView(
+                ShaderPackTile(
+                    kind: .fireworks, title: "Fireworks", model: context.model,
+                    framesPerSecond: context.framesPerSecond))
+        },
     ]
 }
