@@ -1,0 +1,57 @@
+{
+  "name": "vocal-lead",
+  "seed": 1641,
+  "genre": "chill",
+  "bpm": 100,
+  "seconds": 7,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 69,
+      "length": 0.9,
+      "vowel": "ah",
+      "style": "lead",
+      "register": 0.9
+    },
+    {
+      "time": 1.2,
+      "instrument": "vocal",
+      "pitch": 72,
+      "length": 0.5,
+      "vowel": "ee",
+      "style": "lead",
+      "register": 0.9
+    },
+    {
+      "time": 1.8,
+      "instrument": "vocal",
+      "pitch": 71,
+      "length": 0.5,
+      "vowel": "oh",
+      "style": "lead",
+      "register": 0.9
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocal",
+      "pitch": 67,
+      "length": 1.6,
+      "vowel": "ah",
+      "style": "lead",
+      "register": 0.9,
+      "drive": 0.5
+    },
+    {
+      "time": 4.2,
+      "instrument": "vocal",
+      "pitch": 64,
+      "length": 2.0,
+      "vowel": "mm",
+      "style": "solo",
+      "register": 0.4,
+      "drive": 0.1
+    }
+  ]
+}

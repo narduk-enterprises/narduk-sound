@@ -30,6 +30,180 @@ public enum Instrument: String, Sendable, Hashable, Codable, CaseIterable {
     /// guitar's low range), `voice` picks the chord (`voice % 6`: major, minor, dominant 7, minor 7, power, sus2), and
     /// `formant` of 0.5 or more strums up instead of down. `strum` is acoustic; `electricStrum` takes `drive`.
     case strum, electricStrum
+    /// A wordless female-range voice (narduk-libs#1641), formant-synthesised. `pitch` is the note and `formant` its
+    /// register (0 alto ... 1 soprano, 0.5 absent). `voice` packs the vowel and style (see `VocalVowel`, `VocalStyle`):
+    /// `voice & 7` is the vowel (ah, oh, oo, eh, ee, mm) and `(voice >> 3) & 3` the style (0 choir pad of three voices,
+    /// 1 solo lead, 2 solo pad). `drive` is breathiness, 0 ... 1.
+    case vocal
+    /// A short vocal one-shot, the "chop" of a vocal sample: a soft consonant onset into a vowel, gated by
+    /// `lengthSteps`. `pitch`, `voice` (vowel in `voice & 7`), `formant` and `drive` as for `vocal`.
+    case vocalChop
+    /// A cut in the master (narduk-libs#1641): the song is chopped, stuttered, gated or reversed for `lengthSteps` and
+    /// then comes back. `voice` packs the mode and a seed, `formant` the division and `drive` the amount; build one with
+    /// `NoteParams.cut(_:division:steps:amount:seed:)` (see `CutMode`, `CutDivision`).
+    case cut
+    /// A sampled female voice (narduk-libs#1641): real recorded ahs, oohs and runs (VocalSet, CC BY 4.0), key-mapped,
+    /// looped and pitched by the sampler. `pitch` is the note. `voice` packs the vowel (`voice & 7`, as `vocal`), the
+    /// technique (`(voice >> 3) & 3`: straight, vibrato, belt) and the kind (`(voice >> 5) & 3`: a held sustain, a
+    /// syllable chop whose slice is `formant` 0 ... 1, or a whole scale run fitted to `lengthSteps`); build one with
+    /// `NoteParams.sampleVoice(_:technique:kind:)`. `drive` is a gain trim, 0 ... 1 (absent: 0.8).
+    case vocalSample
+}
+
+/// How a `vocalSample` note is sung.
+public enum SampleTechnique: String, Sendable, Hashable, Codable, CaseIterable {
+    case straight, vibrato, belt
+
+    public var index: Int { SampleTechnique.allCases.firstIndex(of: self) ?? 0 }
+
+    public init(voice: Int) {
+        let i = (voice >> 3) & 3
+        self = i < SampleTechnique.allCases.count ? SampleTechnique.allCases[i] : .vibrato
+    }
+}
+
+/// What a `vocalSample` note plays.
+public enum SampleKind: String, Sendable, Hashable, Codable, CaseIterable {
+    /// A held vowel, looped for as long as the note lasts.
+    case sustain
+    /// A short syllable cut from a sung phrase, played once (`formant` picks the slice).
+    case chop
+    /// A fast sung scale, stretched or squeezed to fit the note's length.
+    case run
+
+    public var index: Int { SampleKind.allCases.firstIndex(of: self) ?? 0 }
+
+    public init(voice: Int) {
+        let i = (voice >> 5) & 3
+        self = i < SampleKind.allCases.count ? SampleKind.allCases[i] : .sustain
+    }
+}
+
+extension NoteParams {
+    /// The `voice` field of a `vocalSample` note.
+    public static func sampleVoice(
+        _ vowel: VocalVowel = .ah, technique: SampleTechnique = .vibrato, kind: SampleKind = .sustain
+    ) -> Int {
+        vowel.index | technique.index << 3 | kind.index << 5
+    }
+}
+
+/// What a `cut` does to the song while it lasts.
+public enum CutMode: String, Sendable, Hashable, Codable, CaseIterable {
+    /// Beat repeat: the last slice of the song, over and over. `amount` pitches it up and fades it as it repeats.
+    case stutter
+    /// A trance gate: the song chopped on and off once a slice. `amount` is how short the open part is.
+    case gate
+    /// The last slice played backwards, over and over.
+    case reverse
+    /// The last eight slices re-sequenced in a seeded order, a few left silent: a vocal-chop re-cut. `amount` is how
+    /// many are silent.
+    case chop
+
+    public var index: Int { CutMode.allCases.firstIndex(of: self) ?? 0 }
+}
+
+/// How long one slice of a `cut` is (a repeat of this length lands on the beat grid).
+public enum CutDivision: String, Sendable, Hashable, Codable, CaseIterable {
+    case quarter, eighth, sixteenth, sixteenthTriplet, thirtySecond
+
+    /// The slice's length in sixteenth-note steps.
+    public var steps: Double {
+        switch self {
+        case .quarter: 4
+        case .eighth: 2
+        case .sixteenth: 1
+        case .sixteenthTriplet: 2.0 / 3.0
+        case .thirtySecond: 0.5
+        }
+    }
+
+    public var index: Int { CutDivision.allCases.firstIndex(of: self) ?? 0 }
+
+    /// The `NoteParams.formant` value that carries this division.
+    public var formant: Double { Double(index) / Double(CutDivision.allCases.count - 1) }
+
+    public init(formant: Double) {
+        let all = CutDivision.allCases
+        let i = Int((min(max(formant, 0), 1) * Double(all.count - 1)).rounded())
+        self = all[i]
+    }
+}
+
+extension NoteParams {
+    /// The parameters of a `cut` note of `steps` sixteenths.
+    public static func cut(
+        _ mode: CutMode, division: CutDivision = .sixteenth, steps: Int = 2, amount: Double = 0.5, seed: Int = 0
+    ) -> NoteParams {
+        NoteParams(
+            lengthSteps: max(steps, 1), formant: division.formant, drive: min(max(amount, 0), 1),
+            voice: mode.index | (seed & 0xFFFFF) << 4)
+    }
+}
+
+/// The vowels a `vocal` or `vocalChop` note sings (`NoteParams.voice & 7`; larger values fold back).
+public enum VocalVowel: String, Sendable, Hashable, Codable, CaseIterable {
+    case ah, oh, oo, eh, ee, mm
+
+    /// The value `NoteParams.voice & 7` carries.
+    public var index: Int { VocalVowel.allCases.firstIndex(of: self) ?? 0 }
+}
+
+/// How a `vocal` note is sung (`(NoteParams.voice >> 3) & 3`).
+public enum VocalStyle: String, Sendable, Hashable, Codable, CaseIterable {
+    /// Three detuned voices spread across the stereo field, slow attack and release: the "aah" pad.
+    case choir
+    /// One voice, a quicker attack and a scoop up to the pitch.
+    case lead
+    /// One voice with the pad's slow attack and release.
+    case solo
+
+    /// The value `(NoteParams.voice >> 3) & 3` carries.
+    public var index: Int { VocalStyle.allCases.firstIndex(of: self) ?? 0 }
+
+    /// The style a `voice` field asks for (an unknown value is a choir).
+    public init(voice: Int) {
+        let i = (voice >> 3) & 3
+        self = i < VocalStyle.allCases.count ? VocalStyle.allCases[i] : .choir
+    }
+}
+
+/// A voice character: presets of the same formant synthesiser that differ in formants, breath, vibrato, attack, voice
+/// count and room (`(NoteParams.voice >> 5) & 15`; 0, `classic`, is the original voice).
+public enum VocalFeel: String, Sendable, Hashable, Codable, CaseIterable {
+    /// The original voice: a warm, even choir.
+    case classic
+    /// A breathy whisper pad: high breath, almost no vibrato, a soft slow attack.
+    case airy
+    /// A bright pop lead: soprano, forward upper formants, a fast scoop and a tight quick vibrato.
+    case pop
+    /// A dark, low hum: rounded and low-passed.
+    case dark
+    /// A gospel or soul belt: a wide slow vibrato, grit, and big slides up to the note.
+    case soul
+    /// An ethereal choir: five detuned voices, a long room, the vowel drifting from one to the next.
+    case ethereal
+    /// A playful "la la": higher formants, quick, bright and short.
+    case toy
+    /// A powerful, slightly coarse chest-mix belt: a strong first formant, a forward singer's formant, a little grit.
+    case power
+    /// A riff voice for fast melismatic runs (`VocalRun`): clean, quick, a tight vibrato for the held end of a run.
+    case runs
+
+    public var index: Int { VocalFeel.allCases.firstIndex(of: self) ?? 0 }
+
+    /// The feel a `voice` field asks for (an unknown value is `classic`).
+    public init(voice: Int) {
+        let i = (voice >> 5) & 15
+        self = i < VocalFeel.allCases.count ? VocalFeel.allCases[i] : .classic
+    }
+}
+
+extension NoteParams {
+    /// The `voice` value that sings `vowel` in `style` and `feel`.
+    public static func vocalVoice(_ vowel: VocalVowel, style: VocalStyle = .choir, feel: VocalFeel = .classic) -> Int {
+        vowel.index | style.index << 3 | feel.index << 5
+    }
 }
 
 /// Musical LFO rate for the wobble, as a note division.
@@ -69,11 +243,16 @@ public struct NoteParams: Sendable, Hashable, Codable {
     public var glide: Double?
     /// 0 ... 0.5 of a step the note sounds late (swing on the off-16ths); nil is on the grid.
     public var delay: Double?
+    /// A `vocalSample` note's packed `VocalExpression` (vibrato, scoops, morph, formant shift, echo and the rest); nil
+    /// or 0 is a plain note. Build it with `NoteParams.expressed(_:)`.
+    public var expression: Int?
 
     public init(
         pitch: Int? = nil, lengthSteps: Int = 1, wobbleRate: WobbleRate? = nil, formant: Double? = nil,
-        drive: Double? = nil, voice: Int? = nil, pan: Double = 0, glide: Double? = nil, delay: Double? = nil
+        drive: Double? = nil, voice: Int? = nil, pan: Double = 0, glide: Double? = nil, delay: Double? = nil,
+        expression: Int? = nil
     ) {
+        self.expression = expression
         self.pitch = pitch
         self.lengthSteps = lengthSteps
         self.wobbleRate = wobbleRate

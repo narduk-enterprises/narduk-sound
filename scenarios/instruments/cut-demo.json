@@ -1,0 +1,117 @@
+{
+  "name": "cut-demo",
+  "seed": 1641,
+  "genre": "chill",
+  "bpm": 100,
+  "seconds": 7.5,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 57,
+      "length": 2.28,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7
+    },
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 60,
+      "length": 2.28,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7
+    },
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 64,
+      "length": 2.28,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocal",
+      "pitch": 53,
+      "length": 2.28,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocal",
+      "pitch": 57,
+      "length": 2.28,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocal",
+      "pitch": 60,
+      "length": 2.28,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7
+    },
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 69,
+      "length": 0.9,
+      "vowel": "oh",
+      "style": "lead",
+      "velocity": 0.85
+    },
+    {
+      "time": 1.2,
+      "instrument": "vocal",
+      "pitch": 72,
+      "length": 0.6,
+      "vowel": "oh",
+      "style": "lead",
+      "velocity": 0.85
+    },
+    {
+      "time": 1.8,
+      "instrument": "vocal",
+      "pitch": 71,
+      "length": 0.6,
+      "vowel": "oh",
+      "style": "lead",
+      "velocity": 0.85
+    },
+    {
+      "time": 2.4,
+      "instrument": "cut",
+      "pitch": 60,
+      "length": 0.6,
+      "cut": "stutter",
+      "division": "sixteenth",
+      "drive": 0.4
+    },
+    {
+      "time": 4.8,
+      "instrument": "cut",
+      "pitch": 60,
+      "length": 0.6,
+      "cut": "gate",
+      "division": "sixteenth",
+      "drive": 0.5
+    },
+    {
+      "time": 6.0,
+      "instrument": "cut",
+      "pitch": 60,
+      "length": 0.6,
+      "cut": "reverse",
+      "division": "eighth"
+    }
+  ]
+}

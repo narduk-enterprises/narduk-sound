@@ -15,6 +15,7 @@ struct RenderControls {
     var masterVolume: Float
     var fadingOut: Bool
     var bpmMilli: Int
+    var filter: MasterFilter
 }
 
 /// Everything the render thread mutates. Lives behind one raw pointer owned by
@@ -26,6 +27,8 @@ struct SynthState {
     static let fxCount = 16
     static let stringCount = 24  // guitar strings; a strum takes six
     static let padCount = 8
+    static let vocalCount = 16  // singers; a choir note takes up to five
+    static let sampleCount = 10  // sampled singers
     static let pendingCapacity = 2_048
     static let historySize = 1 << 18  // master history for stutter / tape stop (~5.4 s at 48 kHz)
     static let analysisSize = 1 << 13  // mono analysis ring
@@ -53,6 +56,20 @@ struct SynthState {
     let strings: UnsafeMutablePointer<StringVoice>
     var nextString = 0
     var stringsLive = 0
+    // Wordless vocals (#1641): pooled singers into a small room of their own. Untouched until a vocal note arrives, and
+    // `vocalTail` counts the samples the room keeps running afterwards, so a song without vocals renders bit for bit.
+    let vocals: UnsafeMutablePointer<VocalVoice>
+    var vocalsLive = 0
+    var vocalTail = 0
+    var vocalRoom: RoomReverb
+    // Sampled vocals (#1641): the same room, a pool of sample voices over the shared bank. Untouched until a
+    // `vocalSample` note arrives.
+    let sampleBank: SampleBank?
+    let samples: UnsafeMutablePointer<SampleVoice>
+    var samplesLive = 0
+    // The vocal echo: tempo-synced throws from sampled notes that ask for one. It only runs while one is sounding.
+    var vocalEcho: StereoDelay
+    var vocalEchoTail = 0
     var wobble = WobbleVoice()
     var sub = SubVoice()
     var reverb: RoomReverb
@@ -89,7 +106,10 @@ struct SynthState {
     var tapeLength = 0
     var tapeRead: Double = 0
     var tapeReturn = 0
+    var cut = MasterCut()
     var limiter: BrickwallLimiter
+    var masterFilter = MasterFilterState()
+    let filterGlide: Float
 
     // Analysis / telemetry
     let analysis: UnsafeMutablePointer<Float>
@@ -122,6 +142,17 @@ struct SynthState {
         for i in 0..<SynthState.stringCount {
             (strings + i).initialize(to: StringVoice(seed: 0x9E37_79B9 &+ UInt32(i) &* 40_503))
         }
+        vocals = .allocate(capacity: SynthState.vocalCount)
+        for i in 0..<SynthState.vocalCount {
+            (vocals + i).initialize(to: VocalVoice(seed: 0x7F4A_7C15 &+ UInt32(i) &* 2_654_435))
+        }
+        sampleBank = SampleBank.shared
+        samples = .allocate(capacity: SynthState.sampleCount)
+        samples.initialize(repeating: SampleVoice(), count: SynthState.sampleCount)
+        vocalRoom = RoomReverb(sampleRate: sampleRate, size: 0.8)
+        vocalRoom.feedback = 0.84
+        vocalEcho = StereoDelay(sampleRate: sampleRate, seconds: 0.375, dampingHz: 3_000)
+        vocalEcho.feedback = 0.52
         pads = .allocate(capacity: SynthState.padCount)
         pads.initialize(repeating: PadVoice(), count: SynthState.padCount)
         hall = HallReverb(sampleRate: sampleRate)
@@ -132,6 +163,7 @@ struct SynthState {
         historyRight = .allocate(capacity: SynthState.historySize)
         historyRight.initialize(repeating: 0, count: SynthState.historySize)
         limiter = BrickwallLimiter(sampleRate: sampleRate)
+        filterGlide = MasterFilterState.glide(sampleRate: Float(sampleRate))
         analysis = .allocate(capacity: SynthState.analysisSize)
         analysis.initialize(repeating: 0, count: SynthState.analysisSize)
     }
@@ -145,6 +177,10 @@ struct SynthState {
         reverb.deallocate()
         for i in 0..<SynthState.stringCount { strings[i].deallocate() }
         strings.deallocate()
+        vocals.deallocate()
+        vocalEcho.deallocate()
+        samples.deallocate()
+        vocalRoom.deallocate()
         pads.deallocate()
         hall.deallocate()
         echo.deallocate()
@@ -164,6 +200,13 @@ struct SynthState {
         guard pendingCount < SynthState.pendingCapacity else {
             droppedEvents += 1
             return
+        }
+        var event = event
+        if event.flags & SynthEvent.StrumFlags.immediate != 0 {
+            // Due at the sample the render is on: the step it falls in, and the samples into that step.
+            event.step = clock.step(atSample: sampleClock)
+            event.offset = Int32(max(sampleClock - clock.sample(forStep: event.step), 0))
+            event.delay = 0
         }
         pending[pendingCount] = event
         pendingCount += 1
@@ -288,6 +331,16 @@ struct SynthState {
             if let kind = AmbientKind(voice: Int(e.voice)) { startPad(kind, e) } else { startFX(.keys, e) }
         case 14, 15, 16:  // acoustic, electric, bass guitar (a strum's strings arrive as the first two)
             startString(StringKind(rawValue: e.instrument - 14) ?? .acoustic, e)
+        case 19, 20: startVocal(e)
+        case 22: startSample(e)
+        case 21:  // cut: the master is stuttered, gated, reversed or re-sliced for lengthSteps
+            let division = CutDivision(formant: e.formant < 0 ? CutDivision.sixteenth.formant : Double(e.formant))
+            let packed = max(Int(e.voice), 0)
+            let mode = CutMode.allCases[(packed & 15) % CutMode.allCases.count]
+            cut.begin(
+                mode: mode, slice: Int((clock.samplesPerStep * division.steps).rounded()), length: gateSamples(e),
+                amount: e.drive < 0 ? 0.5 : e.drive, seed: UInt32(truncatingIfNeeded: packed >> 4),
+                historyWrite: historyWrite)
         default: return  // 17, 18 (strums) were expanded into strings when queued
         }
         if e.flags & SynthEvent.StrumFlags.string == 0 {
@@ -319,6 +372,121 @@ struct SynthState {
         strings[slot].trigger(
             kind, pitch: e.pitch, velocity: e.velocity, gateSamples: gateSamples(e), pan: e.pan, drive: e.drive, c)
         stringsLive += 1
+    }
+
+    mutating func startVocal(_ e: SynthEvent) {
+        let chop = e.instrument == Instrument.vocalChop.synthCode
+        let packed = e.voice < 0 ? 0 : Int(e.voice)
+        let vowel = packed & 7
+        let style: VocalStyle = chop ? .lead : VocalStyle(voice: packed)
+        let feel = VocalFeel(voice: packed)
+        let patch = VocalPatch.patch(chop: chop, style: style, feel: feel)
+        let register = e.formant < 0 ? 0.5 : e.formant
+        let breath = e.drive < 0 ? patch.breathDefault : e.drive
+        let gate = gateSamples(e)
+        let singers = !chop && style == .choir ? patch.singers : 1
+        if !chop && style == .lead {
+            // A lead is one voice: the last one gives way.
+            for i in 0..<SynthState.vocalCount where vocals[i].active && vocals[i].isLead { vocals[i].steal() }
+        }
+        for n in 0..<singers {
+            var slot = -1
+            var oldest = 0
+            var oldestAge = -1
+            for i in 0..<SynthState.vocalCount {
+                if !vocals[i].active {
+                    slot = i
+                    break
+                }
+                if vocals[i].age > oldestAge {
+                    oldestAge = vocals[i].age
+                    oldest = i
+                }
+            }
+            if slot < 0 { slot = oldest }
+            let spread = Float(n) - Float(singers - 1) / 2  // -1, 0, 1 for three; 0 for a solo
+            vocals[slot].trigger(
+                pitch: e.pitch < 0 ? 69 : e.pitch, velocity: e.velocity, gateSamples: gate, vowel: vowel,
+                register: register, breath: breath, style: style, feel: feel, chop: chop,
+                pan: singers == 1 ? e.pan : min(max(e.pan + spread * patch.spreadPan, -1), 1),
+                detuneCents: singers == 1 ? 0 : spread * patch.spreadCents,
+                phaseOffset: singers == 1 ? 0 : Float(n) / Float(singers),
+                level: singers == 1 ? 0.8 : 0.55 * (3 / Float(singers)).squareRoot(), c)
+        }
+        vocalsLive += singers
+        let tail = gate + Int(c.sampleRate * (feel == .ethereal ? 5 : 3))
+        vocalTail = max(vocalTail, tail)
+    }
+
+    mutating func startSample(_ e: SynthEvent) {
+        guard let bank = sampleBank else { return }
+        let packed = e.voice < 0 ? 0 : Int(e.voice)
+        let kind = SampleKind(voice: packed)
+        var technique = SampleTechnique(voice: packed)
+        let pitch = e.pitch < 0 ? 69 : e.pitch
+        // A snapped or formant-shifted note is re-sung grain by grain: it wants the steadiest recording there is.
+        if e.expression != 0, kind == .sustain {
+            let x = VocalExpression(packed: Int(e.expression))
+            if x.snap || x.formantShift != 0 { technique = .straight }
+        }
+        let clip = bank.lookup(
+            kind: kind, vowel: packed & 7, technique: technique, pitch: pitch, slice: e.formant < 0 ? 0 : e.formant)
+        guard clip >= 0 else { return }
+        let info = bank.clips[clip]
+        let gate = gateSamples(e)
+        let ratio = bank.sampleRate / Double(c.sampleRate)
+        var rate: Double
+        switch kind {
+        case .sustain, .chop:
+            // Shift to the note, within a few semitones of the root (the set has a root every three).
+            let semitones = min(max(Double(pitch - info.root), -7), 7)
+            rate = pow(2, semitones / 12) * ratio
+        case .run:
+            // Fit the run to the note: its whole length, squeezed or stretched within reason.
+            let natural = Double(info.count) / ratio
+            rate = min(max(natural / Double(max(gate, 1)), 0.5), 2.5) * ratio
+        }
+        var slot = -1
+        var oldest = 0
+        var oldestAge = -1
+        for i in 0..<SynthState.sampleCount {
+            if !samples[i].active {
+                slot = i
+                break
+            }
+            if samples[i].age > oldestAge {
+                oldestAge = samples[i].age
+                oldest = i
+            }
+        }
+        if slot < 0 { slot = oldest }
+        var expression: VocalExpression?
+        var morphClip = -1
+        var morphRate = rate
+        if e.expression != 0 {
+            let x = VocalExpression(packed: Int(e.expression))
+            expression = x
+            if let vowel = x.morph, kind == .sustain {
+                morphClip = bank.lookup(
+                    kind: .sustain, vowel: vowel.index, technique: technique, pitch: pitch, slice: 0)
+                if morphClip >= 0 {
+                    let shift = min(max(Double(pitch - bank.clips[morphClip].root), -7), 7)
+                    morphRate = pow(2, shift / 12) * ratio
+                }
+            }
+        }
+        samples[slot].trigger(
+            bank: bank, clip: clip, rate: rate, gateSamples: kind == .run ? Int(Double(info.count) / rate) : gate,
+            velocity: e.velocity, gain: e.drive < 0 ? 0.8 : e.drive, pan: e.pan, engineRate: c.sampleRate,
+            expression: expression, morphClip: morphClip, morphRate: morphRate, notePitch: pitch,
+            seed: UInt32(truncatingIfNeeded: e.step &* 31 &+ Int(e.pitch * 8)))
+        samplesLive += 1
+        vocalTail = max(vocalTail, gate + Int(c.sampleRate * 2.5))
+        if let expression, expression.echo != .off {
+            vocalEcho.setTime(steps: expression.echo.steps, bpm: clock.bpm, sampleRate: Double(c.sampleRate))
+            vocalEchoTail = max(vocalEchoTail, gate + Int(c.sampleRate * 5))
+            vocalTail = max(vocalTail, vocalEchoTail)
+        }
     }
 
     mutating func startPad(_ kind: AmbientKind, _ e: SynthEvent) {
@@ -455,6 +623,47 @@ struct SynthState {
                 fxL += guitarL
                 fxR += guitarR
             }
+            // Vocals feed the fx bus dry, and a room of their own until its tail has died away.
+            if vocalsLive > 0 || samplesLive > 0 || vocalTail > 0 {
+                var vocalL: Float = 0
+                var vocalR: Float = 0
+                var live = 0
+                var extraSend: Float = 0
+                if vocalsLive > 0 {
+                    for i in 0..<SynthState.vocalCount where vocals[i].active {
+                        let v = vocals[i].next(c)
+                        vocalL += v.0
+                        vocalR += v.1
+                        if vocals[i].send != 1 { extraSend += (v.0 + v.1) * 0.5 * (vocals[i].send - 1) }
+                        if vocals[i].active { live += 1 }
+                    }
+                    vocalsLive = live
+                }
+                var echoIn: Float = 0
+                if samplesLive > 0 {
+                    var sampled = 0
+                    for i in 0..<SynthState.sampleCount where samples[i].active {
+                        let v = samples[i].next()
+                        vocalL += v.0
+                        vocalR += v.1
+                        let mono = (v.0 + v.1) * 0.5
+                        echoIn += mono * samples[i].echoSend
+                        extraSend += mono * samples[i].roomSend * 1.5
+                        if samples[i].active { sampled += 1 }
+                    }
+                    samplesLive = sampled
+                }
+                if vocalTail > 0 { vocalTail -= 1 }
+                let wet = vocalRoom.process((vocalL + vocalR) * 0.5 + extraSend)
+                fxL += vocalL + wet.0 * 2.4
+                fxR += vocalR + wet.1 * 2.4
+                if vocalEchoTail > 0 {
+                    vocalEchoTail -= 1
+                    let throwBack = vocalEcho.process(echoIn, echoIn)
+                    fxL += throwBack.0 * 1.2
+                    fxR += throwBack.1 * 1.2
+                }
+            }
             let fxDuck = 1 - 0.5 * sidechain
             fxL *= fxDuck
             fxR *= fxDuck
@@ -516,9 +725,15 @@ struct SynthState {
                 stutterAge += 1
                 stutterRemaining -= 1
             }
+            if cut.isActive {
+                (mixL, mixR) = cut.process(
+                    mixL, mixR, historyLeft: historyLeft, historyRight: historyRight, mask: historyMask)
+            }
             historyWrite += 1
 
-            // Soft saturation into the brickwall limiter.
+            // The master filter (bypassed unless a drop's build is sweeping it), then soft saturation into the limiter.
+            (mixL, mixR) = masterFilter.process(
+                mixL, mixR, target: controls.filter, sampleRate: Float(c.sampleRate), glide: filterGlide)
             let satL = DSP.softClip(mixL * 0.72) * 1.32
             let satR = DSP.softClip(mixR * 0.72) * 1.32
             let limited = limiter.process(satL, satR)
@@ -560,6 +775,7 @@ public final class DropSynthCore: @unchecked Sendable {
     private let bpmMilli: Atomic<Int>
     // The ambient chain's settings: the bit patterns of an `AmbientSpace`'s six floats.
     private let spaceAtomics = AmbientSpaceAtomics()
+    private let filterBits = MasterFilterAtomics()
 
     // Render → main telemetry.
     private let renderedSamples = Atomic<Int>(0)
@@ -599,6 +815,20 @@ public final class DropSynthCore: @unchecked Sendable {
         events.push(SynthEvent(note))
     }
 
+    /// Cuts the master now: a beat repeat, gate, reverse or re-slice for `steps` sixteenths from the next sample the
+    /// render thread processes (the live "STUTTER" button). Returns false when the event ring is full.
+    @discardableResult
+    public func cut(
+        _ mode: CutMode, division: CutDivision = .sixteenth, steps: Int = 2, amount: Double = 0.5, seed: Int = 0
+    ) -> Bool {
+        var event = SynthEvent(
+            ScheduledNote(
+                step: 0, instrument: .cut, velocity: 1,
+                params: .cut(mode, division: division, steps: steps, amount: amount, seed: seed)))
+        event.flags |= SynthEvent.StrumFlags.immediate
+        return events.push(event)
+    }
+
     /// Sets the tempo; the render thread applies it from the next bar boundary.
     public func setTempo(_ bpm: Double) {
         bpmMilli.store(StepClock.milliBPM(bpm), ordering: .relaxed)
@@ -634,6 +864,14 @@ public final class DropSynthCore: @unchecked Sendable {
         } else {
             muteMask.bitwiseAnd(~bit, ordering: .relaxed)
         }
+    }
+
+    /// Sets the master filter (`MasterFilter.idle` bypasses it). It glides there over about 20 ms from the next buffer,
+    /// so call it as often as the control changes (every UI frame is fine); it allocates nothing.
+    public func setMasterFilter(_ filter: MasterFilter) {
+        filterBits.highPass.store(filter.highPassHz.bitPattern, ordering: .relaxed)
+        filterBits.lowPass.store(filter.lowPassHz.bitPattern, ordering: .relaxed)
+        filterBits.resonance.store(filter.resonance.bitPattern, ordering: .relaxed)
     }
 
     public func setMasterVolume(_ volume: Float) {
@@ -708,7 +946,11 @@ public final class DropSynthCore: @unchecked Sendable {
             gains: (g0, g1, g2),
             masterVolume: Float(bitPattern: masterVolumeBits.load(ordering: .relaxed)),
             fadingOut: fadeOut.load(ordering: .relaxed),
-            bpmMilli: bpmMilli.load(ordering: .relaxed)
+            bpmMilli: bpmMilli.load(ordering: .relaxed),
+            filter: MasterFilter(
+                highPassHz: Float(bitPattern: filterBits.highPass.load(ordering: .relaxed)),
+                lowPassHz: Float(bitPattern: filterBits.lowPass.load(ordering: .relaxed)),
+                resonance: Float(bitPattern: filterBits.resonance.load(ordering: .relaxed)))
         )
         while let event = events.pop() { state.pointee.enqueue(event) }
         state.pointee.space = AmbientSpace(
@@ -738,6 +980,13 @@ public final class DropSynthCore: @unchecked Sendable {
         stepPositionBits.store(position.bitPattern, ordering: .releasing)
         renderedSamples.store(s.pointee.sampleClock, ordering: .releasing)
     }
+}
+
+/// The atomics behind `DropSynthCore.setMasterFilter(_:)`.
+private struct MasterFilterAtomics: ~Copyable {
+    let highPass = Atomic<UInt32>(MasterFilter.highPassOpen.bitPattern)
+    let lowPass = Atomic<UInt32>(MasterFilter.lowPassOpen.bitPattern)
+    let resonance = Atomic<UInt32>(MasterFilter.idle.resonance.bitPattern)
 }
 
 /// The atomics behind `DropSynthCore.setAmbientSpace(_:)` (a struct of named fields, since a tuple cannot hold them).

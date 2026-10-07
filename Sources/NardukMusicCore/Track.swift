@@ -172,6 +172,8 @@ struct Track: Sendable, Hashable {
     /// A track never runs longer than this many phrases.
     var maxPhrases = 10
     var vowel = 0
+    /// Wordless vocals and cuts (narduk-libs#1641); nil unless `SongSettings.variety` asks for them.
+    var vocals: VocalPlan?
     var outro: Outro = .drumBridge
     var name = "Untitled"
 

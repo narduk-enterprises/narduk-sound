@@ -34,6 +34,7 @@ enum Variety {
         if uses("drums", track, variety: variety) { applyDrums(to: &track) }
         if variety > 0 { applyTimbre(to: &track, variety: variety) }
         if uses("arrangement", track, variety: variety) { applyArrangement(to: &track, variety: variety) }
+        track.vocals = vocalPlan(for: track, variety: variety)
         if uses("motif", track, variety: variety) {
             var rng = stream(track, "motif")
             let rhythm = motifRhythm(genre: track.genre, rng: &rng)

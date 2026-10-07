@@ -17,6 +17,7 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
     public var glide: Float  // < 0 when absent
     public var delay: Float  // 0 ... 0.5 of a step late
     public var flags: UInt8  // `StrumFlags`; 0 for every note the conductor writes
+    public var expression: Int64  // `VocalExpression.packed` of a sampled vocal; 0 for every other note
     public var offset: Int32  // samples late, on top of the step and `delay`; 0 for every note the conductor writes
 
     /// Bits of `flags`: what a strum's expansion into six string events carries.
@@ -27,6 +28,8 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
         static let string: UInt8 = 2
         /// A string of an electric strum rather than an acoustic one.
         static let electric: UInt8 = 4
+        /// A live cut (`DropSynthCore.cut`): it fires at the next sample rather than on a step.
+        static let immediate: UInt8 = 8
     }
 
     public init(_ note: ScheduledNote) {
@@ -43,6 +46,7 @@ public struct SynthEvent: Sendable, Hashable, BitwiseCopyable {
         glide = note.params.glide.map { Float(min(max($0.isFinite ? $0 : 0, 0), 1)) } ?? -1
         delay = note.params.delay.map { Float(min(max($0.isFinite ? $0 : 0, 0), 0.5)) } ?? 0
         flags = 0
+        expression = Int64(note.params.expression ?? 0)
         offset = 0
     }
 }
@@ -70,6 +74,10 @@ extension Instrument {
         case .bassGuitar: 16
         case .strum: 17
         case .electricStrum: 18
+        case .vocal: 19
+        case .vocalChop: 20
+        case .cut: 21
+        case .vocalSample: 22
         }
     }
 

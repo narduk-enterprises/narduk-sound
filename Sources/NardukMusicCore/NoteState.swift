@@ -93,7 +93,7 @@ public struct NoteTracker: Sendable {
     /// The instruments whose notes have a pitch worth drawing.
     public static func isPitched(_ instrument: Instrument) -> Bool {
         switch instrument {
-        case .wobble, .sub, .keys, .acousticGuitar, .electricGuitar, .bassGuitar: true
+        case .wobble, .sub, .keys, .acousticGuitar, .electricGuitar, .bassGuitar, .vocal, .vocalChop, .vocalSample: true
         default: false
         }
     }

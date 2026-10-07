@@ -1,0 +1,130 @@
+{
+  "name": "vocal-chops",
+  "seed": 1641,
+  "genre": "dubstep",
+  "bpm": 100,
+  "seconds": 5,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0,
+      "instrument": "vocalChop",
+      "pitch": 64,
+      "length": 0.22,
+      "vowel": "ah",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": 0.3
+    },
+    {
+      "time": 0.3,
+      "instrument": "vocalChop",
+      "pitch": 67,
+      "length": 0.22,
+      "vowel": "oh",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": -0.3
+    },
+    {
+      "time": 0.6,
+      "instrument": "vocalChop",
+      "pitch": 71,
+      "length": 0.22,
+      "vowel": "ah",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": 0.3
+    },
+    {
+      "time": 0.9,
+      "instrument": "vocalChop",
+      "pitch": 64,
+      "length": 0.22,
+      "vowel": "ee",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": -0.3
+    },
+    {
+      "time": 1.5,
+      "instrument": "vocalChop",
+      "pitch": 67,
+      "length": 0.22,
+      "vowel": "ah",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": 0.3
+    },
+    {
+      "time": 1.8,
+      "instrument": "vocalChop",
+      "pitch": 72,
+      "length": 0.22,
+      "vowel": "oh",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": -0.3
+    },
+    {
+      "time": 2.1,
+      "instrument": "vocalChop",
+      "pitch": 71,
+      "length": 0.22,
+      "vowel": "ee",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": 0.3
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocalChop",
+      "pitch": 67,
+      "length": 0.22,
+      "vowel": "ah",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": -0.3
+    },
+    {
+      "time": 3.0,
+      "instrument": "vocalChop",
+      "pitch": 64,
+      "length": 0.22,
+      "vowel": "oo",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": 0.3
+    },
+    {
+      "time": 3.3,
+      "instrument": "vocalChop",
+      "pitch": 69,
+      "length": 0.22,
+      "vowel": "ah",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": -0.3
+    },
+    {
+      "time": 3.6,
+      "instrument": "vocalChop",
+      "pitch": 72,
+      "length": 0.22,
+      "vowel": "eh",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": 0.3
+    },
+    {
+      "time": 3.9,
+      "instrument": "vocalChop",
+      "pitch": 64,
+      "length": 0.22,
+      "vowel": "ah",
+      "register": 0.85,
+      "velocity": 0.9,
+      "pan": -0.3
+    }
+  ]
+}

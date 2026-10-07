@@ -98,10 +98,37 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         public var chord: StrumChord?
         /// A strum's direction (default `down`).
         public var direction: StrumStroke?
+        /// A vocal's vowel (default `ah`).
+        public var vowel: VocalVowel?
+        /// A vocal's style (default `choir`; a chop is always a solo).
+        public var style: VocalStyle?
+        /// A vocal's register, 0 (alto) ... 1 (soprano); default 0.5. A vocal's `drive` is its breathiness.
+        public var register: Double?
+        /// A vocal's voice character (default `classic`).
+        public var feel: VocalFeel?
+        /// A vocal's run: the held note holds, then sings this ornament (`VocalRun`) over the rest of its length.
+        public var run: VocalRun?
+        /// A `cut` note's mode (default `stutter`); its `length` is how long the cut lasts, its `drive` the amount.
+        public var cut: CutMode?
+        /// A `cut` note's slice length (default `sixteenth`).
+        public var division: CutDivision?
+        /// A `cut` note's seed (chop order).
+        public var cutSeed: Int?
+        /// A `vocalSample` note's technique (default `vibrato`) and kind (default `sustain`). For a chop, `register` is
+        /// the slice, 0 ... 1; for a run kind, `length` is how long the whole run takes.
+        public var technique: SampleTechnique?
+        public var kind: SampleKind?
+        /// A `vocalSample` note's expression and character: vibrato, scoop, bend, morph, formant shift, echo, filter
+        /// and the rest (see `VocalExpression`; `preset` names a starting point).
+        public var expression: VocalExpression?
 
         public init(
             time: Double, instrument: Instrument, pitch: Int, length: Double? = nil, velocity: Double? = nil,
-            pan: Double? = nil, drive: Double? = nil, chord: StrumChord? = nil, direction: StrumStroke? = nil
+            pan: Double? = nil, drive: Double? = nil, chord: StrumChord? = nil, direction: StrumStroke? = nil,
+            vowel: VocalVowel? = nil, style: VocalStyle? = nil, register: Double? = nil, feel: VocalFeel? = nil,
+            run: VocalRun? = nil,
+            cut: CutMode? = nil, division: CutDivision? = nil, cutSeed: Int? = nil, technique: SampleTechnique? = nil,
+            kind: SampleKind? = nil, expression: VocalExpression? = nil
         ) {
             self.time = time
             self.instrument = instrument
@@ -112,6 +139,17 @@ public struct MusicScenario: Sendable, Hashable, Codable {
             self.drive = drive
             self.chord = chord
             self.direction = direction
+            self.vowel = vowel
+            self.style = style
+            self.register = register
+            self.feel = feel
+            self.run = run
+            self.cut = cut
+            self.division = division
+            self.cutSeed = cutSeed
+            self.technique = technique
+            self.kind = kind
+            self.expression = expression
         }
     }
 
@@ -186,18 +224,54 @@ public struct MusicScenario: Sendable, Hashable, Codable {
     /// (the second half as a swing `delay`), the resolution a `ScheduledNote` has.
     public func scheduledNotes(settings: SongSettings) -> [ScheduledNote] {
         let secondsPerStep = settings.secondsPerStep
-        return (notes ?? []).filter { $0.time >= 0 && $0.time.isFinite }.sorted { $0.time < $1.time }.map { note in
+        return (notes ?? []).filter { $0.time >= 0 && $0.time.isFinite }.sorted { $0.time < $1.time }.flatMap {
+            note -> [ScheduledNote] in
             let halves = Int((note.time / secondsPerStep * 2).rounded())
             let isStrum = note.instrument == .strum || note.instrument == .electricStrum
+            let lengthSteps = max(1, Int(((note.length ?? 0.5) / secondsPerStep).rounded(.up)))
             var params = NoteParams(
-                pitch: note.pitch, lengthSteps: max(1, Int(((note.length ?? 0.5) / secondsPerStep).rounded(.up))),
+                pitch: note.pitch, lengthSteps: lengthSteps,
                 drive: note.drive, pan: note.pan ?? 0, delay: halves % 2 == 1 ? 0.5 : nil)
             if isStrum {
                 params.voice = note.chord?.voice ?? 0
                 params.formant = note.direction == .up ? 1 : 0
             }
-            return ScheduledNote(
-                step: halves / 2, instrument: note.instrument, velocity: note.velocity ?? 0.8, params: params)
+            if note.instrument == .vocalSample {
+                params.voice = NoteParams.sampleVoice(
+                    note.vowel ?? .ah, technique: note.technique ?? .vibrato, kind: note.kind ?? .sustain)
+                params.formant = note.register
+                if let expression = note.expression { params = params.expressed(expression) }
+            }
+            if note.instrument == .vocal || note.instrument == .vocalChop || note.instrument == .vocalSample {
+                if note.instrument != .vocalSample {
+                    params.voice = NoteParams.vocalVoice(
+                        note.vowel ?? .ah, style: note.style ?? (note.run == nil ? .choir : .lead),
+                        feel: note.feel ?? .classic)
+                    params.formant = note.register
+                }
+                if let run = note.run, note.instrument != .vocalChop {
+                    return run.steps(root: note.pitch, lengthSteps: lengthSteps).map { step in
+                        var p = params
+                        let at = halves + step.half
+                        p.pitch = step.pitch
+                        p.lengthSteps = max(1, (step.halves + 1) / 2)
+                        p.delay = at % 2 == 1 ? 0.5 : nil
+                        return ScheduledNote(
+                            step: at / 2, instrument: note.instrument,
+                            velocity: min((note.velocity ?? 0.8) * step.accent, 1), params: p)
+                    }
+                }
+            }
+            if note.instrument == .cut {
+                params = NoteParams.cut(
+                    note.cut ?? .stutter, division: note.division ?? .sixteenth, steps: params.lengthSteps,
+                    amount: note.drive ?? 0.5, seed: note.cutSeed ?? 0)
+                params.delay = halves % 2 == 1 ? 0.5 : nil
+            }
+            return [
+                ScheduledNote(
+                    step: halves / 2, instrument: note.instrument, velocity: note.velocity ?? 0.8, params: params)
+            ]
         }
     }
 

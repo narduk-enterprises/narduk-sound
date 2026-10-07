@@ -79,6 +79,10 @@ public enum DropEngineError: LocalizedError {
     }
     /// Called on the main actor every ~17 ms; returns the notes for all steps up to `throughStep`.
     @ObservationIgnored public var noteProvider: (@MainActor (_ throughStep: Int) -> [ScheduledNote])?
+    /// Sweeps the master filter over the whole mix (`MasterFilter.idle` bypasses it, bit for bit). A DROP's build drives it
+    /// from `DropArranger.filterSweep` each frame and sets `.idle` on the release, which snaps it open in about 60 ms.
+    public func setMasterFilter(_ filter: MasterFilter) { core?.setMasterFilter(filter) }
+
     /// 0 ... 1
     public var masterVolume: Float = 0.8 {
         didSet { core?.setMasterVolume(min(max(masterVolume, 0), 1)) }
@@ -145,6 +149,43 @@ public enum DropEngineError: LocalizedError {
     public func setMuted(_ muted: Bool, for channel: MixerChannel) {
         if muted { mutes.insert(channel) } else { mutes.remove(channel) }
         core?.setMuted(muted, for: channel.bus)
+    }
+
+    // MARK: Cuts
+
+    /// Chops the song now: a beat repeat (`.stutter`), trance `.gate`, `.reverse` slice or re-sliced `.chop` of
+    /// `division` slices for `steps` sixteenths, from the next audio buffer, then the song comes back. For a live
+    /// "STUTTER" button (narduk-libs#1641). Returns false when the engine is stopped or the event ring is full.
+    @discardableResult
+    public func cut(
+        _ mode: CutMode = .stutter, division: CutDivision = .sixteenth, steps: Int = 4, amount: Double = 0.5,
+        seed: Int = 0
+    ) -> Bool {
+        core?.cut(mode, division: division, steps: steps, amount: amount, seed: seed) ?? false
+    }
+
+    // MARK: Drop tie-in
+
+    /// Schedules the sampled-voice riser (`VocalFX.riser`) that climbs into `dropStep`, an absolute song step. For a
+    /// drop arranger: call it a bar or two ahead. Notes already in the past are dropped by the core. Returns the
+    /// number scheduled, 0 when the engine is stopped.
+    @discardableResult
+    public func scheduleVocalRiser(
+        intoDropAt dropStep: Int, steps: Int = 16, pitch: Int = 67, vowel: VocalVowel = .ah
+    ) -> Int {
+        schedule(VocalFX.riser(endStep: dropStep, steps: steps, pitch: pitch, vowel: vowel))
+    }
+
+    /// Schedules the stutter that tightens (eighth, sixteenth, thirty-second) into `dropStep`, an absolute song step.
+    @discardableResult
+    public func scheduleStutterIntoDrop(at dropStep: Int, beats: Int = 1, seed: Int = 0) -> Int {
+        schedule(VocalFX.stutterIntoDrop(dropStep: dropStep, beats: beats, seed: seed))
+    }
+
+    private func schedule(_ notes: [ScheduledNote]) -> Int {
+        guard let core else { return 0 }
+        for note in notes { core.schedule(note) }
+        return notes.count
     }
 
     // MARK: Transport

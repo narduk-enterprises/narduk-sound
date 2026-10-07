@@ -1,0 +1,39 @@
+{
+  "samples": "vocalsamples.bin",
+  "sources": [
+    {
+      "name": "VocalSet: A Singing Voice Dataset",
+      "author": "Julia Wilkins, Prem Seetharaman, Alison Wahl, Bryan Pardo",
+      "url": "https://zenodo.org/records/1193957",
+      "doi": "10.5281/zenodo.1193957",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "modified": true,
+      "files": [
+        "scales/straight/f2_scales_straight_a.wav",
+        "scales/straight/f2_scales_straight_o.wav",
+        "scales/straight/f2_scales_straight_u.wav",
+        "scales/straight/f2_scales_straight_e.wav",
+        "scales/straight/f2_scales_straight_i.wav",
+        "scales/vibrato/f2_scales_vibrato_a.wav",
+        "scales/vibrato/f2_scales_vibrato_o.wav",
+        "scales/vibrato/f2_scales_vibrato_u.wav",
+        "scales/vibrato/f2_scales_vibrato_e.wav",
+        "scales/vibrato/f2_scales_vibrato_i.wav",
+        "scales/belt/f2_scales_belt_a.wav",
+        "scales/belt/f2_scales_belt_o.wav",
+        "scales/belt/f2_scales_belt_u.wav",
+        "scales/belt/f2_scales_belt_e.wav",
+        "scales/belt/f2_scales_belt_i.wav",
+        "excerpts/straight/f2_row_straight.wav",
+        "excerpts/vibrato/f2_row_vibrato.wav",
+        "excerpts/straight/f2_dona_straight.wav",
+        "excerpts/vibrato/f2_dona_vibrato.wav",
+        "scales/fast_forte/f2_scales_c_fast_forte_a.wav",
+        "scales/fast_forte/f2_scales_c_fast_forte_o.wav",
+        "scales/fast_piano/f2_scales_c_fast_piano_a.wav"
+      ]
+    }
+  ],
+  "indent": null
+}

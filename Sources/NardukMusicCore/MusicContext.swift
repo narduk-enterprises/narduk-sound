@@ -25,6 +25,10 @@ extension Instrument {
         case .bassGuitar: 16
         case .strum: 17
         case .electricStrum: 18
+        case .vocal: 19
+        case .vocalChop: 20
+        case .cut: 21
+        case .vocalSample: 22
         }
     }
 }

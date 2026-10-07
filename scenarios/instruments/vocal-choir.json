@@ -1,0 +1,67 @@
+{
+  "name": "vocal-choir",
+  "seed": 1641,
+  "genre": "chill",
+  "bpm": 100,
+  "seconds": 9,
+  "conductor": false,
+  "notes": [
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 57,
+      "length": 2.2,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.8
+    },
+    {
+      "time": 0.0,
+      "instrument": "vocal",
+      "pitch": 64,
+      "length": 2.2,
+      "vowel": "ah",
+      "style": "choir",
+      "velocity": 0.7,
+      "register": 0.8
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocal",
+      "pitch": 53,
+      "length": 2.2,
+      "vowel": "oh",
+      "style": "choir",
+      "velocity": 0.8
+    },
+    {
+      "time": 2.4,
+      "instrument": "vocal",
+      "pitch": 60,
+      "length": 2.2,
+      "vowel": "oh",
+      "style": "choir",
+      "velocity": 0.7,
+      "register": 0.8
+    },
+    {
+      "time": 4.8,
+      "instrument": "vocal",
+      "pitch": 55,
+      "length": 2.4,
+      "vowel": "oo",
+      "style": "choir",
+      "velocity": 0.8
+    },
+    {
+      "time": 4.8,
+      "instrument": "vocal",
+      "pitch": 62,
+      "length": 2.4,
+      "vowel": "ee",
+      "style": "choir",
+      "velocity": 0.6,
+      "register": 1
+    }
+  ]
+}

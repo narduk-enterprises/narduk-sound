@@ -20,12 +20,20 @@
             case .acousticGuitar, .strum: 0.25
             case .electricGuitar, .electricStrum: 0.75
             case .bassGuitar: 0.58
+            case .vocal, .vocalChop, .vocalSample: 0.92
+            case .cut: 0.84
             }
+        }
+
+        /// The instruments that get a pad: the same set as the Canvas `pads`. The vocals (#1641) and the master cut have
+        /// no pad yet: adding them would reflow every app's grid and its golden image.
+        static let instruments = Instrument.allCases.filter {
+            ![.vocal, .vocalChop, .vocalSample, .cut].contains($0)
         }
 
         /// The MSL tables: the palette position and the brightness lane of each pad, in `Instrument.allCases` order.
         static var tables: String {
-            let all = Instrument.allCases
+            let all = instruments
             let positions = all.map { String(position($0)) }.joined(separator: ", ")
             let lanes = all.map { String($0.index) }.joined(separator: ", ")
             return """

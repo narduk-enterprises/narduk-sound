@@ -714,12 +714,17 @@ public struct DropConductor: Sendable {
             voicing: settings.effectiveVoicing, comping: settings.effectiveComping)
         if ambient {
             out += AmbientArrangement.notes(context)
+            out += VocalArrangement.ambientNotes(
+                context,
+                tones: GenreArrangement.chord(context, degree: context.chord, base: context.keyRoot - 12, seventh: true)
+            )
             if barStep == 0, barInPhrase == 0 {
                 note(legend: "ambient · \(section.label(in: .ambient))", replacingPrefix: "ambient ·")
             }
             return
         }
         out += section.isDrop ? GenreArrangement.drop(genre, context) : GenreArrangement.bed(genre, context)
+        out += VocalArrangement.notes(context)
         if let comping = context.comping {
             // Held back until the event cues have taken their places, so the chord layer never moves a cue.
             compNotes = GenreArrangement.comp(context, pattern: comping)
