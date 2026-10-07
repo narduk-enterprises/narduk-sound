@@ -7,12 +7,16 @@ import Testing
 /// The ambient family end to end: a scenario's signal level in, swells and settles out. Set
 /// `NARDUK_AMBIENT_DEMO_DIR` to also write the render as `ambient-family-demo.wav`.
 @Suite struct AmbientFamilyTests {
-    /// Fingerprints per platform. A 150 s render runs the hall's feedback loops long enough for a last-bit libm
-    /// difference to show, so darwin accepts the value both a developer Mac (macOS 27) and the CI runner produce.
-    static let goldens: [String: Set<UInt64>] = [
-        "darwin-arm64": [0x1fd9_a80d_a1c2_716d, 0x6dad_7bc9_c2a3_30da],
-        "linux-x86_64": [0x010e_8b77_6615_be55],
+    /// The exact fingerprint, Linux only (one container image). The same 150 s render gave a different fingerprint on
+    /// every macOS machine and run that has checked it (narduk-libs#1610), so macOS compares the loudness envelope
+    /// below instead: it must stay within `envelopeToleranceDB` of it, window by window.
+    static let linuxFingerprint: UInt64 = 0x010e_8b77_6615_be55
+
+    /// RMS of the left channel in dB over each 10 s window of the 150 s render.
+    static let envelopeDB: [Double] = [
+        -22.4, -19.2, -22.8, -19.0, -19.4, -16.7, -17.3, -13.5, -11.0, -12.4, -11.3, -12.8, -17.2, -17.1, -19.7,
     ]
+    static let envelopeToleranceDB = 4.0
 
     static func scenario() throws -> MusicScenario {
         let url = URL(fileURLWithPath: #filePath)
@@ -110,11 +114,20 @@ import Testing
         #expect(electronic.audio != Self.run(scenario, seconds: 20).audio)
     }
 
-    @Test func theAmbientRenderMatchesItsGoldenFingerprint() throws {
+    @Test func theAmbientRenderMatchesItsGolden() throws {
         let run = Self.song
-        let actual = String(format: "0x%016llx", run.audio.fingerprint)
-        let golden = try #require(Self.goldens[GoldenRenderTests.platform])
-        #expect(golden.contains(run.audio.fingerprint), "\(GoldenRenderTests.platform) fingerprint \(actual)")
+        #if os(Linux)
+            let actual = String(format: "0x%016llx", run.audio.fingerprint)
+            #expect(run.audio.fingerprint == Self.linuxFingerprint, "linux-x86_64 fingerprint \(actual)")
+        #else
+            for (window, expected) in Self.envelopeDB.enumerated() {
+                let measured =
+                    20 * log10(Double(Self.rms(run.audio, from: Double(window * 10), to: Double(window * 10 + 10))))
+                #expect(
+                    abs(measured - expected) <= Self.envelopeToleranceDB,
+                    "window \(window * 10)-\(window * 10 + 10) s: \(measured) dB, expected \(expected) dB")
+            }
+        #endif
         if let directory = ProcessInfo.processInfo.environment["NARDUK_AMBIENT_DEMO_DIR"] {
             let url = URL(fileURLWithPath: directory).appendingPathComponent("ambient-family-demo.wav")
             try AudioFileWriter.wavData(run.audio).write(to: url)
