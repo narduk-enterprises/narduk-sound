@@ -7,6 +7,13 @@ shipped on narduk-libs tags.
 
 ### Added
 
+- Play across output changes (narduk-sound#6, #7): a route, device or
+  sample-rate change rebuilds only the `AVAudioEngine` graph and keeps the
+  synth and `currentStep`, instead of restarting at step 0; interruptions and a
+  headphone unplug pause (the cursor stays) and `resume()` carries on. iOS
+  `.playback` takes the long-form audio route-sharing policy for AirPlay 2.
+  `DropEngine.routeInfo` publishes `RouteInfo` (`outputLatency`, `isAirPlay`).
+  `mediaServicesWereReset` rebuilds the engine around the same song.
 - Song videos (`NardukSoundVisuals/Video`): `SoundVisualTimelineRecorder` logs
   what the lights drew from while a song records (the music context at 60 Hz,
   the light, its look, calm) into a compact `SoundVisualTimeline` file, and

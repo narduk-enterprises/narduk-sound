@@ -39,7 +39,8 @@ public enum DropEngineError: LocalizedError {
 /// Main actor side: a ~60 Hz timer asks `noteProvider` for notes ~100 ms ahead of the
 /// render position, pushes them through a lock-free ring, and publishes `latestSound` and `latestMusic`.
 /// Render side: the source node calls `DropSynthCore.render`, which never allocates or locks.
-/// Steps restart at 0 on every `start()`.
+/// Steps restart at 0 on every `start()`; an output change (route, device, sample rate) or a media-services reset
+/// rebuilds only the `AVAudioEngine` graph, so the synth and the step carry on.
 @MainActor @Observable public final class DropEngine {
     /// BPM changes apply at the next bar.
     public var settings: SongSettings {
@@ -99,6 +100,9 @@ public enum DropEngineError: LocalizedError {
     /// The iOS audio-session setup `start()` applies. Set it before `start()`; ignored on macOS.
     public var sessionMode: SessionMode = .playback
 
+    /// Where the sound is going (output latency, AirPlay), refreshed on `start()` and on every route change.
+    public private(set) var routeInfo = RouteInfo()
+
     public private(set) var isRecording = false
     public private(set) var gains: [MixerChannel: Float] = [.drums: 1, .bass: 1, .fx: 1]
     public private(set) var mutes: Set<MixerChannel> = []
@@ -114,10 +118,11 @@ public enum DropEngineError: LocalizedError {
     /// The timer period of the note pump and analysis frames.
     public static let frameInterval = 1.0 / 60
 
-    @ObservationIgnored private let engine = AVAudioEngine()
+    /// Replaced only after `mediaServicesWereReset`, when every AVFoundation object the app holds is dead.
+    @ObservationIgnored private var engine = AVAudioEngine()
     /// Where the synth lands before the output stage: the recording taps it, so `mutesHardwareOutput` can silence the
     /// main mixer (the speaker path) without silencing the capture. Graph: source -> capture mixer -> main mixer -> out.
-    @ObservationIgnored private let captureMixer = AVAudioMixerNode()
+    @ObservationIgnored private var captureMixer = AVAudioMixerNode()
     @ObservationIgnored private var sourceNode: AVAudioSourceNode?
     @ObservationIgnored private var core: DropSynthCore?
     @ObservationIgnored private var analyzer: SoundAnalyzer?
@@ -197,21 +202,8 @@ public enum DropEngineError: LocalizedError {
         stopTask = nil
         if engine.isRunning { engine.stop() }
         try activateAudioSession()
-        if let node = sourceNode {
-            engine.disconnectNodeOutput(node)
-            engine.detach(node)
-            sourceNode = nil
-        }
 
-        let sampleRate: Double
-        if let offline = offlineFormat {
-            // Tests: the graph is pulled by `renderOffline(frames:)`, so no output device is needed or touched.
-            try engine.enableManualRenderingMode(.offline, format: offline, maximumFrameCount: Self.offlineSliceFrames)
-            sampleRate = offline.sampleRate
-        } else {
-            let hardware = engine.outputNode.outputFormat(forBus: 0)
-            sampleRate = hardware.sampleRate > 0 ? hardware.sampleRate : 48_000
-        }
+        let sampleRate = try prepareOutput()
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else {
             throw DropEngineError.noOutputFormat
         }
@@ -222,14 +214,7 @@ public enum DropEngineError: LocalizedError {
             core.setMuted(mutes.contains(channel), for: channel.bus)
         }
         core.setMasterVolume(min(max(masterVolume, 0), 1))
-
-        let node = AVAudioSourceNode(format: format, renderBlock: DropEngine.makeRenderBlock(core))
-        engine.attach(node)
-        if captureMixer.engine == nil { engine.attach(captureMixer) }
-        engine.connect(node, to: captureMixer, format: format)
-        engine.connect(captureMixer, to: engine.mainMixerNode, format: format)
-        applyHardwareVolume()
-        engine.prepare()
+        let node = installGraph(source: core, format: format)
 
         self.core = core
         sourceNode = node
@@ -251,8 +236,102 @@ public enum DropEngineError: LocalizedError {
             throw error
         }
         isRunning = true
+        refreshRouteInfo()
         observeConfigurationChanges()
         startTimer()
+    }
+
+    /// Readies the output for a graph and returns the sample rate the synth should run at: the output device's, or
+    /// the offline test format's (pulled by `renderOffline(frames:)`, so no output device is needed or touched).
+    private func prepareOutput() throws -> Double {
+        if let offline = offlineFormat {
+            try engine.enableManualRenderingMode(.offline, format: offline, maximumFrameCount: Self.offlineSliceFrames)
+            return offline.sampleRate
+        }
+        let hardware = engine.outputNode.outputFormat(forBus: 0)
+        return hardware.sampleRate > 0 ? hardware.sampleRate : 48_000
+    }
+
+    /// Replaces the source node with one that renders `core` at `format` and wires the capture and main mixers:
+    /// source -> capture mixer -> main mixer -> out. The engine must be stopped. The mixers convert between `format`
+    /// (the synth's rate) and whatever rate the output device runs at, so one synth can follow a device change.
+    private func installGraph(source core: DropSynthCore, format: AVAudioFormat) -> AVAudioSourceNode {
+        if let old = sourceNode {
+            engine.disconnectNodeOutput(old)
+            engine.detach(old)
+            sourceNode = nil
+        }
+        let node = AVAudioSourceNode(format: format, renderBlock: DropEngine.makeRenderBlock(core))
+        engine.attach(node)
+        if captureMixer.engine == nil { engine.attach(captureMixer) }
+        engine.connect(node, to: captureMixer, format: format)
+        engine.connect(captureMixer, to: engine.mainMixerNode, format: format)
+        applyHardwareVolume()
+        engine.prepare()
+        sourceNode = node
+        return node
+    }
+
+    /// Rebuilds the engine graph around the running synth after the system tore it down, and starts the engine again
+    /// unless the song is held. The synth, `currentStep`, the note cursor and the events already in the synth's ring
+    /// are untouched, so the song continues from the same step. If the engine will not start (no output yet) the song
+    /// is held, and `resume()` retries.
+    func rebuildGraph(start startEngine: Bool) {
+        guard let core else { return }
+        if engine.isRunning { engine.stop() }
+        do {
+            _ = try prepareOutput()
+            guard let format = AVAudioFormat(standardFormatWithSampleRate: core.sampleRate, channels: 2) else {
+                throw DropEngineError.noOutputFormat
+            }
+            _ = installGraph(source: core, format: format)
+            pumpNotes()  // re-prime the look-ahead window; a no-op when the ring already covers it
+            if startEngine { try engine.start() }
+        } catch {
+            isPaused = true
+            timer?.invalidate()
+            timer = nil
+        }
+        refreshRouteInfo()
+    }
+
+    /// The output device or its sample rate changed (an AirPlay switch, a Bluetooth connect, a rate change): rebuild
+    /// the graph and carry on at the same step.
+    func handleConfigurationChange() {
+        switch GraphRebuildResponse.response(isRunning: isRunning, isPaused: isPaused) {
+        case .none: return
+        case .rebuildAndPlay: rebuildGraph(start: true)
+        case .rebuildHeld: rebuildGraph(start: false)
+        }
+    }
+
+    /// The audio daemon restarted, which invalidates every AVFoundation object: make a new engine and mixer, then
+    /// rebuild around the same synth, so the song keeps its place.
+    func handleMediaServicesReset() {
+        let response = GraphRebuildResponse.response(isRunning: isRunning, isPaused: isPaused)
+        if let recorder {
+            // The tap died with the engine; close the file with what was captured.
+            self.recorder = nil
+            isRecording = false
+            Task.detached { _ = recorder.finish() }
+        }
+        if let observer = configurationObserver { NotificationCenter.default.removeObserver(observer) }
+        configurationObserver = nil
+        sourceNode = nil
+        engine = AVAudioEngine()
+        captureMixer = AVAudioMixerNode()
+        try? activateAudioSession()
+        guard response != .none else { return }
+        rebuildGraph(start: response == .rebuildAndPlay)
+        observeConfigurationChanges()
+    }
+
+    fileprivate func refreshRouteInfo() {
+        let info =
+            offlineFormat == nil
+            ? RouteInfo.current(engine: engine)
+            : RouteInfo(outputLatency: engine.outputNode.presentationLatency)
+        if info != routeInfo { routeInfo = info }
     }
 
     /// Holds the song where it is: the audio engine pauses (the render thread stops, so the playhead and the synth's
@@ -267,6 +346,7 @@ public enum DropEngineError: LocalizedError {
 
     public func resume() throws {
         guard isRunning, isPaused else { return }
+        try reactivateAudioSession()
         try engine.start()
         isPaused = false
         startTimer()
@@ -298,6 +378,10 @@ public enum DropEngineError: LocalizedError {
 
     /// The main mixer's output volume, for tests.
     var hardwareVolume: Float { engine.mainMixerNode.outputVolume }
+
+    /// The running synth's identity and sample rate, for tests that a graph rebuild keeps the same synth.
+    var synthIdentity: ObjectIdentifier? { core.map { ObjectIdentifier($0) } }
+    var synthSampleRate: Double? { core?.sampleRate }
 
     /// Set before `start()` to run the graph in manual offline rendering, pulled by `renderOffline(frames:)`
     /// instead of an output device, so a test is the same on a laptop and a CI runner with no live audio.
@@ -379,7 +463,9 @@ public enum DropEngineError: LocalizedError {
         let latency = engine.outputNode.presentationLatency + Double(core.lastBufferFrames) / core.sampleRate
         let audible = max(core.renderedStepPosition - latency / secondsPerStep, 0)
         audibleStepPosition = audible
-        let step = Int(audible)
+        // Never backwards: a route with a longer latency (AirPlay) would otherwise pull the step back; it holds until
+        // the sound catches up.
+        let step = max(Int(audible), currentStep)
         if step != currentStep { currentStep = step }
         pumpNotes()
         publishFrame(core: core)
@@ -429,14 +515,7 @@ public enum DropEngineError: LocalizedError {
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                // The output device or its sample rate changed: rebuild the graph and carry on.
-                guard let self, self.isRunning else { return }
-                self.isRunning = false
-                self.timer?.invalidate()
-                self.timer = nil
-                try? self.start()
-            }
+            MainActor.assumeIsolated { self?.handleConfigurationChange() }
         }
     }
 
@@ -461,20 +540,34 @@ public enum DropEngineError: LocalizedError {
 // MARK: iOS audio session
 
 extension DropEngine {
-    /// Sets the category, activates the session (before the hardware format is read) and listens for interruptions
-    /// and unplugged outputs. A no-op on macOS.
+    /// Sets the category, activates the session (before the hardware format is read) and listens for interruptions,
+    /// route changes and media-services resets. A no-op on macOS.
+    ///
+    /// `.playback` on iOS asks for the long-form audio route-sharing policy, which is what lets the song play to an
+    /// AirPlay 2 speaker or a HomePod group; it needs `UIBackgroundModes: audio` in the app.
     fileprivate func activateAudioSession() throws {
         #if !os(macOS)
             let session = AVAudioSession.sharedInstance()
             switch sessionMode {
             case .playback:
-                try session.setCategory(.playback, mode: .default)
+                #if os(iOS)
+                    try session.setCategory(.playback, mode: .default, policy: .longFormAudio, options: [])
+                #else
+                    try session.setCategory(.playback, mode: .default)
+                #endif
             case .playAndRecord:
                 try session.setCategory(
                     .playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
             }
             try session.setActive(true)
             observeAudioSession(session)
+        #endif
+    }
+
+    /// Brings the session back after an interruption or a deactivation; a no-op on macOS.
+    fileprivate func reactivateAudioSession() throws {
+        #if !os(macOS)
+            try AVAudioSession.sharedInstance().setActive(true)
         #endif
     }
 
@@ -499,25 +592,42 @@ extension DropEngine {
                 center.addObserver(
                     forName: AVAudioSession.routeChangeNotification, object: session, queue: .main
                 ) { [weak self] note in
-                    let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
-                    // Headphones pulled out: stop rather than blast the speaker.
-                    guard reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue else { return }
-                    MainActor.assumeIsolated { self?.stop() }
+                    let reason = RouteChangeReason(
+                        rawValue: note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt)
+                    MainActor.assumeIsolated { self?.handleRouteChange(reason: reason) }
+                })
+            sessionObservers.append(
+                center.addObserver(
+                    forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.handleMediaServicesReset() }
                 })
         }
     #endif
 
-    fileprivate func handleInterruption(began: Bool, shouldResume: Bool) {
+    /// The route changed: keep playing through a route configuration change, pause when the old output vanished
+    /// (headphones pulled, a speaker dropped off AirPlay), and publish the new `routeInfo`.
+    func handleRouteChange(reason: RouteChangeReason) {
+        switch RouteChangeResponse.response(reason: reason, isRunning: isRunning, isPaused: isPaused) {
+        case .pause: pause()
+        case .keepPlaying: break
+        }
+        refreshRouteInfo()
+    }
+
+    /// An interruption (a call, Siri, an alarm) holds the song where it is; its end resumes from the same step when
+    /// the system says to. The engine is not stopped, so the cursor is intact.
+    func handleInterruption(began: Bool, shouldResume: Bool) {
         switch InterruptionResponse.response(
-            began: began, shouldResume: shouldResume, wasRunning: isRunning,
+            began: began, shouldResume: shouldResume, wasRunning: isRunning && !isPaused,
             pausedByInterruption: pausedByInterruption)
         {
         case .pause:
             pausedByInterruption = true
-            stop()
+            pause()
         case .resume:
             pausedByInterruption = false
-            try? start()
+            try? resume()
         case .none:
             if !began { pausedByInterruption = false }
         }
