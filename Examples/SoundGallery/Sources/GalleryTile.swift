@@ -24,9 +24,13 @@ struct GalleryTile: Identifiable {
         [tunnel] + spectacle + intense
             + Visualizer.all.map { visualizer in
                 GalleryTile(id: visualizer.id) { context in
-                    AnyView(
-                        Canvas { canvas, size in visualizer.draw(&canvas, size, context.frame) }
-                            .accessibilityLabel(visualizer.id))
+                    let palette = context.model.cardPalette
+                    return AnyView(
+                        Canvas { canvas, size in
+                            _ = context.tick
+                            visualizer.draw(&canvas, size, context.frame, palette)
+                        }
+                        .accessibilityLabel(visualizer.id))
                 }
             }
             + SoundVisualizerKind.allCases.map { kind in

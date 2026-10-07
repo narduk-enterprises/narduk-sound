@@ -71,6 +71,9 @@
         @Test(.enabled(if: optimized, "allocation counts need an optimized build: swift test -c release"))
         @MainActor func updatingABusySongNeverAllocates() throws {
             let state = SoundVisualState(seed: 7)
+            // A tuned look (preset colors, hue, saturation, brightness, cycle) must not allocate either.
+            state.look = SoundPaletteLook(
+                colors: SoundPalettePreset.sunset.colors, hueShift: 30, saturation: 1.2, brightness: 0.9, cycle: 20)
             // Frames and contexts are built before arming: the caller owns them, the state only reads.
             let frames = (0..<8).map { Script.frame(UInt64($0 + 1), level: 0.2 + Float($0) * 0.1) }
             let sections = SongSection.allCases

@@ -21,8 +21,11 @@
             WobbleTunnelTests.grid(pixels, width: size.width, height: size.height, columns: 1, rows: 1).reduce(0, +) / 3
         }
 
-        static func render(_ kind: IntenseKind, frames: Int = 1, calm: Bool = false) throws -> [UInt8] {
+        static func render(
+            _ kind: IntenseKind, frames: Int = 1, calm: Bool = false, look: SoundPaletteLook = .neutral
+        ) throws -> [UInt8] {
             let state = SoundVisualState(seed: 42)
+            state.look = look
             var limiter = IntenseFlashLimiter()
             var now = 1.0
             var frame = 0

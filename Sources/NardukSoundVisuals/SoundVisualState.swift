@@ -154,8 +154,25 @@ public final class SoundVisualState {
     /// How wild the stage is: the drive blended with the music's energy, toned down in calm mode.
     public private(set) var wild: Float = 0
     public private(set) var calm = false
-    /// The palette after the drive-driven saturation.
+    /// The palette after the drive-driven saturation and the `look`'s knobs.
     public private(set) var palette: SoundPalette
+    /// Colors and knobs applied on top of the section-driven palette, for every visualizer at once. Default: none.
+    public var look = SoundPaletteLook.neutral {
+        didSet {
+            // Ease from what is on screen to the new look instead of snapping (`update` advances it).
+            if look != oldValue {
+                lookFrom = palette
+                lookT = 0
+            }
+        }
+    }
+    /// How long a change of `look` takes to ease in, in seconds.
+    public var lookEaseDuration: Float = 0.6
+    /// True while a change of `look` is still easing in. A host that redraws only on demand keeps drawing (and
+    /// calling `update`) until this is false, even when the sound is paused.
+    public var isEasingLook: Bool { lookT < 1 }
+    private var lookFrom: SoundPalette
+    private var lookT: Float = 1
     private var basePalette: SoundPalette
     private var paletteFrom: SoundPalette
     private var paletteTo: SoundPalette
@@ -190,6 +207,7 @@ public final class SoundVisualState {
         basePalette = initial
         paletteFrom = initial
         paletteTo = initial
+        lookFrom = initial
     }
 
     // The beat clock.
@@ -491,6 +509,13 @@ public final class SoundVisualState {
         }
     }
 
+    /// The base palette with the look's knobs and the drive-driven saturation.
+    private func shaped(_ base: SoundPalette) -> SoundPalette {
+        look.isNeutral
+            ? base.saturated(0.45 + 0.62 * wild)
+            : look.applied(to: base, time: time).saturated(0.45 + 0.62 * wild)
+    }
+
     private func updateMotion(dt: Float, deltaBeats: Float, music: MusicContext?) {
         // Energy: the conductor's when there is one, else the signal's level.
         let target = music?.energy ?? level
@@ -504,7 +529,13 @@ public final class SoundVisualState {
             let s = paletteT * paletteT * (3 - 2 * paletteT)
             basePalette = paletteFrom.mixed(with: paletteTo, s)
         }
-        palette = basePalette.saturated(0.45 + 0.62 * wild)
+        let shapedTarget = shaped(basePalette)
+        if lookT < 1 {
+            lookT = min(1, lookT + dt / max(lookEaseDuration, 0.001))
+            palette = lookFrom.mixedPerceptually(with: shapedTarget, lookT * lookT * (3 - 2 * lookT))
+        } else {
+            palette = shapedTarget
+        }
 
         // Tunnel travel: one ring per beat at speed 1, a kick pushes forward.
         let speed: Float

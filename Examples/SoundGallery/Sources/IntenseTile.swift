@@ -14,6 +14,7 @@ struct IntenseTile: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let _ = model.sync(state)
         if IntenseView.isSupported {
             IntenseView(kind, state: state, calm: reduceMotion) { model.latestInput }
                 .environment(\.soundFramesPerSecond, framesPerSecond)

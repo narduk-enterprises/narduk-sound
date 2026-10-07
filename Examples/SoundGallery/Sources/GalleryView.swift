@@ -22,7 +22,9 @@ struct GalleryView: View {
     private let tiles = GalleryTile.all
 
     /// The render budget: 60 fps while the app is on screen and playing, nothing otherwise.
-    private var isDrawing: Bool { model.isRunning && scenePhase == .active }
+    private var isDrawing: Bool {
+        scenePhase == .active && ((model.isRunning && !model.isPaused) || model.repaintHold)
+    }
 
     var body: some View {
         Group {
@@ -49,6 +51,15 @@ struct GalleryView: View {
             {
                 model.song.style = style
             }
+            // `-palette random|<preset id>` and `-hue <degrees>` set the palette at launch, for screenshots.
+            if let name = defaults.string(forKey: "palette") {
+                if name == "random" {
+                    model.rollRandom(seed: UInt64(defaults.integer(forKey: "paletteSeed")))
+                } else if let preset = SoundPalettePreset(rawValue: name) {
+                    model.choose(preset)
+                }
+            }
+            if defaults.object(forKey: "hue") != nil { model.look.hueShift = Float(defaults.double(forKey: "hue")) }
             if let tileID = defaults.string(forKey: "fullscreen") { open(tileID) }
             if let path = defaults.string(forKey: "autofile") {
                 model.input = .file
@@ -152,6 +163,10 @@ struct GalleryView: View {
             step(1, from: index)
             return .handled
         }
+        .onKeyPress(.space) {
+            model.togglePause()
+            return .handled
+        }
         .onKeyPress(.escape) {
             fullscreenID = nil
             return .handled
@@ -233,11 +248,12 @@ struct GalleryView: View {
             .labelsHidden()
             .disabled(model.isRunning)
             if model.input == .demo { songControls }
+            PaletteControls(model: model)
             if model.input == .demo { PromptView(model: model) }
             HStack {
-                Button(model.isRunning ? "Stop" : (model.input == .file ? "Choose file…" : "Play")) {
+                Button(playTitle) {
                     if model.isRunning {
-                        model.stop()
+                        model.togglePause()
                     } else if model.input == .file {
                         importing = true
                     } else {
@@ -245,11 +261,18 @@ struct GalleryView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.space, modifiers: [])
+                if model.isRunning { Button("Stop") { model.stop() } }
                 Text(model.status).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
                 Spacer(minLength: 0)
             }
         }
         .padding(12)
+    }
+
+    private var playTitle: String {
+        if model.isRunning { return model.isPaused ? "Resume" : "Pause" }
+        return model.input == .file ? "Choose file…" : "Play"
     }
 
     /// The demo song's style (every genre, the guitars, the ambient family) and a new seed.

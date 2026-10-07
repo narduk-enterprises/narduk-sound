@@ -68,11 +68,17 @@ targets:
       - Tests
       - Sources/GallerySong.swift
       - Sources/SongPlayer.swift
+      - Sources/GalleryModel.swift
+      - Sources/Visualizers.swift
     dependencies:
       - package: NardukLibs
         product: NardukMusicCore
       - package: NardukLibs
         product: NardukMusicEngine
+      - package: NardukLibs
+        product: NardukSoundAnalysis
+      - package: NardukLibs
+        product: NardukSoundVisuals
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

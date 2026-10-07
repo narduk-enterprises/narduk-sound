@@ -21,8 +21,9 @@
         static let tolerance = 3.0
 
         /// A busy mid-song state: a kick on every beat, a snare on the backbeat, a wobble, a drop.
-        static func busyState(silent: Bool = false) -> SoundVisualState {
+        static func busyState(silent: Bool = false, look: SoundPaletteLook = .neutral) -> SoundVisualState {
             let state = SoundVisualState(seed: 42)
+            state.look = look
             var now = 100.0
             var notes = NoteCounters()
             // A rising C minor arpeggio, one note every ten frames, each held for twenty-five.

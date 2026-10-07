@@ -13,7 +13,8 @@ struct ParticleFieldTile: View {
     @State private var state = SoundVisualState()
 
     var body: some View {
-        ParticleFieldView(state: state) { model.latestInput }
+        model.sync(state)
+        return ParticleFieldView(state: state) { model.latestInput }
             .environment(\.soundFramesPerSecond, framesPerSecond)
             .accessibilityLabel("Particle field")
     }
@@ -25,7 +26,8 @@ struct KaleidoscopeTile: View {
     @State private var state = SoundVisualState()
 
     var body: some View {
-        BeatKaleidoscopeView(state: state) { model.latestInput }
+        model.sync(state)
+        return BeatKaleidoscopeView(state: state) { model.latestInput }
             .environment(\.soundFramesPerSecond, framesPerSecond)
             .accessibilityLabel("Beat kaleidoscope")
     }
@@ -39,6 +41,7 @@ struct ShaderPackTile: View {
     @State private var state = SoundVisualState()
 
     var body: some View {
+        let _ = model.sync(state)
         if ShaderPackView.isSupported {
             ShaderPackView(kind, state: state) { model.latestInput }
                 .environment(\.soundFramesPerSecond, framesPerSecond)

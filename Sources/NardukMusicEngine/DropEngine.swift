@@ -46,6 +46,8 @@ public enum DropEngineError: LocalizedError {
     }
 
     public private(set) var isRunning = false
+    /// True between `pause()` and `resume()`; the song keeps its place and `isRunning` stays true.
+    public private(set) var isPaused = false
     /// The step currently audible (output-latency compensated).
     public private(set) var currentStep = 0
     /// What the sound is doing, updated ~60 Hz on the main actor (`sequence` advances once per publish). Not
@@ -211,10 +213,28 @@ public enum DropEngineError: LocalizedError {
         startTimer()
     }
 
+    /// Holds the song where it is: the audio engine pauses (the render thread stops, so the playhead and the synth's
+    /// state freeze) and the published frame stays the last one. `resume()` carries on from the same step.
+    public func pause() {
+        guard isRunning, !isPaused else { return }
+        isPaused = true
+        timer?.invalidate()
+        timer = nil
+        engine.pause()
+    }
+
+    public func resume() throws {
+        guard isRunning, isPaused else { return }
+        try engine.start()
+        isPaused = false
+        startTimer()
+    }
+
     /// Fades out over 30 ms, then stops the engine: no click.
     public func stop() {
         guard isRunning else { return }
         isRunning = false
+        isPaused = false
         timer?.invalidate()
         timer = nil
         noteTracker.reset()

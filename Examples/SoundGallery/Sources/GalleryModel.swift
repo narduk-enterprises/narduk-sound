@@ -22,6 +22,11 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     /// What the demo source plays (the picker sets it; `newSong()` rerolls the seed).
     var song = GallerySong()
     private(set) var isRunning = false
+    /// Paused: the source holds its place and the cards keep their last frame, but still repaint on a color change.
+    private(set) var isPaused = false
+    /// True for a moment after the look changes, so a stopped or paused gallery keeps drawing until the ease ends.
+    private(set) var repaintHold = false
+    @ObservationIgnored private var repaintTask: Task<Void, Never>?
     private(set) var status = "Pick a source and press Play."
 
     @ObservationIgnored private var source: (any SoundFrameSource)?
@@ -47,11 +52,78 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     /// display frame, and each card polling for itself would smooth the analyzer's output once per card.
     @ObservationIgnored let visualState = SoundVisualState()
 
+    /// The palette preset behind `look` (the knobs layer on top of it); nil after a random roll.
+    var preset: SoundPalettePreset? = .neon
+
+    /// Colors and knobs for every card; mirrored onto the shared state, which every visualizer draws from.
+    var look = SoundPaletteLook.neutral {
+        didSet {
+            visualState.look = look
+            holdRepaint()
+        }
+    }
+
+    private func holdRepaint() {
+        repaintHold = true
+        repaintTask?.cancel()
+        repaintTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            if !Task.isCancelled { self?.repaintHold = false }
+        }
+    }
+
+    /// Play/Pause as one toggle: a song or a file keeps its playhead; the microphone just freezes the picture.
+    func togglePause() {
+        guard isRunning else { return }
+        if isPaused {
+            do {
+                try drop.resume()
+            } catch {
+                status = "Could not resume: \(error.localizedDescription)"
+                return
+            }
+            player?.play()
+            isPaused = false
+        } else {
+            drop.pause()
+            player?.pause()
+            isPaused = true
+        }
+    }
+
+    /// Copies the gallery's look onto a tile's own state. Metal and spectacle tiles advance a private state on their own
+    /// clocks, so the shared one's look never reaches them unless each tile syncs.
+    func sync(_ state: SoundVisualState) {
+        if state.look != look { state.look = look }
+    }
+
+    /// The colors the gallery's own Canvas cards (Spectrum, Scope, Levels, Radial) draw with: their classic accents until
+    /// the look changes, then the state's palette.
+    var cardPalette: SoundPalette { look.isNeutral ? GalleryPalette.classic : visualState.palette }
+
+    func choose(_ preset: SoundPalettePreset) {
+        self.preset = preset
+        look.colors = preset.colors
+    }
+
+    /// 🎲 A new harmonious palette; the knobs keep their positions.
+    func rollRandom(seed: UInt64 = UInt64.random(in: 0...UInt64.max)) {
+        preset = nil
+        look.colors = SoundPaletteLook.random(seed: seed).colors
+    }
+
+    func resetLook() {
+        preset = .neon
+        look = .neutral
+    }
+
     /// The latest frame at `date`; silence while nothing plays. Also advances `visualState` (with the demo song's
     /// `MusicContext`; other sources drive the visualizers from their frames alone, as the contract allows).
     func poll(at date: Date) -> SoundFrame {
         let now = date.timeIntervalSinceReferenceDate
-        if let source {
+        if isPaused {
+            // Hold the last frame; the state still advances below so a color change eases in.
+        } else if let source {
             latest = source.poll(time: now - clockOrigin)
         } else {
             latest = SoundFrame()
@@ -81,6 +153,7 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     }
 
     func stop() {
+        isPaused = false
         drop.stop()
         player?.stop()
         tap?.stop()
