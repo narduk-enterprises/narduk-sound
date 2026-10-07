@@ -18,6 +18,10 @@ shipped on narduk-libs tags.
   re-encoded). A light over the GPU budget draws smaller and is scaled up, as
   on a slow screen. Beat Blaster's My Songs shares with it (beat-blaster
   `docs/video-share.md` has the measurements).
+- `ConductorDriver` (narduk-sound#5, `docs/conductor-driver.md`): one live pump
+  for `DropEngine.play(_:)`, written from a thread the render block wakes, so it
+  keeps writing with the screen off; its steps never rewind, `next()` skips to
+  another genre, and a switch's tempo lands on the switch bar.
 
 ## 0.5.0 (2026-10-07)
 

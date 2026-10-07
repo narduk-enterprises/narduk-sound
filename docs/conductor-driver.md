@@ -10,7 +10,7 @@ Four apps copy a conductor-to-synth pump with a "the step went backwards, so res
 - Controls, from any thread: `next()` (skip: a different genre from the seed's own stream, at the next bar line),
   `setGenre`, `setTempo` (next bar line), `queueDrop`, `setThresholds`, `ingest(_ signal:)`, `withConductor`.
 - Reads, from any thread: `status` (genre, bpm, pending genre, section, snapshot, track, written step) and
-  `status(heardAt:)`, which reports the genre and tempo the listener hears at an audible step.
+  `status.heard(atStep:)`, the genre and tempo the listener hears at an audible step.
 - Transport stays on `DropEngine`: `engine.play(driver)` attaches it and starts or resumes, `pause()`, `resume()`,
   `stop()`. `driver.next()` is skip. `noteProvider` stays for apps not yet migrated; a driver wins when both are set.
 
@@ -29,7 +29,7 @@ After each write the driver compares `conductor.lastSwitch` with the one it last
 `core.setTempo` at write time: the switch step is a bar line inside the look-ahead, so the render position is still
 in the bar before it, and `StepClock` lands the change exactly on the switch bar. (`OfflineRenderer` applies it once
 the step is audible, which is one bar late: the new genre's first bar plays at the old tempo. Its test records this.)
-Genre and key travel in the notes and `snapshot.track`; `status(heardAt:)` flips genre and bpm at the switch step,
+Genre and key travel in the notes and `snapshot.track`; `heard(atStep:)` flips genre and bpm at the switch step,
 and the engine echoes them into `settings` without re-sending the tempo, so a stale echo never retargets a
 pending change.
 
@@ -38,8 +38,8 @@ pending change.
 A `ConductorSource` is a value the driver owns, called on the pump thread before each write with the song time the
 write reaches (seconds of music written, summed step by step, so a tempo change never runs it backwards):
 `feed(_ conductor: inout DropConductor, time:)`, plus an optional `decorate(_ notes:conductor:)` after it (Data
-Beats' lead composer). `EnergyCurve(cycleSeconds:dropAt:level:)` is the scripted kind: SoundGallery's 32 s loop and
-Forever Loop's 150 s swell are two instances. Data that arrives on its own clock (Data Beats, Wirewatcher) calls
+Beats' lead composer). `EnergyCurve(cycleSeconds:dropAt:level:)` is the scripted kind: SoundGallery's 32 s loop (`.loop`)
+and Forever Loop's 150 s swell (`.swell`) are two instances. Data that arrives on its own clock (Data Beats, Wirewatcher) calls
 `driver.ingest(signal)` from any thread; queued signals are fed before the next write, in arrival order.
 
 ## Threading
@@ -55,4 +55,5 @@ and samples every run.
 ## DropEngineDemo
 
 `playDemo()` becomes `play(.demo())`: the same eight-bar `DemoPattern` loop, through the driver, so it neither
-rewinds nor rides the main run loop. `DropEngineDemo` stays one release as a deprecated `noteProvider` shim.
+rewinds nor rides the main run loop. `DropEngineDemo` stays one release as a `noteProvider` shim, documented as
+superseded (no `@available` deprecation, so existing callers build without warnings).
