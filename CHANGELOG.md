@@ -23,6 +23,12 @@ shipped on narduk-libs tags.
   keeps writing with the screen off; its steps never rewind, `next()` skips to
   another genre, and a switch's tempo lands on the switch bar.
 
+### Fixed
+
+- `OfflineRenderer` sends a tempo switch to the synth when it is written, so it
+  lands on the switch bar; it used to land a bar late, playing the new genre's
+  first bar at the old tempo.
+
 ## 0.5.0 (2026-10-07)
 
 ### Changed

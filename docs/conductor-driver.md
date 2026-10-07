@@ -27,8 +27,8 @@ keeps writing: it maps core step 0 to the next song bar line (`origin`), and the
 
 After each write the driver compares `conductor.lastSwitch` with the one it last applied. A new switch calls
 `core.setTempo` at write time: the switch step is a bar line inside the look-ahead, so the render position is still
-in the bar before it, and `StepClock` lands the change exactly on the switch bar. (`OfflineRenderer` applies it once
-the step is audible, which is one bar late: the new genre's first bar plays at the old tempo. Its test records this.)
+in the bar before it, and `StepClock` lands the change exactly on the switch bar. `OfflineRenderer` now does the same; it
+used to wait until the step was audible, which landed the tempo a bar late.
 Genre and key travel in the notes and `snapshot.track`; `heard(atStep:)` flips genre and bpm at the switch step,
 and the engine echoes them into `settings` without re-sending the tempo, so a stale echo never retargets a
 pending change.

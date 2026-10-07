@@ -2,7 +2,8 @@ import NardukMusicCore
 import NardukMusicRender
 import Testing
 
-/// A conductor-driven offline render follows `DropConductor.lastSwitch`: a genre switch changes the tempo of the render.
+/// A conductor-driven offline render follows `DropConductor.lastSwitch`: a genre switch changes the tempo on the switch
+/// bar itself, not a bar later.
 @Suite struct ConductorTempoSwitchTests {
     /// Ticks (1/60 s) one bar lasts at `bpm`.
     static func barTicks(_ bpm: Double) -> Double { 16 * 15 / bpm * OfflineRenderer.tickRate }
@@ -31,14 +32,6 @@ import Testing
         #expect(abs(after - Self.barTicks(174)) <= 2, "the bar after the switch bar lasted \(after) ticks")
 
         let switchBar = try ticks(barAt: change.step)
-        withKnownIssue(
-            """
-            OfflineRenderer sends the tempo once the switch step is audible, so StepClock lands it a bar late and the new \
-            genre's first bar plays at the old tempo. ConductorDriver sends it when the step is written and lands it on \
-            the switch bar.
-            """
-        ) {
-            #expect(abs(switchBar - Self.barTicks(174)) <= 2, "the switch bar lasted \(switchBar) ticks")
-        }
+        #expect(abs(switchBar - Self.barTicks(174)) <= 2, "the switch bar lasted \(switchBar) ticks")
     }
 }
