@@ -35,6 +35,7 @@
         private let glitch: any MTLRenderPipelineState
         private let fractal: any MTLRenderPipelineState
         private let synthwave: any MTLRenderPipelineState
+        private let liquid: any MTLRenderPipelineState
         private let screenPass = MTLRenderPassDescriptor()
         private let fluidPass = MTLRenderPassDescriptor()
 
@@ -42,8 +43,8 @@
             let options = MTLCompileOptions()
             options.mathMode = .fast
             let source = [
-                IntenseShaderCommon.source, HyperspaceShader.source, FluidGlitchShader.source,
-                FractalDiveShader.source, SynthwaveShader.source,
+                IntenseShaderCommon.source, IntenseEffects.source, HyperspaceShader.source, FluidGlitchShader.source,
+                FractalDiveShader.source, SynthwaveShader.source, LiquidSplashShader.source,
             ].joined(separator: "\n")
             guard let device, let queue = device.makeCommandQueue(),
                 let library = try? device.makeLibrary(source: source, options: options),
@@ -59,7 +60,8 @@
             }
             guard let hyperspace = pipeline("hyperspaceFragment"), let fluid = pipeline("fluidFragment"),
                 let glitch = pipeline("glitchFragment"),
-                let fractal = pipeline("fractalDiveFragment"), let synthwave = pipeline("synthwaveFragment")
+                let fractal = pipeline("fractalDiveFragment"), let synthwave = pipeline("synthwaveFragment"),
+                let liquid = pipeline("liquidSplashFragment")
             else { return nil }
             self.device = device
             self.queue = queue
@@ -68,6 +70,7 @@
             self.glitch = glitch
             self.fractal = fractal
             self.synthwave = synthwave
+            self.liquid = liquid
         }
 
         /// Draws one frame of `kind` into `target` through `buffer`. `surface` is required for `.fluidGlitch`: the
@@ -87,6 +90,8 @@
                 draw(
                     synthwave, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
                     motion: motion)
+            case .liquidSplash:
+                draw(liquid, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil)
             case .fluidGlitch:
                 guard let surface else { return }
                 if surface.isFresh {  // nothing to advect yet: start from black

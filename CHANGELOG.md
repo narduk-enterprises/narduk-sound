@@ -18,6 +18,17 @@ and the Beat Blaster kids app. Everything is additive; the two enum cases below 
 
 ### Added
 
+- `IntenseEffects` in `NardukSoundVisuals` (narduk-libs#1656): the shared MSL effects library every Intense shader
+  compiles with (`fx*`: 3-D noise and `fxCylinder`, `fxRidge`, `fxNormal`/`fxLight`/`fxBall` lighting, `fxZoomLayer`/
+  `fxCell` flying particles, `fxFlash`/`fxTonemap`/`fxVignette`). Liquid splash is its first consumer, pixel for pixel.
+- `IntenseKind.liquidSplash` ("Liquid splash") in `NardukSoundVisuals` (narduk-libs#1569): a Metal splash of
+  iridescent liquid filaments and glossy droplets flying out of a core, lit from a finite-difference normal. Bass
+  sets the reach and the core, mids the warp, highs the spray; the kick swells the core, the snare throws a ring,
+  the drop winds the streams. Flashes stay on the shared limiter.
+- `SoundVisualizerKind.vortex` ("Vortex") in `NardukSoundVisuals` (narduk-libs#1569): a spiral galaxy whose three arms
+  are the spectrum, bass beads at the core and highs at the rim, over a differentially rotating starfield. The
+  waveform wraps the core as an accretion ring, a snare throws a shock ring, a kick swells the core, a drop winds the
+  arms tighter, and a glitch splits them into the optical fringes.
 - `SongSettings.variety` (0 ... 1, default 0.75; settings saved without it decode as 0, the original songs) and
   `SongSettings.varied(genre:seed:)`: a new seed now writes new chord progressions, hook motifs, drum kits (the genre
   keeps its backbeat), per-song drum tuning (the kick, snare and hat voices take a tune from the note's `formant`),
