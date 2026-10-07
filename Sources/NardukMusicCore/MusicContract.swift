@@ -15,6 +15,9 @@ public enum Genre: String, Sendable, Hashable, Codable, CaseIterable {
     case dubstep, riddim, drumAndBass, trap, house, chill
     /// The second electronic wave (narduk-libs#1577): each its own tempo, drum grammar and bass patch.
     case techno, ukGarage, synthwave, lofi
+    /// The band family (narduk-libs#1578): the guitars carry the part over a live-drummer kit and a bass guitar.
+    /// Rock drives power chords, folk strums and picks an acoustic, funk scratches muted 16ths over a popping bass.
+    case rock, folk, funk
 }
 
 public enum Instrument: String, Sendable, Hashable, Codable, CaseIterable {

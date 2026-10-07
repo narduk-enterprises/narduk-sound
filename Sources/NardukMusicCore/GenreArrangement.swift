@@ -9,6 +9,9 @@ import Foundation
 //   trap     sparse kick, rolling hats, 808 slides; the hook is a bell melody over the 808
 //   house    four-on-the-floor, off-beat bass, open hats; the hook is a swung rhythm of chord stabs
 //   chill    soft swung drums, mellow pads; the hook is an electric-piano melody over a soft bass
+//   rock     a live kit, driven power-chord 8ths on electric strums over a picking bass guitar (narduk-libs#1578)
+//   folk     soft kit, the folk strum on an acoustic, a root-fifth bass and a fingerpicked acoustic hook
+//   funk     syncopated kit with ghost snares, muted 16th chicken scratch and a popping 16th bass line
 // The vocabulary is the existing Instrument + NoteParams (plus .keys), so the audio engine needs no genre knowledge.
 
 // MARK: - Public vocabulary
@@ -24,6 +27,9 @@ extension Genre {
         case .techno, .ukGarage: 132
         case .synthwave: 108
         case .lofi: 80
+        case .rock: 124
+        case .folk: 96
+        case .funk: 104
         }
     }
 
@@ -40,6 +46,9 @@ extension Genre {
         case .ukGarage: "UK Garage"
         case .synthwave: "Synthwave"
         case .lofi: "Lo-fi"
+        case .rock: "Rock"
+        case .folk: "Folk"
+        case .funk: "Funk"
         }
     }
 }
@@ -163,6 +172,145 @@ enum GenreArrangement {
             GenreProfile(
                 gain: 0.65, introKickBarStride: 4, buildKicks: [0, 10], buildSnares: [4, 12], riserVelocity: 0.35,
                 chops: true, formantRange: 0.15...0.5, glide: 0.3)
+        case .rock:
+            GenreProfile(
+                introKicks: [0, 8], introKickBarStride: 1, buildKicks: [0, 8], buildSnares: [4, 12],
+                riserVelocity: 0.55, formantRange: 0.3...0.7)
+        case .folk:
+            GenreProfile(
+                gain: 0.75, introKickBarStride: 4, buildKicks: [0, 8], buildSnares: [12], riserVelocity: 0.3,
+                formantRange: 0.3...0.6)
+        case .funk:
+            GenreProfile(
+                introKicks: [0, 10], introKickBarStride: 1, buildKicks: [0, 10], buildSnares: [4, 12],
+                riserVelocity: 0.5, formantRange: 0.3...0.7)
+        }
+    }
+
+    // MARK: Band guitars
+
+    /// Rock, folk and funk: the guitars carry the chords and hook and a bass guitar replaces the sub.
+    static func isBand(_ genre: Genre) -> Bool { genre.family == .band }
+
+    /// The chord (strum) and single-note (lead) guitar the genre plays.
+    private static func guitars(_ genre: Genre) -> (strum: Instrument, lead: Instrument) {
+        genre == .folk ? (.strum, .acousticGuitar) : (.electricStrum, .electricGuitar)
+    }
+
+    /// Folds a pitch by octaves into the bass guitar's range (E1 ... D#2, MIDI 28 ... 39), staying in key.
+    static func bassRegister(_ pitch: Int) -> Int {
+        var p = pitch
+        while p > 39 { p -= 12 }
+        while p < 28 { p += 12 }
+        return p
+    }
+
+    /// The strum voice for a chord on a degree: 0 major, 1 minor, 2 dominant 7, 3 minor 7, 4 power, 5 sus2. Rock plays
+    /// power chords, folk the triads, funk sevenths.
+    static func strumVoice(_ genre: Genre, _ c: StepContext, degree: Int) -> Int {
+        let mode = c.track.mode
+        let minor = mode.semitones(degree + 2) - mode.semitones(degree) == 3
+        switch genre {
+        case .rock: return 4
+        case .funk: return minor ? 3 : 2
+        default: return minor ? 1 : 0
+        }
+    }
+
+    /// One chord stroke of the genre's guitar on the bar's chord (or `degree`), strummed up when `up`.
+    private static func strum(
+        _ genre: Genre, _ c: StepContext, velocity: Double, length: Int, up: Bool = false, degree: Int? = nil,
+        add: (Instrument, Double, NoteParams) -> Void
+    ) {
+        let degree = degree ?? c.chord
+        add(
+            guitars(genre).strum, velocity,
+            NoteParams(
+                pitch: c.track.pitch(c.keyRoot - 12, degree: degree), lengthSteps: c.scaled(length),
+                formant: up ? 0.6 : 0.2, drive: c.track.drive, voice: strumVoice(genre, c, degree: degree)))
+    }
+
+    /// The hook on the genre's lead guitar, one octave above the keys' middle register.
+    private static func guitarHook(
+        _ genre: Genre, _ c: StepContext, velocity: Double, add: (Instrument, Double, NoteParams) -> Void
+    ) {
+        for note in c.hookNotes() {
+            add(
+                guitars(genre).lead, velocity * (note.accent ? 1.0 : 0.82),
+                NoteParams(
+                    pitch: c.track.pitch(c.keyRoot + 12, degree: c.chord + note.degree),
+                    lengthSteps: c.scaled(note.length), drive: c.track.drive))
+        }
+    }
+
+    /// The rhythm part of a drop: rock chugs power chords on the 8ths, folk plays the folk strum (and in the
+    /// breakdown fingerpicks an arpeggio), funk scratches muted 16ths with the chord ringing on 1 and 3.
+    private static func rhythmGuitar(
+        _ genre: Genre, _ c: StepContext, pos: Int, add: (Instrument, Double, NoteParams) -> Void
+    ) {
+        let gain: Double = c.section == .drop2 ? 1 : 0.9
+        switch genre {
+        case .rock:
+            guard pos % 2 == 0 else { return }
+            // The downbeats ring, the back beat leans, the rest are palm-muted chugs.
+            let ring = pos == 0 || pos == 8
+            strum(
+                genre, c, velocity: (ring ? 0.62 : pos % 4 == 0 ? 0.5 : 0.42) * gain, length: ring ? 4 : 1, add: add)
+        case .folk:
+            for hit in CompingPattern.folk.hits(pos: pos, barInPhrase: c.barInPhrase) {
+                strum(
+                    genre, c, velocity: 0.5 * hit.velocity * gain, length: hit.length, up: hit.direction == .up,
+                    add: add)
+            }
+        case .funk:
+            let table: [Double] = [
+                0.55, 0, 0.3, 0.3, 0.45, 0, 0.62, 0.3, 0.5, 0, 0.3, 0.3, 0.45, 0.3, 0.62, 0,
+            ]
+            let velocity = table[pos]
+            guard velocity > 0 else { return }
+            // The stronger hits let the chord ring a moment; the soft ones are the muted scratch.
+            strum(
+                genre, c, velocity: velocity * gain, length: velocity >= 0.5 ? 2 : 1, up: pos % 2 == 1 || pos == 6,
+                add: add)
+        default:
+            break
+        }
+    }
+
+    /// The bass guitar line of a drop.
+    private static func bandBass(
+        _ genre: Genre, _ c: StepContext, pos: Int, length: (Int) -> Int,
+        add: (Instrument, Double, NoteParams) -> Void
+    ) {
+        let base = c.keyRoot - 24
+        func note(_ offset: Int, octave: Int = 0, velocity: Double, steps: Int, drive: Double? = nil) {
+            let pitch = bassRegister(c.track.pitch(base, degree: c.chord + offset)) + octave
+            add(.bassGuitar, velocity, NoteParams(pitch: pitch, lengthSteps: length(steps), drive: drive))
+        }
+        switch genre {
+        case .rock:
+            // Driving 8ths on the root; the last one of the bar leans to the fifth to turn the bar over.
+            guard pos % 2 == 0 else { return }
+            let turn = pos == 14 && c.barInPhrase % 2 == 1
+            note(turn ? 4 : 0, velocity: pos % 4 == 0 ? 0.85 : 0.68, steps: 2, drive: 0.3)
+        case .folk:
+            // Root on the one, fifth on the three: the oom-pah underneath the strum.
+            if pos == 0 { note(0, velocity: 0.8, steps: 8) }
+            if pos == 8 { note(4, velocity: 0.62, steps: 8) }
+        case .funk:
+            // A syncopated 16th line: long root on the one, octave pops, the fifth and the flat seven as answers.
+            switch pos {
+            case 0: note(0, velocity: 0.95, steps: 3, drive: 0.15)
+            case 3: note(0, octave: 12, velocity: 0.6, steps: 1, drive: 0.55)
+            case 6: note(4, velocity: 0.7, steps: 2, drive: 0.15)
+            case 8: note(0, velocity: 0.8, steps: 2, drive: 0.15)
+            case 10: note(0, velocity: 0.7, steps: 1, drive: 0.15)
+            case 11: note(0, octave: 12, velocity: 0.55, steps: 1, drive: 0.55)
+            case 14: note(6, velocity: 0.65, steps: 1, drive: 0.15)
+            default: break
+            }
+        default:
+            break
         }
     }
 
@@ -227,7 +375,12 @@ enum GenreArrangement {
                     step: c.step, instrument: instrument, velocity: min(1, max(0, velocity * p.gain)), params: params))
         }
         let variant = c.track.drums
-        let subPitch = c.track.pitch(c.keyRoot - 36, degree: c.chord)
+        let band = isBand(genre)
+        let low: Instrument = band ? .bassGuitar : .sub
+        let subPitch =
+            band
+            ? bassRegister(c.track.pitch(c.keyRoot - 24, degree: c.chord))
+            : c.track.pitch(c.keyRoot - 36, degree: c.chord)
         switch c.section {
         case .intro:
             if p.introKicks.contains(pos), c.bar % p.introKickBarStride == 0 { add(.kick, 0.55) }
@@ -237,14 +390,14 @@ enum GenreArrangement {
             }
             // Once the input wakes up, a soft sub hums the progression two bars at a time.
             if c.level > 0.3, pos == 0, c.barInPhrase % 2 == 0 {
-                add(.sub, 0.4, NoteParams(pitch: subPitch, lengthSteps: c.perBar * 2))
+                add(low, 0.4, NoteParams(pitch: subPitch, lengthSteps: c.perBar * 2))
             }
             if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.22, add: add) }
             if c.introHook { keysHook(genre, c, velocity: 0.3, add: add) }
         case .breakdown:
             if pos == 0, c.barInPhrase % 4 == 0 { add(.kick, 0.45) }
             if c.level > 0.08, pos % 4 == 2 { add(.hat, 0.15 + 0.2 * c.level) }
-            if pos == 0 { add(.sub, 0.45, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
+            if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
             if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.3, add: add) }
         case .build:
             if p.buildKicks.contains(pos) { add(.kick, pos == 0 ? 0.9 : 0.75) }
@@ -262,7 +415,7 @@ enum GenreArrangement {
                     add(.snare, ramp)
                 }
             }
-            if pos == 0 { add(.sub, 0.55, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
+            if pos == 0 { add(low, 0.55, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
             // The hook, stated on keys and growing toward the drop.
             let grow = 0.35 + 0.3 * Double(c.barInPhrase) / Double(max(1, c.barsPerPhrase - 1))
             keysHook(genre, c, velocity: grow, add: add)
@@ -274,6 +427,12 @@ enum GenreArrangement {
 
     /// Soft pad chords (keys voice 3) on the bar's chord, two bars long.
     private static func pad(_ c: StepContext, velocity: Double, add: (Instrument, Double, NoteParams) -> Void) {
+        let genre = c.track.genre
+        if isBand(genre) {
+            // A band has no pad: a soft guitar chord rings for the two bars instead.
+            strum(genre, c, velocity: velocity * 1.4, length: 32, add: add)
+            return
+        }
         for pitch in chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: Self.lush(c.track.genre)) {
             add(.keys, velocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: 3))
         }
@@ -284,6 +443,10 @@ enum GenreArrangement {
         _ genre: Genre, _ c: StepContext, velocity: Double,
         add: (Instrument, Double, NoteParams) -> Void
     ) {
+        if isBand(genre) {
+            guitarHook(genre, c, velocity: velocity, add: add)
+            return
+        }
         for note in c.hookNotes() {
             let accent = note.accent ? 1.0 : 0.82
             let degree = c.chord + note.degree
@@ -358,7 +521,7 @@ enum GenreArrangement {
         let bank = Banks.drums(genre)
         let variant = bank[(c.section == .drop2 ? c.track.drums2 : c.track.drums) % bank.count]
         let level = c.level
-        let soft = genre == .chill || genre == .lofi
+        let soft = genre == .chill || genre == .lofi || genre == .folk
         let driving = genre == .house || genre == .techno
         let inFill = fill.map { pos >= $0.from } ?? false
         let kind = inFill ? fill?.kind : nil
@@ -435,6 +598,16 @@ enum GenreArrangement {
         case .synthwave:
             // Straight 8ths, the off-beat ones leaning in.
             if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.34 : 0.22) + 0.2 * level, NoteParams()) }
+        case .rock:
+            // Straight 8ths on the hat, the off-beat ones a touch harder.
+            if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.36 : 0.28) + 0.2 * level, NoteParams()) }
+        case .folk:
+            // A shaker on the off-beats and nothing else.
+            if pos % 4 == 2 { add(.hat, 0.14 + 0.1 * level, NoteParams()) }
+        case .funk:
+            // Tight 16ths, the off-beats accented, the in-between ones ghosted.
+            if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.36 : 0.26) + 0.2 * level, NoteParams()) }
+            if pos % 2 == 1, level > 0.3 { add(.hat, 0.12 + 0.1 * level, NoteParams()) }
         case .drumAndBass:
             // Breakbeat hats: 8ths with a swung 16th before the snare.
             if pos % 2 == 0 { add(.hat, 0.32 + 0.3 * level + accent, NoteParams()) }
@@ -484,7 +657,13 @@ enum GenreArrangement {
         // The stutter fill: octave-jumping 16th stabs on the chord root.
         if let stutterFrom, pos >= stutterFrom {
             let pitch = track.pitch(wobbleBase, degree: c.chord) + (pos % 2 == 1 ? 12 : 0)
-            if genre == .trap {
+            if isBand(genre) {
+                add(
+                    .bassGuitar, 0.85,
+                    NoteParams(
+                        pitch: bassRegister(track.pitch(wobbleBase, degree: c.chord)) + (pos % 2 == 1 ? 12 : 0),
+                        lengthSteps: c.scaled(1), drive: 0.4))
+            } else if genre == .trap {
                 add(
                     .sub, 0.9,
                     NoteParams(
@@ -496,6 +675,10 @@ enum GenreArrangement {
             return
         }
 
+        if isBand(genre) {
+            bandBass(genre, c, pos: pos, length: length, add: add)
+            return
+        }
         let subPitch = track.pitch(c.keyRoot - 36, degree: c.chord)
         switch genre {
         case .dubstep, .drumAndBass:
@@ -550,6 +733,8 @@ enum GenreArrangement {
                 let pitch = track.pitch(c.keyRoot - 36, degree: c.chord + (c.chord % 2 == 0 ? 2 : 4))
                 add(.sub, 0.5, NoteParams(pitch: pitch, lengthSteps: length(6)))
             }
+        case .rock, .folk, .funk:
+            break  // the band's bass guitar is written above
         }
 
         let hook = c.hookNotes()
@@ -581,7 +766,7 @@ enum GenreArrangement {
                     track.pitch(wobbleBase, degree: c.chord + (pos == 8 && c.barInPhrase % 2 == 1 ? 4 : 0)), 8,
                     velocity: 0.5, accent: false)
             }
-        case .house, .techno, .ukGarage, .synthwave, .lofi:
+        case .house, .techno, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk:
             break
         }
     }
@@ -623,6 +808,11 @@ enum GenreArrangement {
             if c.section == .drop2 { keysHook(genre, c, velocity: 0.34, add: add) }
         case .riddim:
             break
+        case .rock, .folk, .funk:
+            // The guitar is the chord layer; a kick drop silences it with the bass, and the hook joins in DROP2.
+            if let fill, fill.kind == .kickDrop, pos >= fill.from { return }
+            rhythmGuitar(genre, c, pos: pos, add: add)
+            if c.section == .drop2 { keysHook(genre, c, velocity: 0.5, add: add) }
         }
     }
 

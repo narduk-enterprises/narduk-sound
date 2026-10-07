@@ -72,7 +72,7 @@ import Testing
         var m = Metrics()
         m.bars = bars
         let drums: Set<Instrument> = [.kick, .snare, .hat, .openHat]
-        let bass: Set<Instrument> = [.wobble, .sub]
+        let bass: Set<Instrument> = [.wobble, .sub, .bassGuitar]
         var all = Set<String>()
         var drum = Set<String>()
         var line = Set<String>()
@@ -94,7 +94,8 @@ import Testing
             drum.insert(notes.filter { drums.contains($0.instrument) }.map { key($0, base) }.joined(separator: ","))
             line.insert(notes.filter { bass.contains($0.instrument) }.map { key($0, base) }.joined(separator: ","))
             let wobbles = notes.filter { $0.instrument == .wobble }
-            let melodic = wobbles.isEmpty ? notes.filter { $0.instrument == .sub } : wobbles
+            let melodic =
+                wobbles.isEmpty ? notes.filter { $0.instrument == .sub || $0.instrument == .bassGuitar } : wobbles
             let pitches = melodic.compactMap(\.params.pitch)
             if pitches.count >= 2 {
                 contours.insert(zip(pitches, pitches.dropFirst()).map { "\($1 - $0)" }.joined(separator: ","))
@@ -142,9 +143,11 @@ import Testing
             let m = Self.metrics(r, bpm: c.settings.bpm, from: 16, bars: 64)
             #expect(m.uniqueDrumBars >= 4, "\(genre): \(m)")
             #expect(m.pitchClasses >= 4, "\(genre): \(m)")
-            // House, chill and the second electronic wave carry their hook in the keys; their bass is a groove under it.
+            // House, chill, the second electronic wave and the band carry their hook above the bass, which is a groove under it.
             #expect(
-                m.contours >= ([.house, .chill, .techno, .ukGarage, .synthwave, .lofi].contains(genre) ? 2 : 3),
+                m.contours
+                    >= ([.house, .chill, .techno, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk].contains(genre)
+                        ? 2 : 3),
                 "\(genre): \(m)")
             #expect(m.wobbleRateChangesPerMinute <= 4, "\(genre): \(m)")
             // Sustained energy still breathes: a breakdown, or the next track's build, comes round before the 10th phrase.

@@ -62,6 +62,9 @@ import Testing
         .ukGarage: ["darwin-arm64": 0x012f_7638_eb24_7be7, "linux-x86_64": 0xe989_6941_a15a_231f],
         .synthwave: ["darwin-arm64": 0xcf13_c802_0028_d3bd, "linux-x86_64": 0x39c1_53af_a26b_6088],
         .lofi: ["darwin-arm64": 0x7066_a558_6ba3_d111, "linux-x86_64": 0x06d5_4551_caf9_f7dd],
+        .rock: ["darwin-arm64": 0x8afb_d4e8_19fc_9f65, "linux-x86_64": 0x32c0_ff1a_8b27_74bb],
+        .folk: ["darwin-arm64": 0xd6f4_cb52_585e_77be, "linux-x86_64": 0x55d0_a5b9_9748_c382],
+        .funk: ["darwin-arm64": 0x2d59_faa4_5e21_2e30, "linux-x86_64": 0xb776_40ab_061a_3c4a],
     ]
 
     @Test(arguments: Genre.allCases)

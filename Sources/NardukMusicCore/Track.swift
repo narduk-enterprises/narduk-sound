@@ -171,6 +171,8 @@ struct Track: Sendable, Hashable {
             case .chill, .ukGarage, .lofi: "keys"
             case .synthwave: "synth lead"
             case .drumAndBass: "reese"
+            case .rock, .funk: "electric guitar"
+            case .folk: "acoustic guitar"
             case .dubstep, .riddim: "wobble"
             }
         return "\(hook.contour) \(hook.notes.count)-note \(carrier) hook"
@@ -246,7 +248,8 @@ enum TrackGenerator {
         if let pinned { t.mode = pinned }
 
         // Progression: two-bar chords suit a two-bar hook, so the hook lands whole on each chord.
-        let progressions = t.mode.isMajorQuality ? Banks.majorProgressions : Banks.progressions(genre)
+        let progressions =
+            t.mode.isMajorQuality && genre.family != .band ? Banks.majorProgressions : Banks.progressions(genre)
         var progression = pick(progressions.count)
         if let previous, progressions[progression] == previous.progression {
             progression = (progression + 1) % progressions.count
@@ -346,6 +349,9 @@ enum TrackGenerator {
         case .ukGarage: 128...136
         case .synthwave: 100...118
         case .lofi: 72...90
+        case .rock: 112...136
+        case .folk: 84...108
+        case .funk: 96...114
         }
     }
 
@@ -357,6 +363,9 @@ enum TrackGenerator {
         case (.ukGarage, _): [.dorian, .aeolian, .dorian]
         case (.synthwave, _): character == .chaos ? [.aeolian, .phrygian] : [.aeolian, .ionian, .aeolian, .mixolydian]
         case (.lofi, _): [.dorian, .aeolian, .mixolydian, .dorian]
+        case (.rock, _): character == .chaos ? [.aeolian, .phrygian] : [.aeolian, .mixolydian, .dorian, .aeolian]
+        case (.folk, _): [.ionian, .mixolydian, .aeolian, .ionian]
+        case (.funk, _): [.dorian, .mixolydian, .dorian, .aeolian]
         case (.house, _), (.chill, _): character == .chaos ? [.aeolian, .phrygian] : [.dorian, .dorian, .aeolian]
         case (_, .chaos): [.phrygian, .harmonicMinor]
         case (_, .surge): [.phrygian, .aeolian]
@@ -379,6 +388,7 @@ enum TrackGenerator {
         case .ukGarage: [4]  // talker
         case .synthwave: [1]  // reese, as a saw bass
         case .lofi: [2]  // soft square
+        case .rock, .folk, .funk: [2]  // unused: the bass is a guitar
         }
     }
 
@@ -386,7 +396,7 @@ enum TrackGenerator {
         switch genre {
         case .dubstep, .riddim, .trap: 0
         case .house, .techno: 1
-        case .chill, .drumAndBass, .ukGarage, .synthwave, .lofi: 2
+        case .chill, .drumAndBass, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk: 2
         }
     }
 
@@ -410,6 +420,7 @@ enum TrackGenerator {
             case (.ukGarage, _): .eighth
             case (.synthwave, _): .quarter
             case (.lofi, _): .half
+            case (.rock, _), (.folk, _), (.funk, _): .quarter
             }
         return ladder.firstIndex(of: want) ?? 0
     }
@@ -442,6 +453,9 @@ enum TrackGenerator {
             case .ukGarage: (0.3 + 0.35 * formant, 0.4)
             case .synthwave: (0.4 + 0.3 * formant, 0.5)
             case .lofi: (0.2 + 0.3 * formant, 0.2)
+            case .rock: (0.5, 0.8)
+            case .folk: (0.5, 0.05)
+            case .funk: (0.5, 0.2)
             }
         return (base.0, min(1, max(0, base.1 + lift)))
     }
@@ -453,7 +467,9 @@ enum TrackGenerator {
         case .drumAndBass: 0.06
         case .ukGarage: character == .chaos ? 0.25 : 0.32
         case .lofi: character == .chaos ? 0.25 : 0.36
-        case .dubstep, .riddim, .trap, .techno, .synthwave: 0
+        case .folk: 0.08
+        case .funk: character == .chaos ? 0.2 : 0.14
+        case .dubstep, .riddim, .trap, .techno, .synthwave, .rock: 0
         }
     }
 
@@ -469,6 +485,9 @@ enum TrackGenerator {
         case .ukGarage: [.snareRoll, .halfTime, .kickDrop]
         case .synthwave: [.snareRoll, .tripletRoll, .kickDrop]
         case .lofi: [.kickDrop, .halfTime]
+        case .rock: [.snareRoll, .kickDrop, .tripletRoll]
+        case .folk: [.kickDrop, .halfTime]
+        case .funk: [.snareRoll, .kickDrop, .halfTime]
         }
     }
 
@@ -483,6 +502,7 @@ enum TrackGenerator {
         case .ukGarage: [.drumBridge, .filterSweep]
         case .synthwave: [.filterSweep, .tapeStop]
         case .lofi: [.tapeStop, .filterSweep]
+        case .rock, .folk, .funk: [.drumBridge]
         }
     }
 
@@ -503,6 +523,9 @@ enum TrackGenerator {
         case .ukGarage: [-1, 1, 2, -2, 3, 4, 1]
         case .synthwave: [-2, -1, 1, 2, 3, 4, -3]
         case .lofi: [-1, 1, -2, 2, 3, -3, 4]
+        case .rock: [-1, 1, 2, -2, 3, 4, 0]
+        case .folk: [-1, 1, -2, 2, 1, -1, 3]
+        case .funk: [0, 0, 1, -1, 2, -2, 3]
         }
     }
 

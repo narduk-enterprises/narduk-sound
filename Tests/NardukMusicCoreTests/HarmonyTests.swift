@@ -101,9 +101,11 @@ import Testing
 
     // MARK: Families and settings
 
-    @Test func theSixGenresAreAllElectronic() {
-        #expect(GenreFamily.electronic.genres == Genre.allCases)
-        #expect(Genre.allCases.allSatisfy { $0.family == .electronic })
+    @Test func theFirstTenGenresAreElectronicAndRockFolkFunkAreTheBand() {
+        let band: [Genre] = [.rock, .folk, .funk]
+        #expect(GenreFamily.band.genres == band)
+        #expect(GenreFamily.electronic.genres == Genre.allCases.filter { !band.contains($0) })
+        #expect(Genre.allCases.filter { $0.family == .electronic }.count == 10)
         #expect(GenreFamily.electronic.shape == FamilyShape())
         #expect(GenreFamily.band.shape.comping != nil)
     }

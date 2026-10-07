@@ -318,8 +318,8 @@ import Testing
             #expect(range.contains(track.bpm), "\(genre) at \(track.bpm)")
             let dropBars = (0..<(p.steps / 16)).filter { p.sections[$0 * 16].isDrop && $0 % 8 != 7 && $0 % 8 != 3 }
             #expect(!dropBars.isEmpty, "\(genre) never dropped")
-            // Chill's, lo-fi's and techno's backbeats are soft; everyone else's lands hard.
-            let loudest = [.chill, .lofi, .techno].contains(genre) ? 0.5 : 0.9
+            // Chill's, folk's, lo-fi's and techno's backbeats are soft; everyone else's lands hard.
+            let loudest = [.chill, .lofi, .techno, .folk].contains(genre) ? 0.5 : 0.9
             func hits(_ instrument: Instrument, _ bar: Int, loud: Bool = true) -> [Int] {
                 p.notes.filter {
                     $0.instrument == instrument && $0.step / 16 == bar && (!loud || $0.velocity >= loudest)
@@ -329,7 +329,7 @@ import Testing
                 switch genre {
                 case .dubstep, .riddim, .trap, .chill:
                     #expect(hits(.snare, bar) == [8], "\(genre) half-time snare bar \(bar)")
-                case .drumAndBass, .ukGarage, .synthwave, .lofi:
+                case .drumAndBass, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk:
                     #expect(hits(.snare, bar) == [4, 12], "\(genre) backbeat bar \(bar)")
                 case .house, .techno:
                     #expect(
@@ -355,6 +355,18 @@ import Testing
             case .synthwave:
                 #expect(notes.contains { $0.instrument == .keys } && notes.contains { $0.instrument == .wobble })
             case .dubstep, .drumAndBass: #expect(notes.contains { $0.instrument == .wobble })
+            case .rock:
+                #expect(
+                    notes.contains { $0.instrument == .electricStrum && $0.params.voice == 4 }
+                        && notes.contains { $0.instrument == .bassGuitar }
+                        && !notes.contains { $0.instrument == .wobble || $0.instrument == .sub })
+            case .folk:
+                #expect(notes.contains { $0.instrument == .strum } && notes.contains { $0.instrument == .bassGuitar })
+            case .funk:
+                #expect(
+                    notes.contains { $0.instrument == .electricStrum && [2, 3].contains($0.params.voice) }
+                        && notes.contains { $0.instrument == .bassGuitar }
+                        && notes.contains { ($0.params.delay ?? 0) > 0 })
             }
         }
         let genres = Array(hooks.keys)

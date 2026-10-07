@@ -105,11 +105,27 @@ enum Banks {
         [0, 0, 5, 5, 2, 2, 6, 6], [0, 0, 6, 6, 5, 5, 4, 4], [5, 5, 6, 6, 0, 0, 0, 0], [0, 0, 3, 3, 6, 6, 5, 5],
     ]
 
+    /// Rock: I bVII IV and its cousins, the riff-and-power-chord road.
+    static let rockProgressions: [[Int]] = [
+        [0, 0, 6, 6, 3, 3, 4, 4], [0, 0, 3, 3, 4, 4, 3, 3], [0, 0, 5, 5, 3, 3, 6, 6], [0, 0, 4, 4, 5, 5, 3, 3],
+    ]
+    /// Folk: the three-chord and four-chord songs, turning home on the fifth.
+    static let folkProgressions: [[Int]] = [
+        [0, 0, 3, 3, 4, 4, 0, 0], [0, 0, 4, 4, 5, 5, 3, 3], [0, 0, 5, 5, 3, 3, 4, 4], [0, 0, 3, 3, 0, 0, 4, 4],
+    ]
+    /// Funk: one chord for a long time, then a step to the four.
+    static let funkProgressions: [[Int]] = [
+        [0, 0, 0, 0, 3, 3, 0, 0], [0, 0, 3, 3, 0, 0, 4, 4], [0, 0, 0, 0, 0, 0, 3, 3], [1, 1, 4, 4, 0, 0, 0, 0],
+    ]
+
     static func progressions(_ genre: Genre) -> [[Int]] {
         switch genre {
         case .dubstep, .trap, .drumAndBass: darkProgressions
         case .riddim: riddimProgressions
         case .house, .chill, .ukGarage, .lofi: liftProgressions
+        case .rock: rockProgressions
+        case .folk: folkProgressions
+        case .funk: funkProgressions
         case .techno: technoProgressions
         case .synthwave: synthwaveProgressions
         }
@@ -185,6 +201,28 @@ enum Banks {
         [0, 3, 4, 3, 10, 6, 17, 4, 24, 8],
     ]
 
+    /// Rock: a riff that leans on the 8ths and holds on the downbeat.
+    static let rockHooks: [[Int]] = [
+        [0, 3, 3, 1, 4, 2, 8, 3, 11, 1, 12, 4, 16, 3, 19, 1, 20, 2, 24, 8],
+        [0, 2, 2, 2, 4, 4, 8, 2, 10, 2, 12, 4, 16, 2, 18, 2, 20, 4, 24, 4, 28, 4],
+        [0, 4, 6, 2, 8, 4, 14, 2, 16, 4, 22, 2, 24, 6, 30, 2],
+        [0, 6, 8, 2, 10, 2, 12, 4, 16, 6, 24, 2, 26, 2, 28, 4],
+    ]
+    /// Folk: even, singable phrases that breathe at the bar line.
+    static let folkHooks: [[Int]] = [
+        [0, 4, 4, 2, 6, 2, 8, 4, 12, 4, 16, 4, 20, 2, 22, 2, 24, 8],
+        [0, 6, 6, 2, 8, 4, 12, 4, 16, 6, 22, 2, 24, 4, 28, 4],
+        [0, 3, 4, 2, 6, 2, 8, 6, 16, 4, 20, 4, 24, 4, 28, 4],
+        [2, 4, 6, 2, 8, 4, 14, 2, 18, 4, 22, 2, 24, 8],
+    ]
+    /// Funk: short and syncopated, mostly on the "e" and "a" of the beat.
+    static let funkHooks: [[Int]] = [
+        [0, 1, 3, 1, 6, 2, 10, 1, 13, 1, 16, 1, 19, 1, 22, 2, 26, 1, 29, 2],
+        [0, 2, 3, 1, 5, 1, 8, 2, 11, 1, 14, 2, 16, 2, 19, 1, 21, 1, 24, 2, 27, 1, 30, 2],
+        [1, 1, 4, 1, 7, 1, 10, 2, 14, 1, 17, 1, 20, 2, 23, 1, 26, 2, 30, 1],
+        [0, 1, 2, 1, 6, 2, 8, 1, 11, 2, 16, 1, 18, 1, 22, 2, 24, 1, 27, 2],
+    ]
+
     static func hookRhythms(_ genre: Genre) -> [[Int]] {
         switch genre {
         case .dubstep: dubstepHooks
@@ -197,6 +235,9 @@ enum Banks {
         case .ukGarage: ukgHooks
         case .synthwave: synthwaveHooks
         case .lofi: lofiHooks
+        case .rock: rockHooks
+        case .folk: folkHooks
+        case .funk: funkHooks
         }
     }
 
@@ -264,6 +305,26 @@ enum Banks {
         DrumVariant([0, 11], [0, 6, 10], snares: [4, 12], ghosts: [13, 7], openHats: []),
     ]
 
+    /// Rock: kick on 1 and 3 with a push, the snare on 2 and 4, a crash-and-ride of open hats.
+    static let rockDrums: [DrumVariant] = [
+        DrumVariant([0, 8], [0, 8, 10], snares: [4, 12], ghosts: [], openHats: [14]),
+        DrumVariant([0, 8, 10], [0, 8], snares: [4, 12], ghosts: [15], openHats: [6, 14]),
+        DrumVariant([0, 6, 8], [0, 8, 14], snares: [4, 12], ghosts: [], openHats: [14]),
+    ]
+    /// Folk: a soft kick on 1 and 3, a brushed snare on the back beat, nothing busy.
+    static let folkDrums: [DrumVariant] = [
+        DrumVariant([0, 8], [0, 8], snares: [4, 12], ghosts: [14], openHats: []),
+        DrumVariant([0, 10], [0, 8], snares: [4, 12], ghosts: [15], openHats: []),
+        DrumVariant([0, 8], [0, 6, 8], snares: [4, 12], ghosts: [14], openHats: []),
+    ]
+    /// Funk: the one hits hard, the kick syncs around the snare, ghost notes fill the 16ths.
+    static let funkDrums: [DrumVariant] = [
+        DrumVariant([0, 7, 10], [0, 10, 14], snares: [4, 12], ghosts: [2, 7, 9, 15], openHats: [6]),
+        DrumVariant([0, 3, 10], [0, 7, 11], snares: [4, 12], ghosts: [6, 9, 14], openHats: [14]),
+        DrumVariant([0, 6, 10], [0, 10], snares: [4, 12], ghosts: [3, 7, 11, 15], openHats: [2, 10]),
+        DrumVariant([0, 10, 11], [0, 6, 10, 14], snares: [4, 12], ghosts: [2, 9, 13], openHats: [14]),
+    ]
+
     static func drums(_ genre: Genre) -> [DrumVariant] {
         switch genre {
         case .dubstep: dubstepDrums
@@ -276,6 +337,9 @@ enum Banks {
         case .ukGarage: ukgDrums
         case .synthwave: synthwaveDrums
         case .lofi: lofiDrums
+        case .rock: rockDrums
+        case .folk: folkDrums
+        case .funk: funkDrums
         }
     }
 
@@ -293,6 +357,7 @@ enum Banks {
         case .ukGarage: [.quarter, .eighth]
         case .synthwave: [.quarter]
         case .lofi: [.half, .quarter]
+        case .rock, .folk, .funk: [.quarter]
         }
     }
 }

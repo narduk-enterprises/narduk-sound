@@ -39,7 +39,7 @@ import Testing
     // MARK: Every genre
 
     @Test func everyGenreHasItsOwnTempoAndPlays() {
-        #expect(Genre.allCases.map(\.defaultBPM) == [140, 140, 174, 140, 124, 88, 132, 132, 108, 80])
+        #expect(Genre.allCases.map(\.defaultBPM) == [140, 140, 174, 140, 124, 88, 132, 132, 108, 80, 124, 96, 104])
         for genre in Genre.allCases {
             let settings = SongSettings(genre: genre)
             #expect(settings.genre == genre && settings.bpm == genre.defaultBPM)
@@ -48,7 +48,8 @@ import Testing
             #expect(drops.count >= 8, "\(genre) never dropped")
             #expect(r.notes.contains { $0.instrument == .kick }, "\(genre) has no kick")
             #expect(r.notes.contains { $0.instrument == .snare && $0.velocity >= 0.5 }, "\(genre) has no snare")
-            #expect(r.notes.contains { $0.instrument == .sub }, "\(genre) has no sub")
+            #expect(
+                r.notes.contains { $0.instrument == .sub || $0.instrument == .bassGuitar }, "\(genre) has no low end")
             for note in r.notes {
                 #expect(note.velocity >= 0 && note.velocity <= 1 && note.params.lengthSteps >= 1)
             }
@@ -384,7 +385,8 @@ import Testing
         var c = Self.conductor(.dubstep)
         var notes: [ScheduledNote] = []
         let genres: [Genre] = [
-            .trap, .house, .drumAndBass, .riddim, .chill, .dubstep, .techno, .ukGarage, .synthwave, .lofi,
+            .trap, .house, .drumAndBass, .riddim, .chill, .dubstep, .techno, .ukGarage, .synthwave, .lofi, .rock,
+            .folk, .funk,
         ]
         for step in 0..<(256 + 12 * Self.bar) {
             if step >= 256, (step - 256) % (Self.bar * 2) == 5 {

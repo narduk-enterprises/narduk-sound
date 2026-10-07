@@ -242,17 +242,18 @@ public enum CompingPattern: String, Sendable, Hashable, Codable, CaseIterable {
 
 // MARK: - Families
 
-/// The kind of music a genre belongs to. A family may change a song's shape, not only its tempo and patterns. The six
-/// existing genres are all `electronic`; `band` and `ambient` are defined here so settings can already name them and
-/// the lanes that write those genres have a place to hang their shape.
+/// The kind of music a genre belongs to. A family may change a song's shape, not only its tempo and patterns. The ten
+/// first genres are `electronic`; rock, folk and funk are `band` (their guitars are the chord layer, so a band genre
+/// needs no `SongSettings.comping`); `ambient` has no genres of its own yet.
 public enum GenreFamily: String, Sendable, Hashable, Codable, CaseIterable {
     case electronic, band, ambient
 
     /// The genres written for this family today.
     public var genres: [Genre] {
         switch self {
-        case .electronic: Genre.allCases
-        case .band, .ambient: []
+        case .electronic: Genre.allCases.filter { $0.family == .electronic }
+        case .band: Genre.allCases.filter { $0.family == .band }
+        case .ambient: []
         }
     }
 
@@ -268,7 +269,12 @@ public enum GenreFamily: String, Sendable, Hashable, Codable, CaseIterable {
 
 extension Genre {
     /// The family the genre belongs to.
-    public var family: GenreFamily { .electronic }
+    public var family: GenreFamily {
+        switch self {
+        case .rock, .folk, .funk: .band
+        default: .electronic
+        }
+    }
 }
 
 /// What a family contributes to a song's shape. Nil means "as the genre's own arrangement does it", which for

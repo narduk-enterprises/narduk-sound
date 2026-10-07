@@ -21,6 +21,9 @@ about itself, and the products around it land.
   cleared, so a consumer that skips frames loses no hit.
 - Genres: techno, UK garage, synthwave and lo-fi hip hop. Instruments: acoustic, electric and bass guitar and strums.
   Harmony: major modes, chord voicings and comping patterns.
+- Band genres: `rock`, `folk` and `funk` (`Genre.family == .band`). Each has its own tempo range, drum grammar and
+  progressions; the guitars carry the part (power-chord 8ths, the folk strum with a fingerpicked hook, muted 16th
+  scratch) over a bass guitar, with no wobble, sub or pad.
 - `DropEngine.makeSoundSource()`, the iOS audio session, interruptions and a longer lookahead.
 
 ### Deprecated
@@ -32,6 +35,7 @@ about itself, and the products around it land.
 
 New `Genre` cases break exhaustive switches in apps. Data Beats: `VisualKit.swift:22-30`, `Panels.swift:296`.
 Wirewatcher: `DropPalette.swift:80`, `DropPanel.swift:253`.
+The band genres add `rock`, `folk` and `funk` to the same switches (a title and a palette each).
 
 ## 0.3.0
 
