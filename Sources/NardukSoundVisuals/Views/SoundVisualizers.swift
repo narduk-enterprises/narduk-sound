@@ -54,6 +54,7 @@
             _ kind: SoundVisualizerKind, _ context: inout GraphicsContext, _ size: CGSize, _ state: SoundVisualState,
             style: SoundVisualizerStyle = SoundVisualizerStyle()
         ) {
+            let style = style.tinted(by: state)
             switch kind {
             case .spectrum: spectrum(&context, size, state)
             case .scope: scope(&context, size, state)

@@ -36,7 +36,8 @@
                 float pitch = lift * 0.10 - 0.02;
                 float3 rd = normalize(float3(q.x, q.y + pitch * 1.6, 1.6));
 
-                float3 horizon = mix(u.c1.rgb, float3(1.0, 0.25, 0.65), 0.5) * 0.8;
+                float tinted = u.extra.y;
+                float3 horizon = mix(u.c1.rgb, mix(float3(1.0, 0.25, 0.65), u.c2.rgb, tinted), 0.5) * 0.8;
                 float3 zenith = float3(0.03, 0.01, 0.10) + u.c0.rgb * 0.06;
                 float3 col;
                 float tHit = -1.0;
@@ -85,7 +86,7 @@
                     float sy = saturate((0.18 + R - sc.y) / (2.0 * R));
                     float bars = step(sy * 0.65, fract(sy * 9.0 - t * 0.15));
                     float cut = sy > 0.35 ? bars : 1.0;
-                    float3 sun = mix(float3(1.0, 0.82, 0.30), u.c1.rgb * 1.2, smoothstep(0.1, 0.9, sy));
+                    float3 sun = mix(mix(float3(1.0, 0.82, 0.30), mix(u.c2.rgb, float3(1.0), 0.4), tinted), u.c1.rgb * 1.2, smoothstep(0.1, 0.9, sy));
                     col = mix(col, sun, sunMask * cut);
                     col += mix(u.c1.rgb, u.c2.rgb, 0.4) * exp(-max(dist - R, 0.0) * 4.0) * (0.35 + 0.35 * kick);
                     float2 cell = floor(float2(sx, up) * 38.0);

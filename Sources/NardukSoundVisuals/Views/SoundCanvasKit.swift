@@ -25,6 +25,28 @@
         }
     }
 
+    extension SoundVisualizerStyle: Equatable {}
+
+    extension SoundVisualizerStyle {
+        /// This style with its fixed colors (stage backdrop, phosphor backdrop, the two chromatic fringes) derived from the
+        /// state's palette while a look is active, so a color change reaches the backdrop too. The neutral look keeps the
+        /// classic colors, so default goldens stay put.
+        @MainActor func tinted(by state: SoundVisualState) -> SoundVisualizerStyle {
+            if state.look.isNeutral { return self }
+            let p = state.palette
+            func dark(_ c: SIMD3<Float>, _ k: Float, _ floor: SIMD3<Float>) -> Color {
+                let v = c * k + floor
+                return Color(.sRGB, red: Double(v.x), green: Double(v.y), blue: Double(v.z), opacity: 1)
+            }
+            var out = self
+            out.stage = dark(p.c0, 0.055, SIMD3(0.004, 0.006, 0.014))
+            out.phosphorStage = dark(p.c1, 0.03, SIMD3(0.002, 0.005, 0.008))
+            out.fringeA = SoundCanvas.color(p.c2)
+            out.fringeB = SoundCanvas.color(p.c0)
+            return out
+        }
+    }
+
     enum SoundCanvas {
         static func color(_ v: SIMD3<Float>, _ opacity: Double = 1) -> Color {
             Color(.sRGB, red: Double(v.x), green: Double(v.y), blue: Double(v.z), opacity: opacity)

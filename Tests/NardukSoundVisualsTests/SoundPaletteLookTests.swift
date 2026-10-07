@@ -124,6 +124,16 @@
             #expect(mid.x + mid.y + mid.z > 1.0)
         }
 
+        @Test func theStageBackdropAndFringesFollowALookAndKeepTheirClassicColorsWhenNeutral() {
+            let classic = SoundVisualizerStyle()
+            #expect(classic.tinted(by: CanvasVisualizerTests.busyState()) == classic)
+            let tinted = classic.tinted(by: CanvasVisualizerTests.busyState(look: SoundPaletteLook(preset: .toxic)))
+            #expect(tinted.stage != classic.stage)
+            #expect(tinted.phosphorStage != classic.phosphorStage)
+            #expect(tinted.fringeA != classic.fringeA && tinted.fringeB != classic.fringeB)
+            #expect(tinted.label == classic.label)
+        }
+
         @Test(arguments: SoundVisualizerKind.allCases)
         func everyCanvasKindDrawsDifferentPixelsInANewPalette(_ kind: SoundVisualizerKind) throws {
             let base = try CanvasVisualizerTests.grid(kind, CanvasVisualizerTests.busyState())
@@ -154,6 +164,19 @@
     import Metal
 
     extension IntenseVisualizerTests {
+        @Test func theShaderIsToldWhenALookIsActive() {
+            var drive = IntenseDrive()
+            drive.flash = 0.1
+            var uniforms = IntenseUniforms()
+            let neutral = SoundVisualState(seed: 1)
+            uniforms.fill(size: CGSize(width: 64, height: 64), state: neutral, drive: drive)
+            #expect(uniforms.extra.y == 0)
+            let tinted = SoundVisualState(seed: 1)
+            tinted.look = SoundPaletteLook(preset: .candy)
+            uniforms.fill(size: CGSize(width: 64, height: 64), state: tinted, drive: drive)
+            #expect(uniforms.extra.y == 1)
+        }
+
         @Test(.enabled(if: hasMetal, "no Metal device on this host"), arguments: IntenseKind.allCases)
         func everyIntenseKindDrawsDifferentPixelsInANewPalette(kind: IntenseKind) throws {
             let base = try Self.render(kind)

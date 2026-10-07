@@ -5,7 +5,8 @@
     /// Matches `IntenseUniforms` in `IntenseShaderCommon`: the tunnel's eight float4s, then two more, 160 bytes.
     struct IntenseUniforms {
         var base = WobbleTunnelUniforms()
-        /// x: the rationed flash and laser strobe. z: intensity (calm scales it down). w: glitch strength.
+        /// x: the rationed flash and laser strobe. y: 1 while a palette look is active, so a shader derives its fixed accents
+        /// from the palette instead of using the classic ones. z: intensity (calm scales it down). w: glitch strength.
         var extra = SIMD4<Float>(repeating: 0)
         /// rgb: the red-safe flash tint. a: 1 in calm.
         var flashColor = SIMD4<Float>(1, 1, 1, 0)
@@ -15,7 +16,7 @@
         /// Writes `state`'s picture and `drive` into the uniforms. Touches no heap.
         @MainActor mutating func fill(size: CGSize, state: SoundVisualState, drive: IntenseDrive) {
             base.fill(size: size, state: state)
-            extra = SIMD4(drive.flash, 0, drive.intensity, drive.glitch)
+            extra = SIMD4(drive.flash, state.look.isNeutral ? 0 : 1, drive.intensity, drive.glitch)
             flashColor = SIMD4(drive.flashColor, state.calm ? 1 : 0)
         }
     }
