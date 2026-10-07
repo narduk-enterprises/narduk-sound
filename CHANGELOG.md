@@ -6,6 +6,55 @@ NardukMusic ships on the narduk-libs repository `vX.Y.Z` tags (SwiftPM), not on 
 
 ### Added
 
+- `IntenseKind.audioTerrainMetal` ("Audio terrain (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port
+  of the Canvas audio terrain: fourteen neon-crested ridges in perspective, painted far to near (the nearest six the
+  live waveform history, the rest a ground-fixed noise landscape that scrolls with the travel), under a banded low
+  sun, over a ground grid that rolls on the beat. Bass raises the central peak and swells the sun, mids the shoulders,
+  highs a fine jitter at the edges; a kick and the beat lift the nearest ridge. No flash.
+- `IntenseKind.pitchWheelMetal` ("Pitch wheel (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of
+  the Canvas pitch wheel: twelve cylinder-lit glass petals (C at the top) that grow with each class, tip beads, an
+  outer ring of class dots (hollow for sharps), a chord polygon through the strong classes, the key outlined with a
+  spoke to a plasma ball in the tonic's color, rings on beat, kick and snare. Bass swells the ball and glow, highs
+  sparkle on the tips.
+- `IntenseKind.pianoRollMetal` ("Piano roll (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of the
+  Canvas piano roll: the notes as cylinder-lit glass bars on their pitch rows, hot at the strike and cooling along the
+  tail, dimming with age as they flow into a lit piano keyboard where a sounding note flares and lights its key (the
+  12 chroma rows as cells when the source gives no notes). Bass swells the playhead glow, highs light the dust, a kick
+  flares the playhead.
+- `IntenseKind.phosphorMetal` ("Phosphor (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of the
+  Canvas phosphor: a stereo-goniometer Lissajous burning into a CRT (the newest trace from the live waveform with a
+  hot core and a wide bloom, five fading, shrinking older traces from the history), over a graticule with axes, rings
+  and diagonals that lights under the beam, with a beat ring, a kick ring, a snare ring, dust and scanlines. Bass
+  swells the center glow, highs light the outer graticule, a kick flares the trace.
+- `IntenseKind.mirrorMetal` ("Mirror (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of the Canvas
+  mirror: 64 cylinder-lit neon slabs, bass at the center and highs at both edges (bass widens in a drop), with peak
+  caps and rising embers, over a far skyline and a perspective neon floor that rolls once per beat, lit from below and
+  reflecting the slabs, and a waveform horizon beam. A kick brightens the grid and glow; a snare streaks the horizon.
+- `IntenseKind.padsMetal` ("Pads (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of the Canvas
+  pads: one lit glass pad per instrument (a 7 x 3 grid, role hues from the palette) with a bevel, a hot core, a spill
+  into the gaps and neighbours and a shock ring on each hit, a spectrum backlight (bass left, highs right), a beat
+  sweep each bar and empty sockets. A kick lights the panel.
+- `IntenseKind.wobbleMeterMetal` ("Wobble meter (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of
+  the Canvas wobble meter: a glossy dial with a chrome bezel, a neon cutoff arc and a needle with a fading tail that
+  turns once per wobble cycle, beside segmented LED peak and RMS meters over a dim spectrum. Bass swells the dial's
+  glow and hub, highs spark on the ticks, a kick flares the needle.
+- `IntenseKind.scopeMetal` ("Scope (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of the Canvas
+  scope: the waveform as a phosphor beam on curved CRT glass, triggered on a rising zero crossing, with five receding
+  history traces, a lit graticule and a snare sync bar. Bass swells the bloom, highs sparkle on the beam, a kick
+  flares it.
+- `IntenseKind.haloMetal` ("Halo (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): a Metal port of the Canvas
+  halo: 64 lit spectrum rays around a plasma core, the bass swelling the core and the rays on the left of the ring,
+  the highs the right, a waveform ring with a chroma split, beat rings, a snare ring, peak ticks, zoom dust and shed
+  sparks. Kicks flare the core.
+- `IntenseKind.vortexMetal` ("Vortex (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): the Metal port of the
+  Canvas vortex: a spiral galaxy of lit gas and shaded beads wound from the spectrum, bass at the core and highs at
+  the rim, with a waveform accretion ring, a polar starfield turning at its own rate per ring, snare shock rings and a
+  beat ring. A kick swells the core, a drop winds the arms tighter and a glitch splits them into two fringes.
+- `IntenseKind.spectrumMetal` ("Spectrum (Metal)") in `NardukSoundVisuals` (narduk-libs#1569): the Metal port of the
+  Canvas spectrum: 64 glass tubes of liquid light (a cylinder-lit body, specular streak, meniscus) with hue by band,
+  floating peak beads, a mirror floor, a drifting echo row and dust. Bass and the kick swell the low tubes, highs
+  stand tall, the snare throws a band of light up the tubes, the beat pulses the floor line, the drop widens them.
+  Reads peaks through the new `IntenseAux` buffers.
 - `SoundVisualizerKind.audioTerrain` ("Audio terrain") in `NardukSoundVisuals` (narduk-libs#1569): a neon wireframe
   landscape. Bass lifts the central ridges, mids the shoulders and highs the edge jitter; each older waveform-history
   row sits further away, and `travel` scrolls the grid. The beat lifts the nearest ridge; a drop brightens the palette
@@ -18,6 +67,9 @@ and the Beat Blaster kids app. Everything is additive; the two enum cases below 
 
 ### Added
 
+- `IntenseKind.sun` ("Sun") in `NardukSoundVisuals` (narduk-libs#1569): a Metal close-up star with a rotating,
+  relief-lit granulated photosphere, sunspots, spicules, ridged corona streamers, snare-driven prominence loops and
+  solar-wind sparks; bass swells the disc, mids churn the surface, highs fringe the limb, the kick flares it.
 - `IntenseEffects` in `NardukSoundVisuals` (narduk-libs#1656): the shared MSL effects library every Intense shader
   compiles with (`fx*`: 3-D noise and `fxCylinder`, `fxRidge`, `fxNormal`/`fxLight`/`fxBall` lighting, `fxZoomLayer`/
   `fxCell` flying particles, `fxFlash`/`fxTonemap`/`fxVignette`). Liquid splash is its first consumer, pixel for pixel.

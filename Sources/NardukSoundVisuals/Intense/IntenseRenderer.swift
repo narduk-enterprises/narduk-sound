@@ -36,15 +36,40 @@
         private let fractal: any MTLRenderPipelineState
         private let synthwave: any MTLRenderPipelineState
         private let liquid: any MTLRenderPipelineState
+        private let sun: any MTLRenderPipelineState
+        private let audioTerrainMetal: any MTLRenderPipelineState
+        private let pitchWheelMetal: any MTLRenderPipelineState
+        private let pianoRollMetal: any MTLRenderPipelineState
+        private let phosphorMetal: any MTLRenderPipelineState
+        private let mirrorMetal: any MTLRenderPipelineState
+        private let padsMetal: any MTLRenderPipelineState
+        private let wobbleMeterMetal: any MTLRenderPipelineState
+        private let scopeMetal: any MTLRenderPipelineState
+        private let haloMetal: any MTLRenderPipelineState
+        private let vortexMetal: any MTLRenderPipelineState
+        private let spectrumMetal: any MTLRenderPipelineState
         private let screenPass = MTLRenderPassDescriptor()
         private let fluidPass = MTLRenderPassDescriptor()
+        /// What the Canvas ports read beyond the spectrum and waveform; filled in place each frame.
+        private var aux = IntenseAux()
 
         init?(device: (any MTLDevice)? = MTLCreateSystemDefaultDevice()) {
             let options = MTLCompileOptions()
             options.mathMode = .fast
             let source = [
                 IntenseShaderCommon.source, IntenseEffects.source, HyperspaceShader.source, FluidGlitchShader.source,
-                FractalDiveShader.source, SynthwaveShader.source, LiquidSplashShader.source,
+                FractalDiveShader.source, SynthwaveShader.source, LiquidSplashShader.source, SunShader.source,
+                SpectrumMetalShader.source,
+                VortexMetalShader.source,
+                HaloMetalShader.source,
+                ScopeMetalShader.source,
+                WobbleMeterMetalShader.source,
+                PadsMetalShader.source,
+                MirrorMetalShader.source,
+                PhosphorMetalShader.source,
+                PianoRollMetalShader.source,
+                PitchWheelMetalShader.source,
+                AudioTerrainMetalShader.source,
             ].joined(separator: "\n")
             guard let device, let queue = device.makeCommandQueue(),
                 let library = try? device.makeLibrary(source: source, options: options),
@@ -61,7 +86,18 @@
             guard let hyperspace = pipeline("hyperspaceFragment"), let fluid = pipeline("fluidFragment"),
                 let glitch = pipeline("glitchFragment"),
                 let fractal = pipeline("fractalDiveFragment"), let synthwave = pipeline("synthwaveFragment"),
-                let liquid = pipeline("liquidSplashFragment")
+                let liquid = pipeline("liquidSplashFragment"), let sun = pipeline("sunFragment"),
+                let audioTerrainMetal = pipeline("audioTerrainMetalFragment"),
+                let pitchWheelMetal = pipeline("pitchWheelMetalFragment"),
+                let pianoRollMetal = pipeline("pianoRollMetalFragment"),
+                let phosphorMetal = pipeline("phosphorMetalFragment"),
+                let mirrorMetal = pipeline("mirrorMetalFragment"),
+                let padsMetal = pipeline("padsMetalFragment"),
+                let wobbleMeterMetal = pipeline("wobbleMeterMetalFragment"),
+                let scopeMetal = pipeline("scopeMetalFragment"),
+                let haloMetal = pipeline("haloMetalFragment"),
+                let vortexMetal = pipeline("vortexMetalFragment"),
+                let spectrumMetal = pipeline("spectrumMetalFragment")
             else { return nil }
             self.device = device
             self.queue = queue
@@ -71,6 +107,18 @@
             self.fractal = fractal
             self.synthwave = synthwave
             self.liquid = liquid
+            self.sun = sun
+            self.audioTerrainMetal = audioTerrainMetal
+            self.pitchWheelMetal = pitchWheelMetal
+            self.pianoRollMetal = pianoRollMetal
+            self.phosphorMetal = phosphorMetal
+            self.mirrorMetal = mirrorMetal
+            self.padsMetal = padsMetal
+            self.wobbleMeterMetal = wobbleMeterMetal
+            self.scopeMetal = scopeMetal
+            self.haloMetal = haloMetal
+            self.vortexMetal = vortexMetal
+            self.spectrumMetal = spectrumMetal
         }
 
         /// Draws one frame of `kind` into `target` through `buffer`. `surface` is required for `.fluidGlitch`: the
@@ -81,6 +129,8 @@
             motion: IntenseMotion = IntenseMotion()
         ) {
             uniforms.fill(size: CGSize(width: target.width, height: target.height), state: state, drive: drive)
+            let needs = kind.auxNeeds
+            if !needs.isEmpty { aux.fill(from: state, needs: needs) }
             switch kind {
             case .hyperspaceLasers:
                 draw(hyperspace, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil)
@@ -92,6 +142,52 @@
                     motion: motion)
             case .liquidSplash:
                 draw(liquid, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil)
+            case .sun:
+                draw(sun, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil)
+            case .spectrumMetal:
+                draw(
+                    spectrumMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .vortexMetal:
+                draw(
+                    vortexMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .haloMetal:
+                draw(
+                    haloMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .scopeMetal:
+                draw(
+                    scopeMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars, .history])
+            case .wobbleMeterMetal:
+                draw(
+                    wobbleMeterMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .padsMetal:
+                draw(
+                    padsMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .mirrorMetal:
+                draw(
+                    mirrorMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .phosphorMetal:
+                draw(
+                    phosphorMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars, .history])
+            case .pianoRollMetal:
+                draw(
+                    pianoRollMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars, .roll])
+            case .pitchWheelMetal:
+                draw(
+                    pitchWheelMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars])
+            case .audioTerrainMetal:
+                draw(
+                    audioTerrainMetal, to: target, buffer: buffer, state: state, uniforms: &uniforms, input: nil,
+                    needs: [.scalars, .history])
             case .fluidGlitch:
                 guard let surface else { return }
                 if surface.isFresh {  // nothing to advect yet: start from black
@@ -111,7 +207,7 @@
         private func draw(
             _ pipeline: any MTLRenderPipelineState, to target: any MTLTexture, buffer: any MTLCommandBuffer,
             state: SoundVisualState, uniforms: inout IntenseUniforms, input: (any MTLTexture)?,
-            motion: IntenseMotion? = nil
+            motion: IntenseMotion? = nil, needs: IntenseAux.Needs = []
         ) {
             let pass = screenPass
             pass.colorAttachments[0].texture = target
@@ -134,6 +230,7 @@
                     if let base = bytes.baseAddress { encoder.setFragmentBytes(base, length: bytes.count, index: 3) }
                 }
             }
+            if !needs.isEmpty { aux.bind(needs, to: encoder) }
             if let input { encoder.setFragmentTexture(input, index: 0) }
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             encoder.endEncoding()

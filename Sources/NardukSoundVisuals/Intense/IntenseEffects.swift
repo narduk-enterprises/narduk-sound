@@ -10,6 +10,8 @@
     /// - `fxNormal` and `fxLight`: a finite-difference normal and its diffuse + specular terms, the "lit, not flat" rule.
     /// - `fxBall`: a shaded sphere for droplets, beads and planets.
     /// - `fxZoomLayer` and `fxCell`: a grid of things that fly out of the center and grow, continuous across two layers.
+    /// - `fxSegment`, `fxBeam`, `fxRoundBox`, `fxStars`: stroke distance, a neon stroke profile, a rounded-box SDF and a
+    ///   twinkling far starfield (the Metal ports of the Canvas looks).
     /// - `fxFlash`, `fxTonemap`, `fxVignette`: the finish, with the flash capped at the A11 ration.
     enum IntenseEffects {
         static let source = #"""
@@ -137,6 +139,40 @@
                 float h3 = hash21(id * 0.61 + seed + 9.7);
                 center = (id + 0.5 + (float2(h2, h3) - 0.5) * 0.5) * cs;
                 return true;
+            }
+
+            // ---- Strokes, shapes and stars (the Metal ports of the Canvas looks) -------------------------------
+
+            // Distance from `p` to the segment a-b.
+            static float fxSegment(float2 p, float2 a, float2 b) {
+                float2 pa = p - a;
+                float2 ba = b - a;
+                float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);
+                return length(pa - ba * h);
+            }
+
+            // A neon stroke at distance `d` from its center line: x is the hot core (a tight gaussian of half-width
+            // `width`), y the soft halo that bleeds well past it.
+            static float2 fxBeam(float d, float width) {
+                float core = exp(-d * d / (width * width));
+                float halo = exp(-d / (width * 3.5)) * 0.35;
+                return float2(core, halo);
+            }
+
+            // Signed distance to a rounded box of half-size `h` and corner radius `r` (negative inside).
+            static float fxRoundBox(float2 p, float2 h, float r) {
+                float2 q = abs(p) - h + r;
+                return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+            }
+
+            // A dim far starfield: points that twinkle, in cells of `1/scale` of the space. Returns 0 ... 1.
+            static float fxStars(float2 p, float scale, float seed, float time) {
+                float2 sp = p * scale;
+                float2 id = floor(sp);
+                float h = hash21(id + seed);
+                float2 c = id + 0.5 + (float2(hash21(id + seed + 3.1), hash21(id + seed + 7.7)) - 0.5) * 0.8;
+                float star = exp(-dot(sp - c, sp - c) * 60.0) * step(0.88, h) * (0.3 + 0.7 * hash21(id + seed + 1.3));
+                return star * (0.5 + 0.5 * sin(time * 1.5 + h * 40.0));
             }
 
             // ---- The finish ------------------------------------------------------------------------------------

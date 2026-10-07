@@ -104,6 +104,30 @@ public enum IntenseKind: String, Sendable, CaseIterable, Hashable {
     case synthwaveFlyover
     /// Iridescent liquid filaments and droplets splashing out of a core: bass sets the reach, highs the spray.
     case liquidSplash
+    /// A close-up star: granulated photosphere, sunspots, spicules, corona streamers, prominences and solar wind.
+    case sun
+    /// The Metal port of the Canvas audio terrain: lit neon ridges rolling toward the viewer under a banded low sun.
+    case audioTerrainMetal
+    /// The Metal port of the Canvas pitch wheel: twelve glass petals around a lit core, a chord polygon and the key marked.
+    case pitchWheelMetal
+    /// The Metal port of the Canvas piano roll: a note waterfall of lit glass bars flowing into a keyboard.
+    case pianoRollMetal
+    /// The Metal port of the Canvas phosphor: a stereo-goniometer Lissajous with persistence trails on a lit CRT graticule.
+    case phosphorMetal
+    /// The Metal port of the Canvas mirror: symmetric neon slabs over a beat-rolling neon floor and a waveform horizon.
+    case mirrorMetal
+    /// The Metal port of the Canvas pads: one lit glass pad per instrument, with a hot core, a spill into its neighbours and a shock ring.
+    case padsMetal
+    /// The Metal port of the Canvas wobble meter: a glossy dial with the cutoff arc and the LFO needle, beside LED peak and RMS meters.
+    case wobbleMeterMetal
+    /// The Metal port of the Canvas scope: the waveform as a phosphor beam on curved CRT glass, with receding history traces.
+    case scopeMetal
+    /// A radial spectrum of lit needles around a glossy plasma core with a waveform ring, beat rings and shed sparks.
+    case haloMetal
+    /// A spiral galaxy of lit gas and shaded beads wound from the spectrum: bass at the core, highs at the rim, a waveform accretion ring, snare shock rings.
+    case vortexMetal
+    /// The 64 bands as glass tubes of liquid light on a mirror floor, peak beads floating above: bass swells the low tubes, highs stand tall and shower dust.
+    case spectrumMetal
 
     public var title: String {
         switch self {
@@ -112,6 +136,18 @@ public enum IntenseKind: String, Sendable, CaseIterable, Hashable {
         case .fractalDive: "Fractal dive"
         case .synthwaveFlyover: "Synthwave flyover"
         case .liquidSplash: "Liquid splash"
+        case .sun: "Sun"
+        case .audioTerrainMetal: "Audio terrain (Metal)"
+        case .pitchWheelMetal: "Pitch wheel (Metal)"
+        case .pianoRollMetal: "Piano roll (Metal)"
+        case .phosphorMetal: "Phosphor (Metal)"
+        case .mirrorMetal: "Mirror (Metal)"
+        case .padsMetal: "Pads (Metal)"
+        case .wobbleMeterMetal: "Wobble meter (Metal)"
+        case .scopeMetal: "Scope (Metal)"
+        case .haloMetal: "Halo (Metal)"
+        case .vortexMetal: "Vortex (Metal)"
+        case .spectrumMetal: "Spectrum (Metal)"
         }
     }
 }

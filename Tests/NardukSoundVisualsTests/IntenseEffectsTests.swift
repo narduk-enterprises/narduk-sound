@@ -11,7 +11,7 @@
     @Suite struct IntenseEffectsTests {
         nonisolated static let hasMetal = MTLCreateSystemDefaultDevice() != nil
 
-        static let probeCount = 24
+        static let probeCount = 30
 
         static let probe = #"""
             kernel void fxProbe(device float *out [[buffer(0)]], uint id [[thread_position_in_grid]]) {
@@ -47,6 +47,12 @@
                 out[21] = fxTonemap(float3(0.0), 1.4).x;
                 out[22] = fxVignette(float3(1.0), float2(1.0, 0.0), 0.09).x;
                 out[23] = fxCylinder(float2(0.5, 0.0), 2.0, 10.0, 0.35).z - fxCylinder(float2(0.5, 0.0), 2.0, 0.0, 0.35).z;
+                out[24] = fxSegment(float2(0.5, 1.0), float2(0.0, 0.0), float2(1.0, 0.0));
+                out[25] = fxSegment(float2(2.0, 0.0), float2(0.0, 0.0), float2(1.0, 0.0));
+                out[26] = fxBeam(0.0, 0.01).x - fxBeam(0.05, 0.01).x;
+                out[27] = fxBeam(0.05, 0.01).y;
+                out[28] = fxRoundBox(float2(0.0, 0.0), float2(1.0, 1.0), 0.2) * fxRoundBox(float2(2.0, 0.0), float2(1.0, 1.0), 0.2);
+                out[29] = fxStars(float2(0.3, 0.7), 14.0, 1.0, 0.5);
             }
             """#
 
@@ -109,6 +115,15 @@
             #expect(abs(v[22] - 0.91) < 1e-4)
             // Travel streams the cylinder field outward (the sample slides along the axis).
             #expect(v[23] < 0)
+            // A segment's distance is the perpendicular inside its span and the end distance past it.
+            #expect(abs(v[24] - 1) < 1e-4)
+            #expect(abs(v[25] - 1) < 1e-4)
+            // A beam is hottest on its line, falls off, and keeps a halo; a box is negative inside, positive outside.
+            #expect(v[26] > 0.9)
+            #expect(v[27] > 0 && v[27] < 0.35)
+            #expect(v[28] < 0)
+            // Stars stay in range.
+            #expect(v[29] >= 0 && v[29] <= 1)
         }
     }
 #endif
