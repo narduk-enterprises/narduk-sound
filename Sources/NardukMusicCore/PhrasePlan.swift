@@ -58,17 +58,20 @@ struct PhrasePlan: Sendable, Hashable {
 
 enum PhrasePlanner {
     /// The plan for a new phrase of `track`. Fills alternate between the track's two, except that live chaos stutters
-    /// and live idling cuts the kick, so the input still leans on a track it did not write.
-    static func plan(track: Track, section: SongSection, phraseInTrack: Int, live: MusicCharacter, roll: UInt64)
-        -> PhrasePlan
-    {
+    /// and a measured lull cuts the kick, so the input still leans on a track it did not write. `lull` is true only
+    /// when the flow was heard and found quiet: an idle reading that is merely the default (a source with no flow, or
+    /// a pinned hint) leaves the track's own fills alone, or every phrase would end on a kick drop.
+    static func plan(
+        track: Track, section: SongSection, phraseInTrack: Int, live: MusicCharacter, lull: Bool = false,
+        roll: UInt64
+    ) -> PhrasePlan {
         var plan = PhrasePlan()
         plan.seed = roll
         plan.variants = track.variants(section: section, live: live)
         switch live {
         case .chaos where track.genre != .chill && track.genre != .lofi && track.genre != .tropicalHouse:
             plan.fill = .bassStutter
-        case .idle: plan.fill = .kickDrop
+        case .idle where lull: plan.fill = .kickDrop
         default: plan.fill = track.fills[phraseInTrack % track.fills.count]
         }
         plan.midFill = track.midFill
