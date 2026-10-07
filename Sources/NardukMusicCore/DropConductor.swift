@@ -89,16 +89,22 @@ extension SongSection {
 
 /// INTRO -> BUILD -> DROP -> BREAKDOWN -> DROP2 -> ... Decides one bar before a phrase boundary and
 /// applies at the boundary, so the arranger knows in the last bar whether a drop is coming. Energy and the
-/// thresholds steer every move; the seed only varies lengths: a later build may take two phrases, DROP2 runs two
-/// to four phrases before a one-phrase breather breakdown, and a breather sometimes rebuilds into a fresh DROP
-/// (a double drop) instead of going straight back to DROP2.
+/// thresholds steer every move; the seed only varies lengths: DROP2 runs two to four phrases before a one-phrase
+/// breather breakdown, and a breather sometimes rebuilds into a fresh DROP (a double drop) instead of going straight
+/// back to DROP2. A build is one phrase; a later build takes a second only when the energy was still rising as it
+/// began, and no build outlasts its planned length (16-bar builds at one level were narduk-sound#40).
 struct SectionMachine: Sendable {
     private(set) var section: SongSection = .intro
     /// Phrases the current section has played, counting the one in progress.
     private(set) var phrasesInSection = 1
     private(set) var committedNext: SongSection?
-    /// Phrases a build lasts at full energy; the first build is always one phrase.
+    /// Phrases the current build lasts, fixed as it starts: the first build of a track and a build a queued drop asked
+    /// for are one phrase, a later one is two only when the energy was rising into it.
     private(set) var buildLength = 1
+    /// The energy at the last decision, and whether it had risen since the one before.
+    private var lastEnergy: Double?
+    private var energyRising = false
+    private var buildForDrop = false
     /// Phrases of DROP2 before a breather, from the track, applied when DROP2 starts.
     private(set) var drop2Length = 3
     private var plannedDrop2Length = 3
@@ -114,15 +120,19 @@ struct SectionMachine: Sendable {
     mutating func override(_ next: SongSection) { committedNext = next }
 
     mutating func commit(energy: Double, build: Double, drop: Double, dropQueued: Bool, roll: UInt64 = 0) {
+        energyRising = lastEnergy.map { energy > $0 + 0.02 } ?? false
+        lastEnergy = energy
+        buildForDrop = dropQueued
         var next: SongSection
         switch section {
         case .intro:
             next = energy >= build ? .build : .intro
         case .build:
-            if energy >= build {
-                next = phrasesInSection >= buildLength ? .drop : .build
+            // A build ends on its planned length, into the drop while the energy can hold one.
+            if energy < drop {
+                next = .breakdown
             } else {
-                next = energy < drop ? .breakdown : .build
+                next = phrasesInSection >= buildLength ? .drop : .build
             }
         case .drop:
             next = energy < drop ? .breakdown : (phrasesInSection >= 2 ? .drop2 : .drop)
@@ -145,11 +155,12 @@ struct SectionMachine: Sendable {
     mutating func forceDrop() {
         guard !section.isDrop else { return }
         committedNext = Self.dropTarget(from: section)
+        buildForDrop = true
     }
 
     /// Applies the committed decision. Returns true when the section changed.
     @discardableResult
-    mutating func enterNext(roll: UInt64 = 0) -> Bool {
+    mutating func enterNext() -> Bool {
         defer { if section == .drop2, phrasesInSection == 1 { drop2Length = plannedDrop2Length } }
         let next = committedNext ?? section
         committedNext = nil
@@ -161,7 +172,7 @@ struct SectionMachine: Sendable {
         phrasesInSection = 1
         switch next {
         case .build:
-            buildLength = builds == 0 ? 1 : 1 + Int(roll % 2)
+            buildLength = builds == 0 || buildForDrop || !energyRising ? 1 : 2
             builds += 1
         default:
             break
@@ -469,7 +480,7 @@ public struct DropConductor: Sendable {
         if barStep == 0 { startBar() }
         if phraseStep == 0 {
             if step > 0 {
-                sectionJustStarted = sections.enterNext(roll: rng.next())
+                sectionJustStarted = sections.enterNext()
                 if sections.section.isDrop { dropQueued = false }
                 if trackEnding {
                     let requested = nextTrackRequested
@@ -607,6 +618,9 @@ public struct DropConductor: Sendable {
     private func shouldEndTrack() -> Bool {
         guard !dropQueued, pendingGenre == nil else { return false }
         let section = sections.section
+        // A build always pays off in its own track's drop; the hand-over waits for it. Ending the track here started
+        // the next one on another build, and the two read as one 16-bar build at one level (#40).
+        if section == .build, sections.committedNext?.isDrop == true { return false }
         if trackPhrases >= track.maxPhrases { return true }
         if trackDropPhrases >= track.dropBudget {
             // The track's drops are spent. Riding high energy, mix into the next track's build; once the energy has
@@ -721,17 +735,40 @@ public struct DropConductor: Sendable {
         // Tropical house has none of them either: its drop is a lift, and its hand-overs just let go.
         let gentle = profile.gentle
 
-        if dropComing, !ambient, !gentle {
-            // The last bar: a riser that ends exactly on the drop, and a snare roll that speeds up into it.
-            if !riserFired {
-                riserFired = true
-                add(
-                    .riser, profile.riserVelocity,
-                    NoteParams(pitch: track.keyRoot + 12, lengthSteps: perPhrase - phraseStep))
-                note(legend: "riser ← build to drop", replacingPrefix: "riser")
-            }
-            if Self.rolls(barStep: barStep, half: half, beat: beat) {
-                add(.snare, (0.35 + 0.65 * Double(barStep) / Double(perBar)) * profile.gain)
+        // How this genre arrives at a drop (GenreArrangement.DropEntry). A build writes its own snare roll, so the
+        // conductor's roll only leads a drop that comes straight out of a breakdown.
+        let entry: GenreArrangement.DropEntry = ambient || gentle ? .none : GenreArrangement.dropEntry(genre)
+        if dropComing {
+            let lastBeat = barStep >= perBar - beat
+            switch entry {
+            case .slam:
+                // The last bar: a riser that ends exactly on the drop, and a snare roll that speeds up into it.
+                if !riserFired {
+                    riserFired = true
+                    add(
+                        .riser, profile.riserVelocity,
+                        NoteParams(pitch: track.keyRoot + 12, lengthSteps: perPhrase - phraseStep))
+                    note(legend: "riser ← build to drop", replacingPrefix: "riser")
+                }
+                if section != .build, Self.rolls(barStep: barStep, half: half, beat: beat) {
+                    add(.snare, (0.35 + 0.65 * Double(barStep) / Double(perBar)) * profile.gain)
+                }
+            case .pickup:
+                if !riserFired {
+                    riserFired = true
+                    add(
+                        .riser, profile.riserVelocity * 0.7,
+                        NoteParams(pitch: track.keyRoot + 12, lengthSteps: perPhrase - phraseStep))
+                }
+                if lastBeat { add(.snare, (0.25 + 0.2 * Double(barStep % beat) / Double(beat)) * profile.gain) }
+            case .bandFill:
+                // Snare on the even 16ths, kick on the odd ones, rising into the crash.
+                if lastBeat {
+                    let rise = Double(barStep % beat) / Double(beat)
+                    add(barStep % 2 == 0 ? .snare : .kick, (0.6 + 0.35 * rise) * profile.gain)
+                }
+            case .filterOpen, .none:
+                break
             }
         }
 
@@ -751,9 +788,19 @@ public struct DropConductor: Sendable {
             }
         }
 
-        if barStep == 0, !ambient, !gentle, switched || (section.isDrop && sectionJustStarted) {
-            add(.impact, section.isDrop ? 1.0 : 0.85)
-            quantizer.spend(.instrument(.impact), bar: bar)
+        // A genre switch cuts in at a bar line and is marked like a slam, except by a band; a drop arrives in the
+        // genre's own form.
+        if barStep == 0, switched || (section.isDrop && sectionJustStarted) {
+            switch entry {
+            case .filterOpen where switched && !(section.isDrop && sectionJustStarted), .slam, .pickup:
+                let velocity = section.isDrop ? 1.0 : 0.85
+                add(.impact, entry == .pickup ? velocity * 0.6 : velocity)
+                quantizer.spend(.instrument(.impact), bar: bar)
+            case .bandFill:
+                if section.isDrop, track.kit(drop2: section == .drop2).openHats.count < 2 { add(.openHat, 0.8 * profile.gain) }
+            case .filterOpen, .none:
+                break
+            }
         }
 
         let context = StepContext(
@@ -762,6 +809,8 @@ public struct DropConductor: Sendable {
             inboundShare: energy.inboundShare, track: track, plan: plan, wobbleRate: wobbleRate, voice: voice,
             dropComing: dropComing, outro: outro,
             introHook: section == .intro && trackPhrases >= 2,
+            phraseInSection: sections.phrasesInSection - 1,
+            sectionPhrases: section == .build ? sections.buildLength : 1,
             voicing: settings.effectiveVoicing, comping: settings.effectiveComping)
         if ambient {
             out += AmbientArrangement.notes(context)

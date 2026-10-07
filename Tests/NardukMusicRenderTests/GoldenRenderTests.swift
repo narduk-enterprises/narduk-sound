@@ -11,8 +11,8 @@ import Testing
 /// listen to `narduk-music render --scenario scenarios/build-session.json --out /tmp/x.wav`, and update it here.
 @Suite struct GoldenRenderTests {
     static let goldens: [String: UInt64] = [
-        "darwin-arm64": 0x79b6_c9b5_a14c_909c,
-        "linux-x86_64": 0x330d_8643_585f_3360,
+        // Moved with section variation (#40, 2026-10-07); the Linux value is read from the first Linux CI run.
+        "darwin-arm64": 0x7430_00a9_7187_847e,
     ]
 
     static var platform: String {
@@ -52,22 +52,22 @@ import Testing
     /// One golden per genre: the build-session scenario rendered in each genre at its own tempo, so a change to Core
     /// that moves any existing genre's song fails here.
     static let genreGoldens: [Genre: [String: UInt64]] = [
-        // Genres without a Linux fingerprint moved with the queued-drop build, the band lead and the breath band
-        // (2026-10-07); their Linux values are read from the first Linux CI run.
-        .dubstep: ["darwin-arm64": 0x518a_6bbb_58e6_4717, "linux-x86_64": 0x7368_e9c5_3c8f_61c8],
-        .riddim: ["darwin-arm64": 0x4bf2_aafe_24da_7278, "linux-x86_64": 0x9abc_266a_eb45_dbc8],
-        .drumAndBass: ["darwin-arm64": 0x3f73_a3a6_8d18_65af, "linux-x86_64": 0x8bb6_79b2_cc40_a854],
-        .trap: ["darwin-arm64": 0xb2fc_0671_4bd4_fd74, "linux-x86_64": 0xe1d6_8c8b_40ca_efba],
-        .house: ["darwin-arm64": 0xbb0f_c4fb_dc64_5f02],
-        .chill: ["darwin-arm64": 0x99c9_4129_0e26_4ad5],
-        .techno: ["darwin-arm64": 0x57fb_9a28_6137_84e5],
-        .ukGarage: ["darwin-arm64": 0x5f95_8674_7d35_916a],
-        .synthwave: ["darwin-arm64": 0x7b61_7b54_7f0f_7928],
-        .lofi: ["darwin-arm64": 0x7066_a558_6ba3_d111, "linux-x86_64": 0x06d5_4551_caf9_f7dd],
-        .rock: ["darwin-arm64": 0xf948_6473_5ceb_5d30],
-        .folk: ["darwin-arm64": 0x7fcb_638f_cf1d_9f04],
-        .funk: ["darwin-arm64": 0x2d0b_5ed3_b7e1_6455],
-        .tropicalHouse: ["darwin-arm64": 0xa939_293e_72ea_7e86],
+        // Every genre moved with section variation (#40, 2026-10-07); Linux values are read from
+        // the first Linux CI run. Goldens pin determinism, not a judgement of how the music sounds.
+        .dubstep: ["darwin-arm64": 0xa1c1_e358_a404_14dd],
+        .riddim: ["darwin-arm64": 0xd935_4a8e_b788_7d7b],
+        .drumAndBass: ["darwin-arm64": 0x04c8_f698_361d_2fe9],
+        .trap: ["darwin-arm64": 0x7eaa_4631_d0e4_b6ea],
+        .house: ["darwin-arm64": 0x6c3d_fb37_094a_73d9],
+        .chill: ["darwin-arm64": 0x5a38_2691_60da_2759],
+        .techno: ["darwin-arm64": 0xb790_30ef_5462_0dbb],
+        .ukGarage: ["darwin-arm64": 0xd6ff_9ea5_cc59_bf2d],
+        .synthwave: ["darwin-arm64": 0xaeec_5a14_1c10_257c],
+        .lofi: ["darwin-arm64": 0x4c24_a1e8_c904_a5dd],
+        .rock: ["darwin-arm64": 0xb2fc_c28c_9ff1_5d7c],
+        .folk: ["darwin-arm64": 0x1e9c_66f6_83fa_1db1],
+        .funk: ["darwin-arm64": 0x6f22_24d0_01ce_7450],
+        .tropicalHouse: ["darwin-arm64": 0x789a_6df0_c654_bc65],
     ]
 
     @Test(arguments: Genre.allCases)
