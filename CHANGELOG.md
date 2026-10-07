@@ -35,6 +35,7 @@ shipped on narduk-libs tags.
 
 ### Changed
 
+- Sections vary (#40): a build ramps bar by bar over its whole length (kick, hats, snare roll, then the kit opens like a filter) and lasts a second phrase only when the energy rose into it, and a track no longer hands over mid-build; a drop phrase is a call and a seeded response (bass rhythm variant, hat pattern swap, half-phrase drop-out), so no bar or pair repeats past four bars; an intro adds or rotates a layer each phrase after its second. Each genre arrives at a drop in one of a few forms (slam, filter opening, quiet pickup, band fill) instead of one riser, roll and impact for all, and vocal-plan cuts punctuate only some drop phrases per genre (tropical house's unchanged). Every genre golden moved.
 - Fixes from Logan's Forever Loop flags (2026-10-07):
   - A queued drop out of an intro or breakdown now builds for one phrase first and drops on the line after. A drop straight out of an intro had one bar of lead-in.
   - The formant `vox` breakdown lead no longer plays in band genres (funk, rock, folk).

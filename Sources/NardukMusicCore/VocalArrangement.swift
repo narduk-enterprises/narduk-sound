@@ -161,14 +161,17 @@ enum VocalArrangement {
         }
 
         if plan.cuts {
-            // A stutter fill on the last beat before a drop; a cut on the last bar of each drop phrase.
-            if c.dropComing {
+            // A stutter fill on the last beat before a drop, and a cut on the last bar of some drop phrases, as the
+            // genre punctuates (GenreArrangement.cutsOnDropPhrase).
+            if c.dropComing, GenreArrangement.stuttersIntoDrop(c.track.genre) {
                 if pos == 12 {
                     add(.cut, 1, .cut(.stutter, division: .sixteenth, steps: 2, amount: 0.6, seed: c.bar))
                 } else if pos == 14 {
                     add(.cut, 1, .cut(.stutter, division: .thirtySecond, steps: 2, amount: 0.9, seed: c.bar))
                 }
-            } else if c.section.isDrop, c.isLastBar, pos == 12 {
+            } else if c.section.isDrop, c.isLastBar, pos == 12,
+                GenreArrangement.cutsOnDropPhrase(c.track.genre, phraseInSection: c.phraseInSection)
+            {
                 add(.cut, 1, .cut(plan.cutMode, division: .sixteenth, steps: 4, amount: 0.5, seed: c.bar))
             }
         }
