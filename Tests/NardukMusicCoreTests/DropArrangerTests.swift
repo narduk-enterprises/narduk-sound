@@ -240,4 +240,45 @@ import Testing
         #expect(
             MasterFilter.idle.isIdle && !MasterFilter(highPassHz: 400).isIdle && !MasterFilter(lowPassHz: 900).isIdle)
     }
+
+    // MARK: Intensity
+
+    /// A drop matches its song (Logan 2026-10-07: "a drop should match the song"): a calm song gets a gentle lift, a
+    /// big one the full build and slam.
+    @Test func aCalmSongGetsAGentleDrop() {
+        var big = DropArrangerTests.context(.funk)
+        big.intensity = 1
+        var calm = big
+        calm.intensity = 0.3
+        let bigDrop = DropArrangerTests.dropNotes(big)
+        let calmDrop = DropArrangerTests.dropNotes(calm)
+        #expect(bigDrop.contains { $0.instrument == .impact })
+        #expect(!calmDrop.contains { $0.instrument == .impact })
+        func loudness(_ notes: [ScheduledNote]) -> Double { notes.map(\.velocity).reduce(0, +) }
+        #expect(loudness(calmDrop) < 0.8 * loudness(bigDrop))
+
+        let bigBuild = DropArrangerTests.buildNotes(big)
+        let calmBuild = DropArrangerTests.buildNotes(calm)
+        let riser = { (notes: [ScheduledNote]) in notes.first { $0.instrument == .riser }?.velocity ?? 0 }
+        #expect(riser(calmBuild) < riser(bigBuild))
+        // No 1/32 stutter, and a sparser, softer roll.
+        #expect(!calmBuild.contains { $0.params.delay == 0.5 })
+        let rolls = { (notes: [ScheduledNote]) in notes.filter { $0.instrument == .snare || $0.instrument == .hat } }
+        #expect(rolls(calmBuild).count < rolls(bigBuild).count)
+        #expect(loudness(rolls(calmBuild)) < loudness(rolls(bigBuild)))
+    }
+
+    @Test func aCalmSongsBuildSweepsToALowerCeiling() {
+        let full = DropArranger.filterSweep(heldSteps: 200, secondsPerStep: 0.1, genre: .funk)
+        let calm = DropArranger.filterSweep(heldSteps: 200, secondsPerStep: 0.1, genre: .funk, intensity: 0.3)
+        #expect(calm.highPassHz < full.highPassHz)
+        #expect(calm.highPassHz > MasterFilter.highPassOpen)
+    }
+
+    @Test func intensityDefaultsToTheFullDropAndStaysInRange() {
+        let c = DropContext(genre: .trap, keyRoot: 65, minor: true, secondsPerStep: 0.1)
+        #expect(c.intensity == 1)
+        #expect(DropContext(genre: .trap, keyRoot: 65, minor: true, secondsPerStep: 0.1, intensity: 7).intensity == 1)
+        #expect(DropContext(genre: .trap, keyRoot: 65, minor: true, secondsPerStep: 0.1, intensity: -1).intensity == 0)
+    }
 }

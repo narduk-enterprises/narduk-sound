@@ -131,11 +131,14 @@ public struct DropContext: Sendable, Hashable {
     public var bassVoice: Int?
     /// The song's own notes (`DropMaterial.capture`); nil plays a plain groove on the tonic.
     public var material: DropMaterial?
+    /// 0 ... 1: how big the song is (its energy). A calm song gets a gentle lift: a softer riser, a sparser roll that
+    /// never reaches the 1/32 stutter, and a drop without the impact or the extra sub; 1 is the full build and slam.
+    public var intensity: Double
 
     public init(
         genre: Genre, keyRoot: Int, minor: Bool, chordRoot: Int? = nil, nextChordRoot: Int? = nil,
         stepsPerBar: Int = 16, secondsPerStep: Double, seed: UInt64 = 0x5EED, variety: Double = 0.75,
-        dropNumber: Int = 0, bassVoice: Int? = nil, material: DropMaterial? = nil
+        dropNumber: Int = 0, bassVoice: Int? = nil, material: DropMaterial? = nil, intensity: Double = 1
     ) {
         self.genre = genre
         self.keyRoot = keyRoot
@@ -149,6 +152,7 @@ public struct DropContext: Sendable, Hashable {
         self.dropNumber = dropNumber
         self.bassVoice = bassVoice
         self.material = material
+        self.intensity = min(1, max(0, intensity.isFinite ? intensity : 1))
     }
 }
 
@@ -275,7 +279,7 @@ public enum DropArranger {
             // The riser sweeps two octaves up from the tonic's pitch class, so it ends on the tonic.
             add(
                 make(
-                    .riser, bias.impact == 0 ? 0.4 : 0.9,
+                    .riser, (bias.impact == 0 ? 0.4 : 0.9) * (0.35 + 0.65 * c.intensity),
                     NoteParams(
                         pitch: fold(c.keyRoot, 40...51), lengthSteps: riserSteps(secondsPerStep: c.secondsPerStep))
                 ))
@@ -291,7 +295,8 @@ public enum DropArranger {
         case ..<0.7: span = 2
         default: span = 1
         }
-        let thirtySeconds = charge >= 0.85
+        // A calm song's build tops out at the 1/16 slice: the 1/32 stutter is for big songs.
+        let thirtySeconds = charge >= 0.85 && c.intensity >= 0.5
         let rise = Int((charge * Double(scale.count)).rounded())
         let heard = 0.5 + 0.5 * charge
         let loop = groove.bass + groove.hook
@@ -328,9 +333,14 @@ public enum DropArranger {
         let songDrums = material.current.drums + material.drop.drums
         let hasSnare = songDrums.contains { $0.instrument == .snare }
         let rollInstrument: Instrument = hasSnare || songDrums.isEmpty ? .snare : .hat
-        let rollEvery = charge < 0.2 ? 0 : (charge < 0.35 ? 4 : (charge < 0.5 ? 2 : 1))
+        // A calm song's roll stays on the 8ths and starts later; it never becomes a snare-machine-gun.
+        let calm = c.intensity < 0.5
+        let rollEvery =
+            calm
+            ? (charge < 0.35 ? 0 : (charge < 0.6 ? 4 : 2))
+            : (charge < 0.2 ? 0 : (charge < 0.35 ? 4 : (charge < 0.5 ? 2 : 1)))
         if rollEvery > 0, heldSteps % rollEvery == 0 {
-            let velocity = 0.3 + 0.65 * charge
+            let velocity = (0.3 + 0.65 * charge) * (0.45 + 0.55 * c.intensity)
             add(make(rollInstrument, velocity * (bias.gain < 1 ? 0.7 : 1), NoteParams(pan: 0)))
             if thirtySeconds, bias.hatRoll { add(make(.hat, velocity * 0.6, NoteParams(pan: 0.2)), at: 0.5) }
         }
@@ -345,7 +355,10 @@ public enum DropArranger {
     /// (slowly at first, faster at the end) and holds there until the release, when the caller sets
     /// `MasterFilter.idle` to snap it open. Gentle genres sweep to a lower ceiling and the band genres stay clear of
     /// the vocal range. Apply it each UI frame with `DropEngine.setMasterFilter`; it is a pure function of the hold.
-    public static func filterSweep(heldSteps: Int, secondsPerStep: Double, genre: Genre) -> MasterFilter {
+    /// A calm song (`intensity` under 1) sweeps to a lower ceiling still.
+    public static func filterSweep(heldSteps: Int, secondsPerStep: Double, genre: Genre, intensity: Double = 1)
+        -> MasterFilter
+    {
         guard heldSteps > 0 else { return .idle }
         let charge = charge(heldSteps: heldSteps, secondsPerStep: secondsPerStep)
         let ceiling: Float =
@@ -354,8 +367,11 @@ public enum DropArranger {
             case .band: 1_800
             default: 2_800
             }
+        let ceilingAtIntensity =
+            MasterFilter.highPassOpen
+            * powf(ceiling / MasterFilter.highPassOpen, Float(0.55 + 0.45 * min(1, max(0, intensity))))
         let position = Float(pow(charge, 1.4))
-        let hz = MasterFilter.highPassOpen * powf(ceiling / MasterFilter.highPassOpen, position)
+        let hz = MasterFilter.highPassOpen * powf(ceilingAtIntensity / MasterFilter.highPassOpen, position)
         return MasterFilter(highPassHz: hz, resonance: 0.15 + 0.3 * Float(charge))
     }
 
@@ -376,7 +392,9 @@ public enum DropArranger {
         let scale = scale(c)
         let v = variant(c)
         let punch = 0.75 + 0.25 * min(1, max(0, charge))
-        let gain = power * bias.gain
+        // A calm song's drop is a lift, not a slam: softer overall, and the impact and the sub come in only as it grows.
+        let gain = power * bias.gain * (0.6 + 0.4 * c.intensity)
+        let big = c.intensity >= 0.5
         var out: [ScheduledNote] = []
         func add(_ instrument: Instrument, _ velocity: Double, _ params: NoteParams = NoteParams()) {
             out.append(
@@ -403,8 +421,8 @@ public enum DropArranger {
         if bias.fourOnFloor, pos % 4 == 0, !kickSounds { add(.kick, 1) }
         if bias.gatedSnare, pos == spb / 4 || pos == spb * 3 / 4 { add(.hat, 0.5) }
         if bar == 0, pos == 0 {
-            if bias.impact > 0 { add(.impact, punch * bias.impact) }
-            if bias.crash { add(.openHat, 1) }
+            if bias.impact > 0, big { add(.impact, punch * bias.impact * c.intensity) }
+            if bias.crash { add(.openHat, big ? 1 : 0.6) }
             if bias.tapeStop, v == 0 { add(.tapeStop, 0.5) }
         }
         if pos >= spb - 4, bar % 2 == 1 {
@@ -417,9 +435,9 @@ public enum DropArranger {
         for note in sounding(groove.bass) {
             var n = note.params
             if n.voice == nil { n.voice = c.bassVoice }
-            if note.instrument == .wobble { n.drive = min(1, (n.drive ?? 0.5) + bias.drive) }
-            add(note.instrument, 1.0 * max(note.velocity, 0.7), n)
-            if bias.layerSub, note.instrument != .sub, let pitch = n.pitch {
+            if note.instrument == .wobble { n.drive = min(1, (n.drive ?? 0.5) + bias.drive * c.intensity) }
+            add(note.instrument, big ? max(note.velocity, 0.7) : note.velocity, n)
+            if bias.layerSub, big, note.instrument != .sub, let pitch = n.pitch {
                 add(.sub, 0.8, NoteParams(pitch: pitch - 12, lengthSteps: note.params.lengthSteps))
             }
         }
