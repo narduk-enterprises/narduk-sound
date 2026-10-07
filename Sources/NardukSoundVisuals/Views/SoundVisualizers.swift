@@ -21,6 +21,8 @@
         case pianoRoll
         /// The 12 pitch classes around a wheel, growing as they sound, with the key marked.
         case pitchWheel
+        /// A neon wireframe landscape: spectrum and waveform history raise the ridges, and travel scrolls the grid.
+        case audioTerrain
 
         public var id: String { rawValue }
 
@@ -35,13 +37,14 @@
             case .phosphor: "Phosphor"
             case .pianoRoll: "Piano roll"
             case .pitchWheel: "Pitch wheel"
+            case .audioTerrain: "Audio terrain"
             }
         }
 
         /// True when the visualizer fills its own backdrop; the others draw over whatever the host supplies.
         public var paintsBackdrop: Bool {
             switch self {
-            case .mirror, .halo, .phosphor, .pianoRoll, .pitchWheel: true
+            case .mirror, .halo, .phosphor, .pianoRoll, .pitchWheel, .audioTerrain: true
             default: false
             }
         }
@@ -65,6 +68,7 @@
             case .phosphor: phosphor(&context, size, state, style)
             case .pianoRoll: pianoRoll(&context, size, state, style)
             case .pitchWheel: pitchWheel(&context, size, state, style)
+            case .audioTerrain: audioTerrain(&context, size, state, style)
             }
         }
     }
