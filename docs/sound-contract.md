@@ -122,8 +122,8 @@ public struct MusicContext: Sendable, Hashable {
     public var dropQueued: Bool
 }
 
-/// 14 instruments fit 16 lanes: a fixed-size value, no allocation, indexed by `Instrument.index`.
-public struct HitCounters: Sendable, Hashable { var lanes: SIMD16<UInt32> /* subscript(Instrument) -> UInt32 */ }
+/// 32 lanes (14 used, indices dense and never renumbered): a fixed-size value, no allocation, indexed by `Instrument.index`.
+public struct HitCounters: Sendable, Hashable { var lanes: SIMD32<UInt32> /* subscript(Instrument) -> UInt32 */ }
 ```
 
 Everything past the plan's list is something a visualizer in one of the two apps
@@ -434,7 +434,7 @@ exhaustive switches at data-beats `902d4e6` and wirewatcher `4c7d38f`:
 | `SongSection` | `Neon.section`, `VisualKit.swift:22-30`   | `SongSection.palette`, `DropPalette.swift:80` |
 | `Genre`       | `genreName`, `Views/Panels.swift:294-296` | the `title` switch, `DropPanel.swift:251-253` |
 
-`Instrument` is also a fixed lane count in `HitCounters` (16 lanes, 14 used):
+`Instrument` is also a fixed lane count in `HitCounters` (32 lanes, 14 used):
 adding a case past 16 changes that type, so A6 asserts the count at compile
 time. `SoundPaletteProvider` takes a `SoundPaletteDriver`, so a new section
 never forces an edit inside the library, only in the app's provider.
