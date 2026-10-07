@@ -43,6 +43,9 @@ Existing products keep their public API. The dependency edge is `NardukMusicDSP`
   Visuals (`SoundVisualState`, palette math, the budget function) is plain Swift
   and is compiled on Linux where its manifest placement allows.
 
+`NardukMusicPlayback` (Darwin only; Now Playing, remote commands, `AirPlayPicker`) depends on nothing in this package;
+see `docs/now-playing.md`.
+
 Platforms are macOS 15 and iOS 18 from the first commit (the root manifest
 already declares them).
 
