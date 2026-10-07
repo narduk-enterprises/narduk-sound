@@ -137,5 +137,34 @@
             #expect(count == 0, "the render thread allocated \(count) times, first at:\n\(Self.firstAllocationStack)")
             #expect(core.takeHits().isSuperset(of: Set(guitars)))
         }
+
+        @Test(.enabled(if: optimized, "allocation counts need an optimized build: swift test -c release"))
+        func renderingAmbientPadsAndTheirTailNeverAllocates() throws {
+            let core = DropSynthCore(sampleRate: 48_000, bpm: 70)
+            let frames = 512
+            let left = UnsafeMutablePointer<Float>.allocate(capacity: frames)
+            let right = UnsafeMutablePointer<Float>.allocate(capacity: frames)
+            defer {
+                left.deallocate()
+                right.deallocate()
+            }
+            // More pad notes than the pool holds (stealing), drones, and a settings change mid-render.
+            for step in stride(from: 0, to: 96, by: 2) {
+                core.schedule(
+                    ScheduledNote(
+                        step: step, instrument: .keys, velocity: 0.7,
+                        params: NoteParams(
+                            pitch: 45 + step % 19, lengthSteps: 12,
+                            voice: step % 8 == 0 ? KeysVoice.drone : KeysVoice.ambientPad)))
+            }
+            core.render(frames: frames, left: left, right: right)  // first-touch work happens before arming
+            var space = AmbientSpace()
+            space.reverbSeconds = 14
+            let count = try Self.countAllocations {
+                core.setAmbientSpace(space)
+                for _ in 0..<1_500 { core.render(frames: frames, left: left, right: right) }
+            }
+            #expect(count == 0, "the render thread allocated \(count) times, first at:\n\(Self.firstAllocationStack)")
+        }
     }
 #endif

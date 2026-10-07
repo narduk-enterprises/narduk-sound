@@ -25,6 +25,7 @@ struct SynthState {
     static let hatCount = 4
     static let fxCount = 16
     static let stringCount = 24  // guitar strings; a strum takes six
+    static let padCount = 8
     static let pendingCapacity = 2_048
     static let historySize = 1 << 18  // master history for stutter / tape stop (~5.4 s at 48 kHz)
     static let analysisSize = 1 << 13  // mono analysis ring
@@ -55,6 +56,15 @@ struct SynthState {
     var wobble = WobbleVoice()
     var sub = SubVoice()
     var reverb: RoomReverb
+
+    // Ambient chain: pooled pads and drones into a long hall and a delay. Idle (and bit-for-bit silent in the mix)
+    // until a pad note arrives; `ambientTail` counts the samples it keeps running after the last one.
+    let pads: UnsafeMutablePointer<PadVoice>
+    var nextPad = 0
+    var hall: HallReverb
+    var echo: StereoDelay
+    var ambientTail = 0
+    var space = AmbientSpace()
 
     // Sidechain
     var sidechain: Float = 0
@@ -110,6 +120,10 @@ struct SynthState {
         for i in 0..<SynthState.stringCount {
             (strings + i).initialize(to: StringVoice(seed: 0x9E37_79B9 &+ UInt32(i) &* 40_503))
         }
+        pads = .allocate(capacity: SynthState.padCount)
+        pads.initialize(repeating: PadVoice(), count: SynthState.padCount)
+        hall = HallReverb(sampleRate: sampleRate)
+        echo = StereoDelay(sampleRate: sampleRate)
         stopStep = 1 / Float(0.03 * sampleRate)
         historyLeft = .allocate(capacity: SynthState.historySize)
         historyLeft.initialize(repeating: 0, count: SynthState.historySize)
@@ -129,6 +143,9 @@ struct SynthState {
         reverb.deallocate()
         for i in 0..<SynthState.stringCount { strings[i].deallocate() }
         strings.deallocate()
+        pads.deallocate()
+        hall.deallocate()
+        echo.deallocate()
         historyLeft.deallocate()
         historyRight.deallocate()
         limiter.deallocate()
@@ -263,7 +280,8 @@ struct SynthState {
             tapeRead = Double(historyWrite - 1)
             tapeReturn = 0
         case 12: startFX(.impact, e)
-        case 13: startFX(.keys, e)
+        case 13:
+            if let kind = AmbientKind(voice: Int(e.voice)) { startPad(kind, e) } else { startFX(.keys, e) }
         case 14, 15, 16:  // acoustic, electric, bass guitar (a strum's strings arrive as the first two)
             startString(StringKind(rawValue: e.instrument - 14) ?? .acoustic, e)
         default: return  // 17, 18 (strums) were expanded into strings when queued
@@ -295,6 +313,26 @@ struct SynthState {
         strings[slot].trigger(
             kind, pitch: e.pitch, velocity: e.velocity, gateSamples: gateSamples(e), pan: e.pan, drive: e.drive, c)
         stringsLive += 1
+    }
+
+    mutating func startPad(_ kind: AmbientKind, _ e: SynthEvent) {
+        var slot = -1
+        for i in 0..<SynthState.padCount where !pads[i].active {
+            slot = i
+            break
+        }
+        if slot < 0 {
+            slot = nextPad
+            nextPad = (nextPad + 1) % SynthState.padCount
+            pads[slot].steal()
+        }
+        let gate = gateSamples(e)
+        pads[slot].noteOn(kind, pitch: e.pitch, gateSamples: gate, velocity: e.velocity, c)
+        // Keep the chain running through the note, its release and the hall's tail.
+        let run =
+            gate + PadVoice.releaseSamples(kind, sampleRate: c.sampleRate)
+            + Int(space.reverbSeconds * 1.2 * c.sampleRate)
+        ambientTail = max(ambientTail, run)
     }
 
     mutating func startFX(_ kind: FXKind, _ e: SynthEvent) {
@@ -333,6 +371,9 @@ struct SynthState {
             clock.requestTempo(milli: controls.bpmMilli, currentSample: sampleClock, stepsPerBar: stepsPerBar)
         }
         recomputeNextDue()
+        hall.setDecayIfChanged(space.reverbSeconds)
+        echo.feedback = space.delayFeedback
+        echo.setTime(steps: Double(space.delaySteps), bpm: clock.bpm, sampleRate: Double(c.sampleRate))
 
         let historyMask = SynthState.historySize - 1
         let analysisMask = SynthState.analysisSize - 1
@@ -411,6 +452,23 @@ struct SynthState {
             let fxDuck = 1 - 0.5 * sidechain
             fxL *= fxDuck
             fxR *= fxDuck
+
+            if ambientTail > 0 {
+                ambientTail -= 1
+                var padL: Float = 0
+                var padR: Float = 0
+                for i in 0..<SynthState.padCount {
+                    let p = pads[i].next(c)
+                    padL += p.0
+                    padR += p.1
+                }
+                padL *= space.padLevel
+                padR *= space.padLevel
+                let tail = hall.process(padL * space.reverbMix, padR * space.reverbMix)
+                let echoes = echo.process(padL * space.delayMix, padR * space.delayMix)
+                fxL += padL + tail.0 * 2.2 + echoes.0 * 1.2
+                fxR += padR + tail.1 * 2.2 + echoes.1 * 1.2
+            }
 
             busGains.0 = controls.gains.0 + (busGains.0 - controls.gains.0) * smoothing
             busGains.1 = controls.gains.1 + (busGains.1 - controls.gains.1) * smoothing
@@ -494,6 +552,8 @@ public final class DropSynthCore: @unchecked Sendable {
     private let masterVolumeBits = Atomic<UInt32>(Float(0.8).bitPattern)
     private let fadeOut = Atomic<Bool>(false)
     private let bpmMilli: Atomic<Int>
+    // The ambient chain's settings: the bit patterns of an `AmbientSpace`'s six floats.
+    private let spaceAtomics = AmbientSpaceAtomics()
 
     // Render → main telemetry.
     private let renderedSamples = Atomic<Int>(0)
@@ -530,6 +590,20 @@ public final class DropSynthCore: @unchecked Sendable {
     /// Sets the tempo; the render thread applies it from the next bar boundary.
     public func setTempo(_ bpm: Double) {
         bpmMilli.store(StepClock.milliBPM(bpm), ordering: .relaxed)
+    }
+
+    /// Sets the ambient chain's reverb, delay and pad level (clamped to sane ranges); it applies from the next buffer.
+    public func setAmbientSpace(_ space: AmbientSpace) {
+        func store(_ value: Float, _ range: ClosedRange<Float>, _ atomic: borrowing Atomic<UInt32>) {
+            let safe = min(max(value.isFinite ? value : range.lowerBound, range.lowerBound), range.upperBound)
+            atomic.store(safe.bitPattern, ordering: .relaxed)
+        }
+        store(space.reverbSeconds, 0.1...HallReverb.maxDecaySeconds, spaceAtomics.reverbSeconds)
+        store(space.reverbMix, 0...1, spaceAtomics.reverbMix)
+        store(space.delayMix, 0...1, spaceAtomics.delayMix)
+        store(space.delayFeedback, 0...0.95, spaceAtomics.delayFeedback)
+        store(space.delaySteps, 0.25...64, spaceAtomics.delaySteps)
+        store(space.padLevel, 0...1.5, spaceAtomics.padLevel)
     }
 
     public func setGain(_ gain: Float, for bus: SynthBus) {
@@ -617,6 +691,13 @@ public final class DropSynthCore: @unchecked Sendable {
             bpmMilli: bpmMilli.load(ordering: .relaxed)
         )
         while let event = events.pop() { state.pointee.enqueue(event) }
+        state.pointee.space = AmbientSpace(
+            reverbSeconds: Float(bitPattern: spaceAtomics.reverbSeconds.load(ordering: .relaxed)),
+            reverbMix: Float(bitPattern: spaceAtomics.reverbMix.load(ordering: .relaxed)),
+            delayMix: Float(bitPattern: spaceAtomics.delayMix.load(ordering: .relaxed)),
+            delayFeedback: Float(bitPattern: spaceAtomics.delayFeedback.load(ordering: .relaxed)),
+            delaySteps: Float(bitPattern: spaceAtomics.delaySteps.load(ordering: .relaxed)),
+            padLevel: Float(bitPattern: spaceAtomics.padLevel.load(ordering: .relaxed)))
         state.pointee.render(frames: frames, left: left, right: right, controls: controls)
 
         let s = state
@@ -635,4 +716,14 @@ public final class DropSynthCore: @unchecked Sendable {
         stepPositionBits.store(position.bitPattern, ordering: .releasing)
         renderedSamples.store(s.pointee.sampleClock, ordering: .releasing)
     }
+}
+
+/// The atomics behind `DropSynthCore.setAmbientSpace(_:)` (a struct of named fields, since a tuple cannot hold them).
+private struct AmbientSpaceAtomics: ~Copyable {
+    let reverbSeconds = Atomic<UInt32>(AmbientSpace().reverbSeconds.bitPattern)
+    let reverbMix = Atomic<UInt32>(AmbientSpace().reverbMix.bitPattern)
+    let delayMix = Atomic<UInt32>(AmbientSpace().delayMix.bitPattern)
+    let delayFeedback = Atomic<UInt32>(AmbientSpace().delayFeedback.bitPattern)
+    let delaySteps = Atomic<UInt32>(AmbientSpace().delaySteps.bitPattern)
+    let padLevel = Atomic<UInt32>(AmbientSpace().padLevel.bitPattern)
 }
