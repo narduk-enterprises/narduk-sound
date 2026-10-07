@@ -38,7 +38,7 @@ struct VocalPlan: Sendable, Hashable {
     var chopGrid: [Int] = [0, 8]
     var chopSlices: [Double] = [0.1, 0.6]
 
-    var isEmpty: Bool { !pad && !chop && !cuts && !line }
+    var isEmpty: Bool { !pad && !chop && !cuts && !line && !chops }
 
     static func padGenre(_ genre: Genre) -> Bool {
         genre == .chill || genre == .house || genre == .synthwave || genre == .tropicalHouse
@@ -46,8 +46,6 @@ struct VocalPlan: Sendable, Hashable {
     static func chopGenre(_ genre: Genre) -> Bool {
         genre == .dubstep || genre == .trap || genre == .ukGarage || genre == .house || genre == .tropicalHouse
     }
-    /// The feel a genre's chops are sung in: tropical house's are airy, every other genre's the classic voice.
-    static func chopFeel(_ genre: Genre) -> VocalFeel { genre == .tropicalHouse ? .airy : .classic }
 }
 
 extension Variety {
@@ -82,14 +80,22 @@ extension Variety {
         plan.harmony = Int(lineRng.next() % 4)
         plan.radio = lineRng.unit() < 0.5
         plan.lineDraw = lineRng.unit()
-        // Tropical house sings breathy, whatever the draw (the draw above still happens, so the stream stays put).
-        if track.genre == .tropicalHouse { plan.character = .airy }
         let grids: [[Int]] = [[0, 8], [4, 12], [0, 6, 8], [2, 8, 12], [0, 4, 10]]
         plan.chopGrid = grids[Int(lineRng.next() % UInt64(grids.count))]
         plan.chopSlices = [lineRng.unit() * 0.45, 0.5 + lineRng.unit() * 0.45]
         if uses("vocalLine", track, variety: variety), track.genre.family == .electronic {
             plan.line = true
             plan.chops = VocalPlan.chopGenre(track.genre)
+        }
+        if track.genre == .tropicalHouse {
+            // One vocal role: sampled syllables answering the pluck. No choir pad, synth chops or sung line on top
+            // of it (four vocal layers at once buried the hook); its cut policy (`GenreArrangement.cutsOnDropPhrase`)
+            // adds no master cuts either.
+            let sings = plan.pad || plan.chop || plan.line
+            plan.pad = false
+            plan.chop = false
+            plan.line = false
+            plan.chops = sings
         }
         return plan.isEmpty ? nil : plan
     }
@@ -139,7 +145,7 @@ enum VocalArrangement {
                             pitch: tones[rung] + 12, lengthSteps: 1, formant: plan.register, drive: plan.breath,
                             voice: NoteParams.vocalVoice(
                                 plan.chopVowels[(pos / 2) % plan.chopVowels.count],
-                                feel: VocalPlan.chopFeel(c.track.genre)),
+                                feel: .classic),
                             pan: pos % 4 == 0 ? -0.3 : 0.3))
                 }
             }
@@ -154,7 +160,7 @@ enum VocalArrangement {
                             formant: plan.register, drive: plan.breath,
                             voice: NoteParams.vocalVoice(
                                 plan.chopVowels[index % plan.chopVowels.count],
-                                feel: VocalPlan.chopFeel(c.track.genre)),
+                                feel: .classic),
                             pan: index % 2 == 0 ? -0.35 : 0.35))
                 }
             }

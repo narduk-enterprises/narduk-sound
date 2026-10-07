@@ -134,7 +134,7 @@ import Testing
     /// Each genre arrives at its drops in its own one of a few forms, not one riser, roll and impact for all.
     @Test func dropsArriveInTheGenresOwnForm() {
         let forms: [(Genre, GenreArrangement.DropEntry)] = [
-            (.dubstep, .slam), (.house, .filterOpen), (.synthwave, .pickup), (.funk, .bandFill), (.tropicalHouse, .none),
+            (.dubstep, .slam), (.house, .filterOpen), (.synthwave, .pickup), (.funk, .bandFill), (.tropicalHouse, .filterOpen),
         ]
         for (genre, form) in forms {
             #expect(GenreArrangement.dropEntry(genre) == form)

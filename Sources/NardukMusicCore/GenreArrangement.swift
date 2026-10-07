@@ -12,7 +12,8 @@ import Foundation
 //   rock     a live kit, driven power-chord 8ths on electric strums over a picking bass guitar (narduk-libs#1578)
 //   folk     soft kit, the folk strum on an acoustic, a root-fifth bass and a fingerpicked acoustic hook
 //   funk     syncopated kit with ghost snares, muted 16th chicken scratch and a popping 16th bass line
-//   tropical a soft, round four-on-the-floor with an off-beat shaker; the hook is a marimba pluck over pumping pads
+//   tropical a soft, round four-on-the-floor with a recorded off-beat shaker; the hook is a recorded steel drum or flute
+//   pluck over piano chords and pumping pads
 // The vocabulary is the existing Instrument + NoteParams (plus .keys), so the audio engine needs no genre knowledge.
 
 // MARK: - Public vocabulary
@@ -223,7 +224,7 @@ enum GenreArrangement {
         case pickup
         /// A drummer's fill: snare and kick trading 16ths over the last beat, then a crash instead of an impact.
         case bandFill
-        /// Nothing: the drop is a lift (tropical house) or the music has no drops (ambient).
+        /// Nothing: the music has no drops (ambient).
         case none
     }
 
@@ -233,7 +234,9 @@ enum GenreArrangement {
         case .house, .techno, .ukGarage: .filterOpen
         case .chill, .lofi, .synthwave: .pickup
         case .rock, .folk, .funk: .bandFill
-        case .tropicalHouse: .none
+        // Tropical house's drop is a lift: the groove opens back up after the build thins out, with no riser,
+        // impact or stutter (its gentle profile keeps the conductor's transitions off as well).
+        case .tropicalHouse: .filterOpen
         }
     }
 
@@ -241,7 +244,7 @@ enum GenreArrangement {
     /// vocal plan has cuts. A cut on every drop phrase of every genre was the same punctuation over and over.
     static func cutsOnDropPhrase(_ genre: Genre, phraseInSection: Int) -> Bool {
         switch genre {
-        case .tropicalHouse: true  // unchanged here: its vocal punctuation is tuned separately
+        case .tropicalHouse: false  // a lift marks its changes by taking parts away, not by cutting the master
         case .dubstep, .riddim, .trap, .drumAndBass, .ukGarage: phraseInSection % 2 == 1
         case .house, .techno, .synthwave, .chill, .lofi: phraseInSection % 4 == 3
         case .rock, .folk, .funk: false
@@ -251,8 +254,7 @@ enum GenreArrangement {
     static func stuttersIntoDrop(_ genre: Genre) -> Bool {
         switch dropEntry(genre) {
         case .slam: true
-        case .none: genre == .tropicalHouse
-        case .filterOpen, .pickup, .bandFill: false
+        case .filterOpen, .pickup, .bandFill, .none: false
         }
     }
 
@@ -490,8 +492,12 @@ enum GenreArrangement {
             if style == 3, pos % 2 == 0 { add(.hat, 0.12 + 0.2 * c.level) }
             if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar))) }
             if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
-            // Tropical house keeps its pluck through the breakdown: pads and the hook, softly.
-            if genre == .tropicalHouse { keysHook(genre, c, velocity: 0.34, add: add) }
+            // Tropical house keeps its hook through the breakdown, softly, handed to a recorded sax or nylon guitar
+            // (by the track's breakdown style) over the pads.
+            if genre == .tropicalHouse {
+                let voice = c.track.breakdownStyle % 2 == 0 ? KeysVoice.sampledSax : KeysVoice.sampledNylonGuitar
+                keysHook(genre, c, velocity: 0.34, voice: voice, add: add)
+            }
         case .build:
             // The build ramps bar by bar across its whole planned length, not once per phrase (#40): the kick firms up
             // and fills in, the hats go from quarters to 8ths to 16ths, the snare tightens from the backbeat to a
@@ -571,14 +577,22 @@ enum GenreArrangement {
             return
         }
         let voice = genre == .tropicalHouse ? KeysVoice.pumpPad : KeysVoice.pad
-        for pitch in chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: Self.lush(c.track.genre)) {
-            add(.keys, velocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: voice))
+        let notes = chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: Self.lush(c.track.genre))
+        // Tropical house's chords are a recorded piano, the pumping pad a quieter bed beneath it.
+        let padVelocity = genre == .tropicalHouse ? velocity * 0.6 : velocity
+        for pitch in notes {
+            add(.keys, padVelocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: voice))
+        }
+        if genre == .tropicalHouse {
+            for pitch in notes {
+                add(.keys, velocity, NoteParams(pitch: pitch + 12, lengthSteps: c.perBar * 2, voice: KeysVoice.sampledPiano))
+            }
         }
     }
 
     /// The hook on the track's keys: single notes, or chord stabs for house.
     private static func keysHook(
-        _ genre: Genre, _ c: StepContext, velocity: Double,
+        _ genre: Genre, _ c: StepContext, velocity: Double, voice: Int? = nil,
         add: (Instrument, Double, NoteParams) -> Void
     ) {
         if isBand(genre) {
@@ -601,9 +615,24 @@ enum GenreArrangement {
                     .keys, velocity * accent,
                     NoteParams(
                         pitch: c.track.pitch(base, degree: degree), lengthSteps: c.scaled(note.length),
-                        voice: c.track.keysVoice))
+                        voice: voice ?? c.track.keysVoice))
             }
         }
+    }
+
+    /// Tropical house plays its drums' top on hand percussion (`PercussionVoice`): the hat on a shaker, the open hat on
+    /// a tambourine, the snare on a finger snap (applied to every note `DropConductor` writes). Every other genre, and a
+    /// note that already names a voice, is unchanged.
+    static func percussion(_ genre: Genre, _ instrument: Instrument, _ params: NoteParams) -> NoteParams {
+        guard genre == .tropicalHouse, params.voice == nil else { return params }
+        var params = params
+        switch instrument {
+        case .hat: params.voice = PercussionVoice.shaker
+        case .openHat: params.voice = PercussionVoice.tambourine
+        case .snare: params.voice = PercussionVoice.snap
+        default: break
+        }
+        return params
     }
 
     /// The breakdown's vocal lead: the hook's long notes on vox, an octave down from the keys.
@@ -1022,8 +1051,14 @@ enum GenreArrangement {
             keysHook(genre, c, velocity: 0.45, add: add)
             if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.24, add: add) }
         case .tropicalHouse:
-            // The drop is the marimba hook over the full groove, with the pad pumping underneath.
-            keysHook(genre, c, velocity: 0.6, add: add)
+            // Four bars at a time: the pluck calls for two, the vocal chops answer in the third (`VocalLine`), and
+            // the fourth rests on the groove with a conga or two. Piano chords and the pumping pad underneath.
+            let call = c.barInPhrase % 4
+            if call < 2 { keysHook(genre, c, velocity: 0.6, add: add) }
+            if call == 3, !c.isLastBar {
+                if pos == 10 { add(.keys, 0.42, NoteParams(pitch: 64, lengthSteps: 2, voice: KeysVoice.sampledConga)) }
+                if pos == 14 { add(.keys, 0.5, NoteParams(pitch: 55, lengthSteps: 2, voice: KeysVoice.sampledConga)) }
+            }
             if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.32, add: add) }
         case .drumAndBass:
             if pos == 0, c.barInPhrase % 2 == 0 {

@@ -18,7 +18,8 @@ public enum Genre: String, Sendable, Hashable, Codable, CaseIterable {
     /// The band family (narduk-libs#1578): the guitars carry the part over a live-drummer kit and a bass guitar.
     /// Rock drives power chords, folk strums and picks an acoustic, funk scratches muted 16ths over a popping bass.
     case rock, folk, funk
-    /// Tropical house: a soft four-on-the-floor at 100 ... 112 BPM, a marimba pluck hook, pumping pads and airy chops.
+    /// Tropical house: a soft four-on-the-floor at 100 ... 112 BPM on hand percussion, a recorded steel drum or flute
+    /// pluck answered by sampled vocal chops, piano chords and pumping pads.
     case tropicalHouse
 }
 
@@ -82,11 +83,13 @@ public enum SampleKind: String, Sendable, Hashable, Codable, CaseIterable {
 }
 
 extension NoteParams {
-    /// The `voice` field of a `vocalSample` note.
+    /// The `voice` field of a `vocalSample` note. `nearPitch` (a chop only) picks the slice among the syllables
+    /// sung near the note's pitch, so it is shifted by a few semitones at most rather than clamped at the edge.
     public static func sampleVoice(
-        _ vowel: VocalVowel = .ah, technique: SampleTechnique = .vibrato, kind: SampleKind = .sustain
+        _ vowel: VocalVowel = .ah, technique: SampleTechnique = .vibrato, kind: SampleKind = .sustain,
+        nearPitch: Bool = false
     ) -> Int {
-        vowel.index | technique.index << 3 | kind.index << 5
+        vowel.index | technique.index << 3 | kind.index << 5 | (nearPitch ? 1 << 7 : 0)
     }
 }
 

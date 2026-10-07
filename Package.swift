@@ -24,7 +24,9 @@ let package = Package(
             // Copied entry by entry, not as one `Resources` folder: an iOS bundle is flat, and a `Resources` directory
             // inside one makes codesign reject it ("bundle format unrecognized"), so no iOS app could link
             // NardukMusicDSP.
-            resources: [.copy("Resources/vocalsamples.bin"), .copy("Resources/LICENSES")]
+            resources: [
+                .copy("Resources/vocalsamples.bin"), .copy("Resources/instruments.bin"), .copy("Resources/LICENSES"),
+            ]
         ),
         .target(name: "NardukMusicRender", dependencies: ["NardukMusicCore", "NardukMusicDSP"]),
         .executableTarget(name: "narduk-music", dependencies: ["NardukMusicRender"]),

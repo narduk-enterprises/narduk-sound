@@ -35,5 +35,129 @@
       ]
     }
   ],
-  "indent": null
+  "indent": null,
+  "instruments": {
+    "samples": "instruments.bin",
+    "notes": "Instruments.md",
+    "sources": [
+      {
+        "name": "Salamander Grand Piano V3",
+        "author": "Alexander Holm",
+        "url": "https://github.com/sfzinstruments/SalamanderGrandPiano",
+        "license": "CC-BY-3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+        "licenseFile": "Salamander-CC-BY-3.0.txt",
+        "modified": true,
+        "credit": "required",
+        "files": [
+          "Samples/C3v4.flac",
+          "Samples/D#3v4.flac",
+          "Samples/F#3v4.flac",
+          "Samples/A3v4.flac",
+          "Samples/C4v4.flac",
+          "Samples/D#4v4.flac",
+          "Samples/F#4v4.flac",
+          "Samples/A4v4.flac",
+          "Samples/C5v4.flac",
+          "Samples/D#5v4.flac",
+          "Samples/F#5v4.flac",
+          "Samples/A5v4.flac"
+        ]
+      },
+      {
+        "name": "jSteelDrum v2",
+        "author": "Jeff Learman",
+        "url": "https://github.com/jlearman/jlearman.SteelDrum",
+        "license": "Unlicense",
+        "licenseUrl": "https://unlicense.org",
+        "licenseFile": "jSteelDrum-Unlicense.txt",
+        "modified": true,
+        "credit": "courtesy",
+        "files": [
+          "flac/SteelDrum_060__C4_4.flac",
+          "flac/SteelDrum_063_Eb4_4.flac",
+          "flac/SteelDrum_066_Gb4_4.flac",
+          "flac/SteelDrum_069__A4_4.flac",
+          "flac/SteelDrum_072__C5_4.flac",
+          "flac/SteelDrum_075_Eb5_4.flac",
+          "flac/SteelDrum_078_Gb5_4.flac",
+          "flac/SteelDrum_081__A5_4.flac"
+        ]
+      },
+      {
+        "name": "VSCO 2 Community Edition",
+        "author": "Versilian Studios (Sam Gossner)",
+        "url": "https://github.com/sgossner/VSCO-2-CE",
+        "license": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "licenseFile": "VSCO-2-CE-CC0-1.0.txt",
+        "modified": true,
+        "credit": "requested",
+        "files": [
+          "Woodwinds/Flute/susvib/LDFlute_susvib_C4_v1_1.wav",
+          "Woodwinds/Flute/susvib/LDFlute_susvib_E4_v1_1.wav",
+          "Woodwinds/Flute/susvib/LDFlute_susvib_A4_v1_1.wav",
+          "Woodwinds/Flute/susvib/LDFlute_susvib_C5_v1_1.wav",
+          "Woodwinds/Flute/susvib/LDFlute_susvib_E5_v1_1.wav",
+          "Woodwinds/Flute/susvib/LDFlute_susvib_A5_v1_1.wav",
+          "Woodwinds/Flute/susvib/LDFlute_susvib_C6_v1_1.wav"
+        ]
+      },
+      {
+        "name": "Versilian Community Sample Library",
+        "author": "Versilian Studios (Sam Gossner)",
+        "url": "https://github.com/sgossner/VCSL",
+        "license": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "licenseFile": "VCSL-CC0-1.0.txt",
+        "modified": true,
+        "credit": "courtesy",
+        "files": [
+          "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerHighFaster_Up_rr1.wav",
+          "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerHighFaster_Up_rr2.wav",
+          "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerHighFaster_Down_rr1.wav",
+          "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerHighFaster_Down_rr2.wav",
+          "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerDouble_Up_rr1.wav",
+          "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerDouble_Down_rr1.wav",
+          "Idiophones/Struck Idiophones/Shaker, Large/LShaker_Shake1U_rr1_Mid.wav",
+          "Idiophones/Struck Idiophones/Shaker, Large/LShaker_Shake1D_rr2_Mid.wav",
+          "Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Hit_v1_rr1_Mid.wav",
+          "Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Hit_v2_rr1_Mid.wav",
+          "Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Shake_rr1_Mid.wav",
+          "Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Shake_rr2_Mid.wav",
+          "Membranophones/Struck Membranophones/Conga/Tumba_HitN_v2_rr1_Sum.wav",
+          "Membranophones/Struck Membranophones/Conga/Tumba_HitN_v2_rr2_Sum.wav",
+          "Membranophones/Struck Membranophones/Conga/Conga_HitN_v2_rr1_Sum.wav",
+          "Membranophones/Struck Membranophones/Conga/Conga_HitN_v2_rr2_Sum.wav"
+        ]
+      },
+      {
+        "name": "University of Iowa Musical Instrument Samples",
+        "author": "University of Iowa Electronic Music Studios",
+        "url": "https://theremin.music.uiowa.edu/MIS.html",
+        "license": "freely available, without restrictions",
+        "licenseUrl": "https://theremin.music.uiowa.edu/MIS.html",
+        "modified": true,
+        "credit": "courtesy",
+        "files": [
+          "Woodwinds/altosaxophone/AltoSax.Vib.pp.C4B4.aiff",
+          "Woodwinds/altosaxophone/AltoSax.Vib.mf.C4B4.aiff",
+          "Piano_Other/guitar/Guitar.mf.sulG.C4B4.mono.aif",
+          "Piano_Other/guitar/Guitar.mf.sulB.C5Gb5.mono.aif"
+        ]
+      },
+      {
+        "name": "Fingersnap",
+        "author": "Joma86",
+        "url": "https://freesound.org/people/Joma86/sounds/532862/",
+        "license": "CC0-1.0",
+        "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/",
+        "modified": true,
+        "credit": "courtesy",
+        "files": [
+          "532862__joma86__fingersnap.wav"
+        ]
+      }
+    ]
+  }
 }

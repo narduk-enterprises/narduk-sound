@@ -133,10 +133,14 @@ enum Variety {
         track.drive = min(1, max(0, track.drive + spread(0.4)))
         track.vowel = Int(rng.next() % 4)
         // A genre's keys timbre follows its sound, but not every song in it plays the same keys.
-        // Tropical house keeps its marimba: the pluck is the genre.
+        // Tropical house keeps a pluck (the genre's sound): the same draw picks a recorded flute or steel drum.
         if rng.unit() < 0.6 * variety {
             let voice = Int(rng.next() % 3)
-            if track.genre != .tropicalHouse { track.keysVoice = voice }
+            if track.genre == .tropicalHouse {
+                track.keysVoice = voice == 0 ? KeysVoice.sampledFlute : KeysVoice.sampledSteelDrum
+            } else {
+                track.keysVoice = voice
+            }
         }
     }
 
