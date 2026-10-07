@@ -3,7 +3,7 @@
 NardukSound ships on this repository's `vX.Y.Z` tags (SwiftPM). Through v0.4.1 it
 shipped on narduk-libs tags.
 
-## Unreleased
+## 0.5.0 (2026-10-07)
 
 ### Changed
 
