@@ -3,6 +3,19 @@
 NardukSound ships on this repository's `vX.Y.Z` tags (SwiftPM). Through v0.4.1 it
 shipped on narduk-libs tags.
 
+## Unreleased
+
+### Added
+
+- Song videos (`NardukSoundVisuals/Video`): `SoundVisualTimelineRecorder` logs
+  what the lights drew from while a song records (the music context at 60 Hz,
+  the light, its look, calm) into a compact `SoundVisualTimeline` file, and
+  `SoundVideoExporter` turns the recorded audio plus that timeline into an
+  `.mp4` with any Metal light drawn again offline (audio copied, not
+  re-encoded). A light over the GPU budget draws smaller and is scaled up, as
+  on a slow screen. Beat Blaster's My Songs shares with it (beat-blaster
+  `docs/video-share.md` has the measurements).
+
 ## 0.5.0 (2026-10-07)
 
 ### Changed

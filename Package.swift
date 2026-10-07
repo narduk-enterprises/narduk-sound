@@ -41,7 +41,7 @@ let package = Package(
         .testTarget(name: "NardukSonifyTests", dependencies: ["NardukSonify", "NardukMusicCore"]),
         .testTarget(
             name: "NardukSoundVisualsTests",
-            dependencies: ["NardukSoundVisuals", "NardukSoundAnalysis", "NardukMusicCore"]
+            dependencies: ["NardukSoundVisuals", "NardukSoundAnalysis", "NardukMusicCore", "NardukMusicRender"]
         ),
     ],
     swiftLanguageModes: [.v6]
