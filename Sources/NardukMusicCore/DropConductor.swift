@@ -339,7 +339,11 @@ public struct DropConductor: Sendable {
     /// Asks for a genre change. Steps already emitted are never touched: a new track in the new genre, at the genre's
     /// default BPM (reported by `lastSwitch`), starts at the first bar line of steps not yet emitted, preceded by a
     /// short transition. Section and energy carry over. Setting `settings.genre` directly is equivalent.
-    public mutating func setGenre(_ genre: Genre) { settings.genre = genre }
+    public mutating func setGenre(_ genre: Genre) {
+        settings.genre = genre
+        nextTrackRequested = false
+        nextTrackGenre = nil
+    }
 
     /// Moves on to a new track the way the set does by itself: the current phrase plays out, its last bar carries the
     /// track's outro, and the new track starts on the next phrase line, in `genre` if given (at a tempo near that

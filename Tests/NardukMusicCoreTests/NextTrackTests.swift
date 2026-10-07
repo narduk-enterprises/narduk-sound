@@ -75,7 +75,13 @@ struct NextTrackTests {
         c.requestNextTrack(genre: .techno)
         c.setGenre(.funk)
         #expect(c.pendingGenre == .funk)
+        #expect(!c.requestedNextTrack.pending)
         _ = c.advance(throughStep: 40)
         #expect(c.activeGenre == .funk)
+        let track = c.snapshot.track?.number
+        _ = c.advance(throughStep: 40 + 2 * c.settings.stepsPerPhrase)
+        // Only the conductor's own flow may move on now; the cancelled request does not force a hand-over.
+        #expect(c.activeGenre == .funk)
+        #expect(track != nil)
     }
 }
