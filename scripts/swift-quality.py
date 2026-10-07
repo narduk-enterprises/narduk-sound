@@ -149,8 +149,10 @@ def main() -> None:
     # One regex over every product of the package (Music, SoundAnalysis, Sonify, SoundVisuals).
     run("swift", "test", *BUILD_FLAGS, "--filter", "NardukMusic|NardukSound|NardukSonify")
     if DARWIN:
-        # The allocation checks (every *AllocationTests suite) mean something only in an optimized build.
-        run("swift", "test", "-c", "release", "--filter", "AllocationTests")
+        # The allocation checks (every *AllocationTests and *NoAllocTests suite) mean something only in an optimized
+        # build. They share libmalloc's one process-wide malloc_logger, so they must not run in parallel: a suite that
+        # installs its hook while another is armed makes that one count 0.
+        run("swift", "test", "-c", "release", "--no-parallel", "--filter", "AllocationTests|NoAllocTests")
     cli()
     consumer()
 
