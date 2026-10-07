@@ -1,10 +1,10 @@
 # narduk-sound 0.6 and the infinite mixer: survey and plan
 
-Status: proposal for Logan, 2026-10-07. Written by the master session from three
+Status: Part 3 decided by Logan on 2026-10-07 (see the end); the waves are the
+working program. Written by the master session from three
 read-only survey lanes (audio, visuals, apps; reports in
 `~/.agents/programs/narduk-sound/reports/2026-10-07-survey-s*.md`) with the
-load-bearing claims re-checked by hand. Nothing here is decided until Logan says
-so; open choices are in the last section. The previous program's plan and
+load-bearing claims re-checked by hand. The previous program's plan and
 retrospective live in data-beats (`docs/sound-visuals-plan.md`,
 `docs/sound-visuals-retro.md`).
 
@@ -113,15 +113,17 @@ choices marked (Opus) want an Opus high design pass before the lane starts.
   at `v0.5.0`. Consumers (data-beats, wirewatcher, buildbeat, beat-blaster)
   repoint their dependency URL to narduk-sound when they next bump.
 - Cut `v0.6.0-alpha.1` after L1 so the new app pins a tag from day one.
-- In beat-blaster, stop tracking the derived `design/assets/ios` and `out`
-  folders: keep the xcassets the build needs and regenerate the rest from
-  `raw/`.
+- In beat-blaster, stop tracking the derived `design/assets/out` folder (20.8 MB
+  of renders and contact sheets the tools regenerate from `raw/` and
+  `icons/raw/`); `design/assets/ios` is the app's `Images.xcassets` and stays.
+  Logan also wants the files purged from history, which needs a force-push
+  that the org ruleset `protect-default-branches` refuses; that is his call.
 - Fix the stale docs: plan and retro close-out lines (A7 is merged as
   data-beats#6 and #9), Data Beats README (0.4.1, 13 genres, six tabs), the Data
   Beats `ci.yml` header, the visualizer skill's Canvas references, the
   CHANGELOG's `*Metal` names.
-- File one issue per wave item below with the repo's `area:music` label; link
-  them to a new portal board (`narduk-infinite-mixer`) that supersedes
+- File one issue per wave item below in narduk-sound (`enhancement`); link
+  them to a new portal board (`forever-loop`) that supersedes
   `narduk-sound-visuals` for this work.
 
 ### Wave L1: play forever on any output (the new app's first dependency)
@@ -193,27 +195,26 @@ and the TV Mac through the frame meter.
 
 ## Part 2: the new app
 
-Working title to be chosen by Logan; the repo placeholder below is
-`infinite-mixer`. Everything in this part is a proposal.
+The app is **Forever Loop**, in the private repo
+`narduk-enterprises/forever-loop` (Logan, 2026-10-07).
 
 ### What it is
 
 An endless, self-mixing set of generated music for adults, on iPhone, iPad and
 Mac, that you tune rather than operate. It is on when you want music in the
 house and nobody wants to DJ. The screen is a living artwork when it is on, and
-the music keeps going when it is off. No AI dependency in the core experience
-(the on-device prompt-to-song from SoundGallery is an optional extra, Logan's
-call).
+the music keeps going when it is off. No AI dependency: SoundGallery's on-device
+prompt-to-song is out for now.
 
-### Setup (decided by the surveys, pending Logan's yes)
+### Setup
 
-- A private repo `narduk-enterprises/infinite-mixer` like data-beats: a SwiftPM
+- The private repo `narduk-enterprises/forever-loop` like data-beats: a SwiftPM
   kit (`MixerKit`, headless, Swift Testing) plus a CLI for offline set
   rendering, and one xcodegen app target with native
   `supportedDestinations: [iOS, macOS]` (SoundGallery's model, not Catalyst),
   iOS 18 and macOS 15, pinned to a narduk-sound tag.
 - Beat Blaster's signing: automatic, team FVSY7CFC3S, bundle
-  `com.nardukenterprises.<name>`, TestFlight internal group.
+  `com.nardukenterprises.foreverloop`, TestFlight internal group.
 - Info: `UIBackgroundModes: audio`, `NSMicrophoneUsageDescription` only if the
   room-listening feature ships, `PrivacyInfo.xcprivacy`, entitlements file,
   `LSApplicationCategoryType` music, no `UIRequiresFullScreen`.
@@ -304,18 +305,18 @@ each a half-day:
    the Intense library.
 4. Does the recorder support a rolling buffer?
 
-## Part 3: open choices for Logan
+## Part 3: Logan's choices (2026-10-07)
 
-1. **Name and repo.** A private `narduk-enterprises/<name>` repo like
-   beat-blaster and data-beats (apps no longer live inside the package repo);
-   the name is the open part.
-2. **Transition first.** Ship M1 with cuts (today's conductor) and blend in M2
-   (recommended), or hold M1 for the blend.
-3. **Prompt to song.** In as an optional extra on devices that have the model,
-   or out of this app entirely.
-4. **Plugins on iOS.** Keep `.metal` drop-ins macOS-only (recommended) or risk
-   App Store review on iOS.
-5. **Catalyst.** Drop Beat Blaster's never-built Catalyst flag in favour of the
-   native multiplatform target the new app uses, or keep it.
-6. **The design assets.** Keep the 98 MB in beat-blaster now that it is
-   private, or drop the derived folders and regenerate them.
+Answered by multiple choice; his words are quoted.
+
+1. **Name and repo.** "Forever Loop", repo `forever-loop`
+   (`narduk-enterprises/forever-loop`, private, created the same day).
+2. **Transition first.** "Cuts first": M1 ships on L1 with today's conductor;
+   blends arrive in M2.
+3. **Prompt to song.** "Out for now".
+4. **Plugins on iOS.** "macOS only": `.metal` drop-ins stay a Mac feature.
+5. **Catalyst.** "Drop it": Beat Blaster's flag is removed; a native macOS
+   destination comes later, the way Forever Loop does it.
+6. **The design assets.** "drop it and purge from history": the derived `out`
+   folder is untracked in beat-blaster. Purging history needs a force-push to
+   `main`, which the org ruleset refuses, so it waits on Logan.
