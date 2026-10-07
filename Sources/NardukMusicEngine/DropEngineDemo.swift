@@ -5,6 +5,9 @@ import NardukMusicDSP
 /// A built-in pattern provider for previews and manual listening when no conductor
 /// exists: an 8-bar cycle (2-bar build into a looping 2-bar wobble drop) from
 /// `DemoPattern`, with the section echoed into the engine's frames.
+///
+/// Superseded by `ConductorDriver.demo()` (what `playDemo()` plays now), which follows the audio clock and never
+/// rewinds; this `noteProvider` shim stays one release for callers that attach it themselves.
 @MainActor public final class DropEngineDemo {
     private var cursor = -1
 
@@ -31,9 +34,8 @@ import NardukMusicDSP
 }
 
 extension DropEngine {
-    /// Starts the built-in demo loop.
+    /// Starts the built-in demo loop through a `ConductorDriver`.
     public func playDemo() throws {
-        _ = DropEngineDemo.attach(to: self)
-        try start()
+        try play(.demo())
     }
 }
