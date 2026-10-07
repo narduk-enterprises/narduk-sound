@@ -3,6 +3,7 @@ import NardukMusicCore
 import NardukMusicDSP
 import NardukMusicRender
 
+// narduk-music abtest | abscore | samey: the measuring tools (narduk-sound#36), see Measure.swift.
 // narduk-music render --scenario <file.json> [--seconds 30] [--genre dubstep] [--seed 24301] [--bpm 140] [--variety 0.75] [--varied]
 //                     --out <file.wav | file.m4a> [--json]
 //
@@ -20,6 +21,7 @@ func log(_ message: String) {
 let usage = """
     usage: narduk-music render --scenario <file.json> --out <file.wav|file.m4a>
                                [--seconds N] [--genre NAME] [--seed N] [--bpm N] [--variety 0...1] [--varied] [--json]
+    \(measureUsage)
     genres: \(Genre.allCases.map(\.rawValue).joined(separator: ", "))
     scenario "notes" play an instrument directly: {"time": 1.5, "instrument": "strum", "pitch": 45, "chord": "minor"}
     note instruments: \(Instrument.allCases.filter { $0.synthCode >= 14 }.map(\.rawValue).joined(separator: ", "))
@@ -33,6 +35,12 @@ func value(_ name: String, in arguments: [String]) -> String? {
 
 func main() -> Int32 {
     let arguments = Array(CommandLine.arguments.dropFirst())
+    switch arguments.first {
+    case "abtest": return abtest(arguments)
+    case "abscore": return abscore(arguments)
+    case "samey": return samey(arguments)
+    default: break
+    }
     guard arguments.first == "render" else {
         log(usage)
         return arguments.first == "--help" || arguments.first == "-h" ? 0 : 64
