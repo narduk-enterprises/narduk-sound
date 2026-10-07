@@ -77,6 +77,14 @@ public enum DropEngineError: LocalizedError {
         didSet { core?.setMasterVolume(min(max(masterVolume, 0), 1)) }
     }
 
+    /// Mutes what reaches the speaker and nothing else: the recording and the `SoundFrameSource` keep the full signal.
+    /// For a headless run that must verify recording and the meters without making a sound (Beat Blaster's
+    /// `-silent YES`). Unlike `masterVolume`, which scales the synth itself, this acts after the capture point. False
+    /// (the default) leaves the output as it was. Takes effect at once, also while playing.
+    public var mutesHardwareOutput = false {
+        didSet { applyHardwareVolume() }
+    }
+
     /// The iOS audio-session setup `start()` applies. Set it before `start()`; ignored on macOS.
     public var sessionMode: SessionMode = .playback
 
@@ -96,6 +104,9 @@ public enum DropEngineError: LocalizedError {
     public static let frameInterval = 1.0 / 60
 
     @ObservationIgnored private let engine = AVAudioEngine()
+    /// Where the synth lands before the output stage: the recording taps it, so `mutesHardwareOutput` can silence the
+    /// main mixer (the speaker path) without silencing the capture. Graph: source -> capture mixer -> main mixer -> out.
+    @ObservationIgnored private let captureMixer = AVAudioMixerNode()
     @ObservationIgnored private var sourceNode: AVAudioSourceNode?
     @ObservationIgnored private var core: DropSynthCore?
     @ObservationIgnored private var analyzer: SoundAnalyzer?
@@ -159,8 +170,10 @@ public enum DropEngineError: LocalizedError {
 
         let node = AVAudioSourceNode(format: format, renderBlock: DropEngine.makeRenderBlock(core))
         engine.attach(node)
-        engine.connect(node, to: engine.mainMixerNode, format: format)
-        engine.mainMixerNode.outputVolume = 1
+        if captureMixer.engine == nil { engine.attach(captureMixer) }
+        engine.connect(node, to: captureMixer, format: format)
+        engine.connect(captureMixer, to: engine.mainMixerNode, format: format)
+        applyHardwareVolume()
         engine.prepare()
 
         self.core = core
@@ -201,13 +214,22 @@ public enum DropEngineError: LocalizedError {
         }
     }
 
+    /// The speaker path's volume: 0 when muted, else 1 (the main mixer is not a user-facing volume).
+    private func applyHardwareVolume() {
+        engine.mainMixerNode.outputVolume = mutesHardwareOutput ? 0 : 1
+    }
+
+    /// The main mixer's output volume, for tests.
+    var hardwareVolume: Float { engine.mainMixerNode.outputVolume }
+
     // MARK: Recording
 
-    /// Records the master bus to an AAC `.m4a` at `url` until `stopRecording()`.
+    /// Records the synth's output to an AAC `.m4a` at `url` until `stopRecording()`, at full level also while
+    /// `mutesHardwareOutput` is on.
     public func startRecording(to url: URL) throws {
         guard isRunning else { throw DropEngineError.notRunning }
         guard recorder == nil else { throw DropEngineError.alreadyRecording }
-        let mixer = engine.mainMixerNode
+        let mixer = captureMixer
         let format = mixer.outputFormat(forBus: 0)
         let recorder = try DropRecorder(url: url, format: format)
         mixer.installTap(onBus: 0, bufferSize: 4_096, format: format, block: recorder.makeTapBlock())
@@ -218,7 +240,7 @@ public enum DropEngineError: LocalizedError {
     /// Finishes the file and returns its URL (nil if nothing was recording or the file failed).
     public func stopRecording() async -> URL? {
         guard let recorder else { return nil }
-        engine.mainMixerNode.removeTap(onBus: 0)
+        captureMixer.removeTap(onBus: 0)
         self.recorder = nil
         isRecording = false
         return await Task.detached { recorder.finish() }.value
