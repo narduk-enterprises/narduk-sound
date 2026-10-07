@@ -41,6 +41,13 @@ enum GallerySongStyle: Hashable, Identifiable {
         }
     }
 
+    /// Whether this style is the built-in eight-bar loop (`DropEngine.playDemo`). Every other style is written live by
+    /// a `SongPlayer`: sending one to `playDemo` plays the loop under the wrong name (narduk-libs#1623).
+    var playsClassicLoop: Bool {
+        if case .demo = self { return true }
+        return false
+    }
+
     /// Every entry the picker shows, in order.
     static var all: [GallerySongStyle] {
         [.demo] + Genre.allCases.map(GallerySongStyle.genre) + [.guitars, .ambient]

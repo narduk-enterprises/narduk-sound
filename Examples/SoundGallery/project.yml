@@ -59,3 +59,22 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.nardukenterprises.soundgallery
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
+  # A logic-only bundle: the song routing and the song player, with no host app, so it runs headless and never opens a
+  # window or plays a sound. `xcodebuild -scheme SoundGalleryTests test -destination 'platform=macOS'`.
+  SoundGalleryTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/GallerySong.swift
+      - Sources/SongPlayer.swift
+    dependencies:
+      - package: NardukLibs
+        product: NardukMusicCore
+      - package: NardukLibs
+        product: NardukMusicEngine
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        SWIFT_VERSION: "6.0"

@@ -99,11 +99,10 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     // MARK: Sources
 
     private func startDemo() throws {
-        switch song.style {
-        case .demo, .ambient:
+        if song.style.playsClassicLoop {
             try drop.playDemo()
             status = "Playing the NardukMusic demo song."
-        case .genre, .guitars, .recipe:
+        } else {
             drop.settings = song.settings
             let player = SongPlayer(song: song, engine: drop)
             drop.noteProvider = { [player] throughStep in player.notes(through: throughStep) }
