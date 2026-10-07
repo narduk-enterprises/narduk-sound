@@ -12,6 +12,7 @@ import Foundation
 //   rock     a live kit, driven power-chord 8ths on electric strums over a picking bass guitar (narduk-libs#1578)
 //   folk     soft kit, the folk strum on an acoustic, a root-fifth bass and a fingerpicked acoustic hook
 //   funk     syncopated kit with ghost snares, muted 16th chicken scratch and a popping 16th bass line
+//   tropical a soft, round four-on-the-floor with an off-beat shaker; the hook is a marimba pluck over pumping pads
 // The vocabulary is the existing Instrument + NoteParams (plus .keys), so the audio engine needs no genre knowledge.
 
 // MARK: - Public vocabulary
@@ -30,6 +31,7 @@ extension Genre {
         case .rock: 124
         case .folk: 96
         case .funk: 104
+        case .tropicalHouse: 106
         }
     }
 
@@ -49,6 +51,7 @@ extension Genre {
         case .rock: "Rock"
         case .folk: "Folk"
         case .funk: "Funk"
+        case .tropicalHouse: "Tropical House"
         }
     }
 }
@@ -184,6 +187,10 @@ enum GenreArrangement {
             GenreProfile(
                 introKicks: [0, 10], introKickBarStride: 1, buildKicks: [0, 10], buildSnares: [4, 12],
                 riserVelocity: 0.5, formantRange: 0.3...0.7)
+        case .tropicalHouse:
+            GenreProfile(
+                gain: 0.85, introKicks: [0, 4, 8, 12], introKickBarStride: 1, buildKicks: [0, 4, 8, 12],
+                buildSnares: [4, 12], riserVelocity: 0.5, chops: true, formantRange: 0.1...0.4, glide: 0.2)
         }
     }
 
@@ -407,6 +414,8 @@ enum GenreArrangement {
             if style == 3, pos % 2 == 0 { add(.hat, 0.12 + 0.2 * c.level) }
             if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: c.perBar)) }
             if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
+            // Tropical house keeps its pluck through the breakdown: pads and the hook, softly.
+            if genre == .tropicalHouse { keysHook(genre, c, velocity: 0.34, add: add) }
         case .build:
             if p.buildKicks.contains(pos) { add(.kick, pos == 0 ? 0.9 : 0.75) }
             let rush = c.barInPhrase >= 6 && c.level > 0.7
@@ -441,8 +450,9 @@ enum GenreArrangement {
             strum(genre, c, velocity: velocity * 1.4, length: 32, add: add)
             return
         }
+        let voice = genre == .tropicalHouse ? KeysVoice.pumpPad : KeysVoice.pad
         for pitch in chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: Self.lush(c.track.genre)) {
-            add(.keys, velocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: 3))
+            add(.keys, velocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: voice))
         }
     }
 
@@ -534,7 +544,7 @@ enum GenreArrangement {
         let variant = c.track.kit(drop2: c.section == .drop2)
         let level = c.level
         let soft = genre == .chill || genre == .lofi || genre == .folk
-        let driving = genre == .house || genre == .techno
+        let driving = genre == .house || genre == .techno || genre == .tropicalHouse
         let inFill = fill.map { pos >= $0.from } ?? false
         let kind = inFill ? fill?.kind : nil
         let main = c.isLastBar  // the half-phrase fill only whispers
@@ -553,12 +563,15 @@ enum GenreArrangement {
         if kind == .kickDrop { kicks = [] }
         if kicks.contains(pos) {
             let velocity =
-                pos == 0 ? (soft ? 0.7 : 1.0) : (soft ? 0.4 : driving ? 0.95 : genre == .synthwave ? 0.9 : 0.75)
+                genre == .tropicalHouse
+                ? 0.82
+                : pos == 0 ? (soft ? 0.7 : 1.0) : (soft ? 0.4 : driving ? 0.95 : genre == .synthwave ? 0.9 : 0.75)
             add(.kick, velocity, NoteParams())
         }
 
         let snareVelocity =
-            soft ? 0.5 : genre == .house ? 0.75 : genre == .techno ? 0.55 : genre == .synthwave ? 0.9 : 1.0
+            soft || genre == .tropicalHouse
+            ? 0.5 : genre == .house ? 0.75 : genre == .techno ? 0.55 : genre == .synthwave ? 0.9 : 1.0
         var snared = false
         if snares.contains(pos) {
             add(.snare, snareVelocity, NoteParams())
@@ -620,6 +633,10 @@ enum GenreArrangement {
             // Tight 16ths, the off-beats accented, the in-between ones ghosted.
             if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.36 : 0.26) + 0.2 * level, NoteParams()) }
             if pos % 2 == 1, level > 0.3 { add(.hat, 0.12 + 0.1 * level, NoteParams()) }
+        case .tropicalHouse:
+            // A shaker: the off-beat 8th leans in, the 16ths around it whisper.
+            if pos % 4 == 2 { add(.hat, 0.3 + 0.15 * level, NoteParams()) }
+            if pos % 2 == 1 { add(.hat, 0.1 + 0.08 * level, NoteParams()) }
         case .drumAndBass:
             // Breakbeat hats: 8ths with a swung 16th before the snare.
             if pos % 2 == 0 { add(.hat, 0.32 + 0.3 * level + accent, NoteParams()) }
@@ -745,6 +762,18 @@ enum GenreArrangement {
                 let pitch = track.pitch(c.keyRoot - 36, degree: c.chord + (c.chord % 2 == 0 ? 2 : 4))
                 add(.sub, 0.5, NoteParams(pitch: pitch, lengthSteps: length(6)))
             }
+        case .tropicalHouse:
+            // A round off-beat bass the kick pumps: the sub on every "and", the last one of an odd bar on the fifth,
+            // and a soft, closed wub on beats 2 and 4's "and" for body.
+            if pos % 4 == 2 {
+                let turn = pos == 14 && c.barInPhrase % 2 == 1
+                let pitch = turn ? track.pitch(c.keyRoot - 36, degree: c.chord + 4) : subPitch
+                add(.sub, 0.8, NoteParams(pitch: pitch, lengthSteps: length(2)))
+                if pos == 6 || pos == 14 {
+                    let degree = c.chord + (turn ? 4 : 0)
+                    wobble(track.pitch(wobbleBase, degree: degree), 2, velocity: 0.4, accent: false)
+                }
+            }
         case .rock, .folk, .funk:
             break  // the band's bass guitar is written above
         }
@@ -778,7 +807,7 @@ enum GenreArrangement {
                     track.pitch(wobbleBase, degree: c.chord + (pos == 8 && c.barInPhrase % 2 == 1 ? 4 : 0)), 8,
                     velocity: 0.5, accent: false)
             }
-        case .house, .techno, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk:
+        case .house, .techno, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk, .tropicalHouse:
             break
         }
     }
@@ -809,6 +838,10 @@ enum GenreArrangement {
         case .lofi:
             keysHook(genre, c, velocity: 0.45, add: add)
             if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.24, add: add) }
+        case .tropicalHouse:
+            // The drop is the marimba hook over the full groove, with the pad pumping underneath.
+            keysHook(genre, c, velocity: 0.6, add: add)
+            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.32, add: add) }
         case .drumAndBass:
             if pos == 0, c.barInPhrase % 2 == 0 {
                 for pitch in chord(c, degree: c.chord, base: c.keyRoot, seventh: true) {

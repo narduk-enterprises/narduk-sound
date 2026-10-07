@@ -82,7 +82,7 @@ enum Variety {
         case .riddim: return GrooveProfile(kick: late, kicks: 0...2, ghost: late, ghosts: 1...2, openHats: 0)
         case .drumAndBass, .ukGarage:
             return GrooveProfile(kick: sync, kicks: 1...3, ghost: offbeat, ghosts: 2...4, openHats: 1)
-        case .house:
+        case .house, .tropicalHouse:
             return GrooveProfile(kick: offbeat, kicks: 0...1, ghost: offbeat, ghosts: 1...2, openHats: 2, floor: true)
         case .techno:
             return GrooveProfile(kick: offbeat, kicks: 0...1, ghost: offbeat, ghosts: 1...2, openHats: 2, floor: true)
@@ -126,14 +126,18 @@ enum Variety {
     static func applyTimbre(to track: inout Track, variety: Double) {
         var rng = stream(track, "timbre")
         func spread(_ width: Double) -> Double { (rng.unit() - 0.5) * width * variety }
-        track.kickTune = min(0.95, max(0.05, 0.5 + spread(0.9)))
+        track.kickTune = min(0.95, max(0.05, track.kickTune + spread(0.9)))
         track.snareTune = min(0.95, max(0.05, 0.5 + spread(0.9)))
         track.hatTune = min(0.95, max(0.05, 0.5 + spread(0.9)))
         track.formant = min(1, max(0, track.formant + spread(0.5)))
         track.drive = min(1, max(0, track.drive + spread(0.4)))
         track.vowel = Int(rng.next() % 4)
         // A genre's keys timbre follows its sound, but not every song in it plays the same keys.
-        if rng.unit() < 0.6 * variety { track.keysVoice = Int(rng.next() % 3) }
+        // Tropical house keeps its marimba: the pluck is the genre.
+        if rng.unit() < 0.6 * variety {
+            let voice = Int(rng.next() % 3)
+            if track.genre != .tropicalHouse { track.keysVoice = voice }
+        }
     }
 
     /// Genres whose backbeat has a half-time reading: the snare moves from 2 and 4 to 3.
@@ -196,7 +200,7 @@ enum Variety {
         case .techno:
             return Palette(
                 weights: [1, 0.2, 0.2, 0.3, 0.3, 0.6, 0.7], shapes: [vamp, vampTurn, fourBar, twoBar], home: 0.95)
-        case .house, .chill, .ukGarage, .lofi:
+        case .house, .chill, .ukGarage, .lofi, .tropicalHouse:
             return Palette(weights: [1, 0.7, 0.5, 0.8, 0.8, 0.9, 0.3], shapes: all, home: 0.7)
         case .synthwave:
             return Palette(weights: [1, 0.1, 0.8, 0.5, 0.4, 1, 1], shapes: all, home: 0.75)
@@ -267,6 +271,8 @@ enum Variety {
         case .rock: MotifProfile(notes: 6...10, beat: 1, eighth: 0.9, sixteenth: 0.2, longest: 8, shortest: 1)
         case .folk: MotifProfile(notes: 6...9, beat: 1, eighth: 0.8, sixteenth: 0.15, longest: 6, shortest: 2)
         case .funk: MotifProfile(notes: 8...12, beat: 0.5, eighth: 0.7, sixteenth: 1, longest: 3, shortest: 1)
+        case .tropicalHouse:
+            MotifProfile(notes: 7...11, beat: 0.8, eighth: 1, sixteenth: 0.4, longest: 4, shortest: 1)
         }
     }
 

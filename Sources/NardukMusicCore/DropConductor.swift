@@ -306,6 +306,9 @@ public struct DropConductor: Sendable {
     private var hookStated = false
     /// The current phrase is the track's last: its last bar plays the outro and the next phrase starts a new track.
     private var trackEnding = false
+    /// A hand-over asked for by `requestNextTrack`, and the genre it should land in (nil keeps the genre).
+    private var nextTrackRequested = false
+    private var nextTrackGenre: Genre?
     private var trackStartStep = -1
     /// The tempo later tracks vary around: the session's, the genre's, or the one the user set.
     private var baseBPM: Double
@@ -336,7 +339,25 @@ public struct DropConductor: Sendable {
     /// Asks for a genre change. Steps already emitted are never touched: a new track in the new genre, at the genre's
     /// default BPM (reported by `lastSwitch`), starts at the first bar line of steps not yet emitted, preceded by a
     /// short transition. Section and energy carry over. Setting `settings.genre` directly is equivalent.
-    public mutating func setGenre(_ genre: Genre) { settings.genre = genre }
+    public mutating func setGenre(_ genre: Genre) {
+        settings.genre = genre
+        nextTrackRequested = false
+        nextTrackGenre = nil
+    }
+
+    /// Moves on to a new track the way the set does by itself: the current phrase plays out, its last bar carries the
+    /// track's outro, and the new track starts on the next phrase line, in `genre` if given (at a tempo near that
+    /// genre's). Asked for during a phrase's last bar, the hand-over waits for the following phrase. Unlike `setGenre`,
+    /// which cuts in at the next bar line, nothing changes until the outro has played. A later request replaces an
+    /// earlier one; `setGenre` cancels it.
+    public mutating func requestNextTrack(genre: Genre? = nil) {
+        nextTrackRequested = true
+        nextTrackGenre = genre
+        settings.genre = activeGenre
+    }
+
+    /// Whether a hand-over asked for by `requestNextTrack` is still to come, and the genre it lands in.
+    public var requestedNextTrack: (pending: Bool, genre: Genre?) { (nextTrackRequested, nextTrackGenre) }
 
     // MARK: Input
 
@@ -442,7 +463,20 @@ public struct DropConductor: Sendable {
                 sectionJustStarted = sections.enterNext(roll: rng.next())
                 if sections.section.isDrop { dropQueued = false }
                 if trackEnding {
+                    let requested = nextTrackRequested
+                    if requested, let genre = nextTrackGenre, genre != activeGenre {
+                        activeGenre = genre
+                        settings.genre = genre
+                        baseBPM = genre.defaultBPM
+                        rollSteps.removeAll()
+                    }
+                    nextTrackRequested = false
+                    nextTrackGenre = nil
                     startTrack(step: step, reason: .next)
+                    if requested {
+                        lastSwitch = GenreSwitch(genre: activeGenre, step: step, bpm: settings.bpm)
+                        note(legend: "next track ← asked for", replacingPrefix: "next track")
+                    }
                 } else if !hookStated, characterizer.current != track.character {
                     // The first record is picked after hearing the room: rewrite it before its hook has played.
                     startTrack(step: step, reason: .rewrite)
@@ -464,7 +498,7 @@ public struct DropConductor: Sendable {
             sections.commit(
                 energy: energy.value, build: snapshot.buildThreshold, drop: snapshot.dropThreshold,
                 dropQueued: dropQueued, roll: rng.next())
-            trackEnding = shouldEndTrack()
+            trackEnding = shouldEndTrack() || (nextTrackRequested && pendingGenre == nil)
             if trackEnding {
                 sections.override(energy.value >= snapshot.dropThreshold ? .build : .intro)
                 note(legend: "next track ← \(characterizer.current.label)", replacingPrefix: "next track")

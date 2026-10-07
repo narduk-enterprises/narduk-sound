@@ -146,7 +146,8 @@ import Testing
             // House, chill, the second electronic wave and the band carry their hook above the bass, which is a groove under it.
             #expect(
                 m.contours
-                    >= ([.house, .chill, .techno, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk].contains(genre)
+                    >= ([.house, .chill, .techno, .ukGarage, .synthwave, .lofi, .rock, .folk, .funk, .tropicalHouse]
+                        .contains(genre)
                         ? 2 : 3),
                 "\(genre): \(m)")
             #expect(m.wobbleRateChangesPerMinute <= 4, "\(genre): \(m)")

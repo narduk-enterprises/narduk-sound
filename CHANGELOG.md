@@ -7,6 +7,8 @@ shipped on narduk-libs tags.
 
 ### Added
 
+- `Genre.tropicalHouse` ("Tropical House", 100 ... 112 BPM): a soft four-on-the-floor with an off-beat shaker and a light clap, a round off-beat sub, a marimba pluck hook (new `KeysVoice.marimba`) over pads that pump on their own slower sidechain (`KeysVoice.pumpPad`), airy vocal chops, and a gentle drop with no impact bias or grit. First version for listening.
+- `DropConductor.requestNextTrack(genre:)`: a smooth hand-over. The phrase plays out, its last bar carries the track's outro, and the new track (in the requested genre, if any) starts on the next phrase line. `setGenre` still cuts in at the next bar line.
 - `NardukMusicPlayback` (Darwin): `NowPlayingBridge` publishes Now Playing info and maps play, pause, toggle and
   next track from the lock screen and HomePods to a `NowPlayingTransport`; `AirPlayPicker` wraps `AVRoutePickerView`.
   `docs/now-playing.md` has the `UIBackgroundModes: audio` requirement (narduk-sound#8).

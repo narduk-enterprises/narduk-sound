@@ -35,6 +35,8 @@ public struct SynthCoefficients: Sendable, Hashable {
 
     let sidechainAttack: Float
     let sidechainRelease: Float
+    /// The pumping pad's slower recovery from each kick (`KeysVoice.pumpPad`).
+    let pumpRelease: Float
 
     public init(sampleRate: Double) {
         let sr = Float(sampleRate)
@@ -65,6 +67,7 @@ public struct SynthCoefficients: Sendable, Hashable {
 
         sidechainAttack = DSP.decay(seconds: 0.0015, sampleRate: sr)
         sidechainRelease = DSP.decay(seconds: 0.065, sampleRate: sr)
+        pumpRelease = DSP.decay(seconds: 0.16, sampleRate: sr)
     }
 }
 
