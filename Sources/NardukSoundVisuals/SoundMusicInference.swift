@@ -39,6 +39,9 @@ public final class SoundMusicInference {
     static let subdivisionLag = minLag / 4
     /// Estimates in a row that must agree before the clock locks or switches.
     static let agreementsToLock = 4
+    /// Estimates in a row that must agree on another tempo before a locked one is left: a two-bar build of snare rolls
+    /// (3.4 s at 140 BPM) must not pull the clock to an alias.
+    static let agreementsToSwitch = 8
     /// Below this RMS the source is silent: the clock stops and the section rests.
     public static let silenceDB: Float = -65
     /// A gap this long between frames (the view was hidden) resets the flux baseline instead of hearing one huge onset.
@@ -110,12 +113,18 @@ public final class SoundMusicInference {
     private var energySlow: Float = 0
     /// The most energy the song has reached, falling slowly: what a drop is measured against.
     private var energyPeak: Float = 0
+    /// Loudness alone, smoothed like `energy`: sections follow it, since a snare roll makes a build as busy as a drop.
+    private(set) var level: Float = 0
+    private(set) var levelPeak: Float = 0
     private var midLevel: Float = 0
     private var silentSince = -Double.infinity
     private var highSince = -Double.infinity
+    private var midSince = -Double.infinity
     private var lowSince = -Double.infinity
     private var sectionSince = -Double.infinity
     private var dropsEntered = 0
+    /// The loudness peak when the current drop began: a drop much louder than it is a new drop.
+    private var dropEntryPeak: Float = 0
     private var energy: Float = 0
     private var section = SongSection.intro
 
@@ -162,12 +171,16 @@ public final class SoundMusicInference {
         density = 0
         energySlow = 0
         energyPeak = 0
+        level = 0
+        levelPeak = 0
         midLevel = 0
         silentSince = -.infinity
         highSince = -.infinity
+        midSince = -.infinity
         lowSince = -.infinity
         sectionSince = -.infinity
         dropsEntered = 0
+        dropEntryPeak = 0
         energy = 0
         section = .intro
         latest = MusicContext()
@@ -362,7 +375,7 @@ public final class SoundMusicInference {
             candidateBPM = measured
             agreements = 1
         }
-        guard agreements >= Self.agreementsToLock else { return }
+        guard agreements >= (locked ? Self.agreementsToSwitch : Self.agreementsToLock) else { return }
         if locked {
             // Leave a locked tempo only for one that clearly outscores it.
             let currentLag = min(max(Int((Self.gridRate * 60 / bpm).rounded()), Self.minLag), Self.maxLag)
@@ -383,8 +396,8 @@ public final class SoundMusicInference {
     /// gentle prior around 120 BPM.
     private func score(_ lag: Int, _ r: UnsafeMutablePointer<Float>) -> Float {
         let lagBPM = Self.gridRate * 60 / Double(lag)
-        let octaves = log2(lagBPM / 120)
-        let prior = Float(exp(-0.5 * (octaves / 0.9) * (octaves / 0.9)))
+        let octaves = log2(lagBPM / 130)
+        let prior = Float(exp(-0.5 * (octaves / 0.75) * (octaves / 0.75)))
         let half = lag / 2 >= Self.subdivisionLag ? max(0, r[lag / 2]) : 0
         let quarter = lag / 4 >= Self.subdivisionLag ? max(0, r[lag / 4]) : 0
         return (r[lag] + 0.5 * half + 0.25 * quarter) * prior
@@ -410,6 +423,7 @@ public final class SoundMusicInference {
     private func updateEnergy(_ frame: SoundFrame, dt: Float, silent: Bool, resting: Bool) {
         if resting {
             energy = 0
+            level = 0
             energySlow += (energy - energySlow) * min(1, dt / 2)
             return
         }
@@ -428,13 +442,19 @@ public final class SoundMusicInference {
             ceiling = max(loud, ceiling - dt * 0.3)
             floorDB = min(loud, floorDB + dt)
             let span = max(ceiling - floorDB, 10)
-            fromLoudness = min(max((loud - (ceiling - span)) / span, 0), 1)
+            let relative = min(max((loud - (ceiling - span)) / span, 0), 1)
+            // Half relative to the song's own range, half absolute: a quiet intro is the loudest thing heard so far,
+            // and only an absolute scale says it is still quiet.
+            let absolute = min(max((loud + 32) / 22, 0), 1)
+            fromLoudness = 0.35 * relative + 0.65 * absolute
         }
         let fromDensity = min(density / 5, 1)
         let target: Float = silent ? 0 : 0.65 * fromLoudness + 0.35 * fromDensity
         energy += (target - energy) * min(1, dt * 3)
         energySlow += (energy - energySlow) * min(1, dt / 2)
         energyPeak = max(energy, energyPeak - dt * 0.02)
+        level += (fromLoudness - level) * min(1, dt * 3)
+        levelPeak = max(level, levelPeak - dt * 0.02)
     }
 
     private func updateSection(now: Double, resting: Bool) {
@@ -444,37 +464,46 @@ public final class SoundMusicInference {
                 sectionSince = now
             }
             highSince = -.infinity
+            midSince = -.infinity
             lowSince = -.infinity
             return
         }
-        // A drop is energy held near the most the song has reached; the bars scale with that peak so a quiet song
-        // still has drops and a loud one is not one long drop.
-        if energy >= max(0.5, energyPeak * 0.85) {
-            if highSince == -.infinity { highSince = now }
-        } else {
-            highSince = -.infinity
+        // Loudness against the most the song has reached puts each moment in one of three tiers: a drop is held near
+        // the peak, a build sits under it and a breakdown well below. The bars scale with the peak so a quiet song still
+        // has drops and a loud one is not one long drop; the absolute floors keep a quiet intro out of a drop.
+        let high = level >= max(0.55, levelPeak * 0.85)
+        let low = level < max(0.25, levelPeak * 0.55)
+        func hold(_ since: inout Double, _ active: Bool) -> Double {
+            if !active {
+                since = -.infinity
+                return 0
+            }
+            if since == -.infinity { since = now }
+            return now - since
         }
+        let highFor = hold(&highSince, high)
+        let midFor = hold(&midSince, !high && !low)
+        let lowFor = hold(&lowSince, low)
         let inDrop = section == .drop || section == .drop2
-        let lowBar: Float = inDrop ? max(0.35, energyPeak * 0.6) : max(0.25, energyPeak * 0.45)
-        if energy < lowBar {
-            if lowSince == -.infinity { lowSince = now }
-        } else {
-            lowSince = -.infinity
-        }
         let dwell = now - sectionSince
         var next = section
-        if !inDrop, highSince != -.infinity, now - highSince >= 0.6, dwell >= 1 {
+        if !inDrop, highFor >= 0.4, dwell >= 1 {
             next = dropsEntered % 2 == 0 ? .drop : .drop2
-        } else if inDrop, lowSince != -.infinity, now - lowSince >= 1, dwell >= 2 {
+        } else if inDrop, level >= dropEntryPeak * 1.12, highFor >= 0.4, dwell >= 2 {
+            next = dropsEntered % 2 == 0 ? .drop : .drop2  // louder than the drop we are in: a new one
+        } else if inDrop, lowFor >= 1, dwell >= 2 {
             next = .breakdown
-        } else if section == .build, lowSince != -.infinity, now - lowSince >= 1.5, dwell >= 2 {
+        } else if inDrop, midFor >= 0.8, dwell >= 2 {
+            next = .build
+        } else if section == .build, lowFor >= 1.5, dwell >= 2 {
             next = .breakdown
-        } else if section == .intro || section == .breakdown, energy > 0.45, energy - energySlow > 0.08, dwell >= 1.5 {
+        } else if section == .intro || section == .breakdown, midFor >= 1, level > 0.3, dwell >= 1.5 {
             next = .build
         }
         guard next != section else { return }
         if next == .drop || next == .drop2 {
             dropsEntered += 1
+            dropEntryPeak = levelPeak
             counts.record(.impact)
         }
         section = next
