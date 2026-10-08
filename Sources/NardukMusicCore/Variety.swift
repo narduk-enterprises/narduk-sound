@@ -126,8 +126,11 @@ enum Variety {
     static func applyTimbre(to track: inout Track, variety: Double) {
         var rng = stream(track, "timbre")
         func spread(_ width: Double) -> Double { (rng.unit() - 0.5) * width * variety }
-        track.kickTune = min(0.95, max(0.05, track.kickTune + spread(0.9)))
-        track.snareTune = min(0.95, max(0.05, 0.5 + spread(0.9)))
+        // A tune pushed past the top folds back under it, so a genre whose drum sits high (house's kick) keeps its
+        // spread instead of piling up at the ceiling. A genre centred at 0.5 never reaches it.
+        func fold(_ tune: Double, top: Double) -> Double { tune > top ? 2 * top - tune : tune }
+        track.kickTune = min(1, max(0.05, fold(track.kickTune + spread(0.9), top: 1)))
+        track.snareTune = min(0.95, max(0.05, fold(track.snareTune + spread(0.9), top: 0.95)))
         track.hatTune = min(0.95, max(0.05, 0.5 + spread(0.9)))
         track.formant = min(1, max(0, track.formant + spread(0.5)))
         track.drive = min(1, max(0, track.drive + spread(0.4)))

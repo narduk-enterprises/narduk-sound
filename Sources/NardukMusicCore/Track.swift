@@ -319,9 +319,10 @@ enum TrackGenerator {
             * ((variant + 1 + pick(BassPatches.variantCount - 1)) % BassPatches.variantCount)
         t.keysVoice = Self.keysVoice(genre)
         // Tropical house's kick sits a little lower: softer and rounder than house's. House's sits higher, settling
-        // near 54 Hz rather than 45: at 45 Hz its boom alone put most of the drop under 60 Hz (record-loop, 2026-10-08).
+        // near 57 Hz rather than 45 once variety folds it back from the top (median tune 0.83): at 45 Hz its boom
+        // alone put most of the drop under 60 Hz (record-loop, 2026-10-08).
         if genre == .tropicalHouse { t.kickTune = 0.4 }
-        if genre == .house { t.kickTune = 0.9 }
+        if genre == .house { t.kickTune = 0.95 }
         let ladder = Banks.rateLadder(genre)
         let rung = min(
             ladder.count - 1, max(0, Self.rateRung(genre, character, ladder: ladder) + (chance(0.3) ? 1 : 0)))
