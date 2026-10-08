@@ -10,7 +10,8 @@ import Testing
 @Suite struct SongRecipeGoldenTests {
     static let goldens: [String: UInt64] = [
         // Moved with section variation (#40, 2026-10-07); the Linux value is read from the first Linux CI run.
-        "darwin-arm64": 0x8a68_7ae7_e250_aca5
+        "darwin-arm64": 0x8a68_7ae7_e250_aca5,
+        "linux-x86_64": 0xa41a_ae7a_cee8_9712,
     ]
 
     static let recipe = SongRecipe(
