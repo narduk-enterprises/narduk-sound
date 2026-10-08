@@ -3,6 +3,9 @@
     record-loop profile --out ref.json FILE...             measure audio files (mp3, wav, flac)
     record-loop sweep --bin narduk-music --genre house --seeds 1-50 --dir renders/ --out ours.json
     record-loop gap ref.json ours.json [--trend trend.jsonl --label pass-3]
+    record-loop validate --anchor anchor.json --corpus corpus.json --out ref.json
+    record-loop run --bin narduk-music --genre house --ref ref.json --dir renders/ [--trend t.jsonl --label pass-3]
+    record-loop listen --out kit/ --engine a.wav ... --model b.wav ... --anchor c.mp3 ...
 
 A profile is {"tracks": {path: {property: value}}, "source": ...}. Measurements are cached next to each audio file
 (<file>.<window>.<codec>.features.json, keyed by size and mtime), so re-profiling a reference set is free.
@@ -241,6 +244,109 @@ def cmd_gap(args: argparse.Namespace) -> int:
     return 0
 
 
+def validate_rows(anchor: dict, corpus: dict) -> tuple[dict, list[dict]]:
+    """Merge a model corpus into an anchor profile, property by property.
+
+    The corpus is a reference only where it agrees with the anchors: a property whose corpus p50 sits inside the
+    anchor p10-p90 takes both sets' values; otherwise the anchor wins and the corpus values for it are dropped.
+    """
+    a, c = _table(anchor), _table(corpus)
+    decisions = []
+    kept: set[str] = set()
+    for key in sorted(set(a) & set(c)):
+        lo, hi = np.percentile(a[key], [10, 90])
+        mid = float(np.percentile(c[key], 50))
+        ok = bool(lo <= mid <= hi)
+        decisions.append({"property": key, "anchor": [float(lo), float(hi)], "corpus_p50": mid, "kept": ok})
+        if ok:
+            kept.add(key)
+    tracks = dict(anchor["tracks"])
+    for path, feats in corpus["tracks"].items():
+        tracks[path] = {k: v for k, v in feats.items() if k in kept}
+    merged = {"source": "anchor+corpus", "anchors": len(anchor["tracks"]), "corpus": len(corpus["tracks"])}
+    return {**merged, "kept_properties": sorted(kept), "tracks": tracks}, decisions
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    anchor, corpus = json.loads(Path(args.anchor).read_text()), json.loads(Path(args.corpus).read_text())
+    merged, decisions = validate_rows(anchor, corpus)
+    for d in decisions:
+        mark = "keep" if d["kept"] else "DROP"
+        print(
+            f"{d['property']:28} anchor {d['anchor'][0]:9.3g} .. {d['anchor'][1]:9.3g}  corpus p50 {d['corpus_p50']:9.3g}  {mark}"
+        )
+    kept = sum(d["kept"] for d in decisions)
+    print(f"\ncorpus agrees with the anchors on {kept} of {len(decisions)} properties -> {args.out}")
+    Path(args.out).write_text(json.dumps(merged, indent=1))
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    ours = str(Path(args.dir) / f"{args.genre}.json")
+    sweep = argparse.Namespace(**{**vars(args), "out": ours})
+    if cmd_sweep(sweep):
+        return 1
+    return cmd_gap(argparse.Namespace(ref=args.ref, ours=ours, trend=args.trend, label=args.label))
+
+
+def _clip(job: tuple[str, str, str | None, float, float]) -> None:
+    """Cut, loudness-match and fade one clip, written as 320k MP3."""
+    import pyloudnorm
+    import soundfile as sf
+
+    source, out, window, seconds, target = job
+    offset, _ = _window(source, window)
+    stereo, sr = _load(source, f"{offset}:{seconds}")
+    gain = 10 ** ((target - pyloudnorm.Meter(sr).integrated_loudness(stereo)) / 20)
+    stereo = stereo * gain
+    peak = float(np.max(np.abs(stereo)))
+    if peak > 0.98:
+        stereo *= 0.98 / peak
+    fade = np.linspace(0, 1, int(0.5 * sr))[:, None]
+    stereo[: len(fade)] *= fade
+    stereo[-len(fade) :] *= fade[::-1]
+    wav = out[: -len(".mp3")] + ".wav"
+    sf.write(wav, stereo, sr)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", wav, "-c:a", "libmp3lame", "-b:a", "320k", out], check=True)
+    os.remove(wav)
+
+
+def cmd_listen(args: argparse.Namespace) -> int:
+    """A blind kit: shuffled, loudness-matched clips with hidden sources, a scoresheet, a page and a sealed key."""
+    import random
+
+    groups = {"engine": (args.engine, args.engine_window), "model": (args.model, "35%"), "anchor": (args.anchor, "35%")}
+    items = [(group, path, window) for group, (paths, window) in groups.items() for path in paths or []]
+    random.Random(args.seed).shuffle(items)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    key, jobs = [], []
+    for n, (group, path, window) in enumerate(items, 1):
+        name = f"clip-{n:02d}.mp3"
+        key.append({"clip": name, "group": group, "source": path})
+        jobs.append((path, str(out / name), window, args.seconds, args.lufs))
+    with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+        list(pool.map(_clip, jobs))
+    (out / ".key.json").write_text(json.dumps(key, indent=1))
+    rows = "\n".join(f"| {k['clip']} | | |" for k in key)
+    (out / "scoresheet.md").write_text(
+        "# Blind listen\n\nFor each clip: keep or skip, and any tell that says it was made by code.\n\n"
+        f"| Clip | Keep? | Tell |\n|---|---|---|\n{rows}\n\nReveal: `cat .key.json` after scoring.\n"
+    )
+    players = "\n".join(
+        f'<li><b>{k["clip"][:-4]}</b><br><audio controls preload="none" src="{k["clip"]}"></audio></li>' for k in key
+    )
+    (out / "index.html").write_text(
+        "<!doctype html><meta charset=utf-8><title>Blind listen</title>"
+        "<style>body{font:16px system-ui;margin:24px;max-width:640px}li{margin:14px 0}audio{width:100%}</style>"
+        f"<h1>Blind listen</h1><p>{len(key)} clips, {args.seconds:.0f} s each, loudness-matched to "
+        f"{args.lufs:.0f} LUFS. Sources are hidden.</p><ol style='list-style:none;padding:0'>{players}</ol>"
+    )
+    counts = {g: sum(k["group"] == g for k in key) for g in groups}
+    print(f"kit: {len(key)} clips {counts} -> {out} (key sealed in .key.json)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="record-loop", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -270,6 +376,36 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--trend")
     a.add_argument("--label", default="")
     a.set_defaults(fn=cmd_gap)
+    a = sub.add_parser("validate")
+    a.add_argument("--anchor", required=True)
+    a.add_argument("--corpus", required=True)
+    a.add_argument("--out", required=True)
+    a.set_defaults(fn=cmd_validate)
+    a = sub.add_parser("run")
+    a.add_argument("--bin", required=True)
+    a.add_argument("--genre", required=True)
+    a.add_argument("--ref", required=True)
+    a.add_argument("--seeds", default="1-50")
+    a.add_argument("--variety", type=float, default=0.75)
+    a.add_argument("--dir", required=True)
+    a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    a.add_argument("--window", default="136:48")
+    a.add_argument("--codec", default="320k")
+    a.add_argument("--trend")
+    a.add_argument("--label", default="")
+    a.set_defaults(fn=cmd_run)
+    a = sub.add_parser("listen")
+    a.add_argument("--out", required=True)
+    a.add_argument("--engine", nargs="*")
+    a.add_argument("--model", nargs="*")
+    a.add_argument("--anchor", nargs="*")
+    # Inside the song plan's second drop, like the gap window.
+    a.add_argument("--engine-window", default="137")
+    a.add_argument("--seconds", type=float, default=45)
+    a.add_argument("--lufs", type=float, default=-16)
+    a.add_argument("--seed", type=int, default=20261007)
+    a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    a.set_defaults(fn=cmd_listen)
     args = p.parse_args(argv)
     return args.fn(args)
 

@@ -67,3 +67,16 @@ def test_repetition_rises_when_a_clip_is_looped() -> None:
     once = features.structure(_melody(48, 2), sr)["repetition_ratio"]
     looped = features.structure(np.vstack([_melody(12, 3)] * 4), sr)["repetition_ratio"]
     assert looped > once + 0.2
+
+
+def test_corpus_counts_only_where_it_agrees_with_the_anchors() -> None:
+    from record_loop.cli import validate_rows
+
+    anchor = {"tracks": {f"a{i}": {"tempo_bpm": 120.0 + i, "crest_db": 12.0 + i} for i in range(10)}}
+    # Tempo agrees with the anchors; crest is far louder-mastered, so the anchors win there.
+    corpus = {"tracks": {f"c{i}": {"tempo_bpm": 124.0, "crest_db": 4.0} for i in range(20)}}
+    merged, decisions = validate_rows(anchor, corpus)
+    assert {d["property"]: d["kept"] for d in decisions} == {"crest_db": False, "tempo_bpm": True}
+    assert merged["kept_properties"] == ["tempo_bpm"]
+    assert merged["tracks"]["c0"] == {"tempo_bpm": 124.0}
+    assert merged["tracks"]["a0"] == {"tempo_bpm": 120.0, "crest_db": 12.0}
