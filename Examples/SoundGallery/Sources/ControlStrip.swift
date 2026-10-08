@@ -118,6 +118,10 @@ struct ControlStrip: View {
         VStack(alignment: .leading, spacing: GalleryTheme.Space.s) {
             TransportControls(model: model, importing: $importing, spaceShortcut: spaceShortcut)
             Text(model.status).font(.footnote).foregroundStyle(.secondary).lineLimit(3)
+            if let tempo = model.heardTempo {
+                Label("\(tempo) BPM", systemImage: "metronome").font(.footnote).foregroundStyle(.secondary)
+                    .accessibilityLabel("Heard tempo \(tempo) beats per minute")
+            }
         }
     }
 

@@ -80,7 +80,7 @@
         }
     }
 
-    #if os(iOS) || os(visionOS) || os(tvOS)
+    #if os(iOS) || os(visionOS)
         /// The `AVAudioSession` setup an iOS app needs before it taps the microphone.
         public enum AudioSessionConfiguration {
             /// Play and record in measurement mode (no input processing), mixing with other audio, then activate.
