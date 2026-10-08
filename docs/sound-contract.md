@@ -474,3 +474,47 @@ exhaustive switches at data-beats `902d4e6` and wirewatcher `4c7d38f`:
 adding a case past 16 changes that type, so A6 asserts the count at compile
 time. `SoundPaletteProvider` takes a `SoundPaletteDriver`, so a new section
 never forces an edit inside the library, only in the app's provider.
+
+## 11. SoundTimeline (NardukSoundVisuals)
+
+A `SoundTimeline` is one track analyzed once and replayed anywhere: a Mac runs the audio through `SoundAnalyzer` and
+`SoundMusicInference` (`SoundTimelineRecorder`), and a device that only *plays* the track, with no access to its audio
+(an Apple TV streaming Apple Music), asks a `SoundTimelinePlayer` for the `SoundVisualInput` at the playback time and
+feeds it to `SoundVisualState.update(_:now:)` as it would a live source. It is not `SoundVisualTimeline` (the video
+exporter's record of what the lights were doing); a timeline holds the analysis, not the lights.
+
+**Grid.** One sample per analysis frame, 60 Hz (`SoundTimeline.defaultGridRate`), so a sample is exactly the frame and
+context the live path saw and nothing is resampled. A 50 Hz grid was measured against it (the Sun, 76 s of the demo loop,
+luma correlation with live 0.962, a hit up to a frame off) and dropped.
+
+**Per sample** (93 bytes at the demo's four hit lanes, plus the waveform): 64 bands and 12 chroma classes at 8 bits;
+`rmsDB` and `peakDB` as Int16 centi-dB (the silence rules sit at -65 and -100 dB); the beat position in 16th steps with
+the fraction through the step (Float32), `secondsPerStep` (UInt16 x 4 microseconds), the section, `isRunning` and
+`dropQueued` (one byte), `wobbleCutoff` and `energy` (8 bits); hits since the previous sample on each lane that ever
+fired (`header.hitLanes`, one byte each, a lane's excess over 255 carried into the next samples); and 32 waveform points
+(box means of 16 samples, `sign * sqrt(|x|)` companded to Int8). The player restores 512 points with a Catmull-Rom curve,
+which is what every shader that reads `.waveform` indexes. `wobblePhase` and `phraseProgress` are derived from the beat
+position; notes and the key are not recorded (the inference leaves them empty).
+
+**Size.** 450 KB a minute for the demo loop (1.8 MB for four minutes, 720,596 bytes for the 96 s demo loop). The waveform
+is the one knob: 64 points would take 2.26 MB for four minutes, 32 points every second sample 1.57 MB (and lose the
+Scope's frame-to-frame motion, r 0.62 against 0.97).
+
+**Encoding.** `encoded()` writes `NSTL`, a UInt16 version, a UInt32 header length, the header as sorted-key JSON, then
+planar little-endian blocks (a block per field, in the order the properties are declared). Foundation only: it decodes
+on tvOS, iOS and macOS, and the same timeline always gives the same bytes. `Codable` carries the samples as one `Data`.
+A reader of version 1 ignores header keys it does not know and rejects another version.
+
+**Player rules.**
+- Spectrum, chroma and levels are interpolated between samples, the waveform, section and flags come from the nearest
+  sample; each new `time` is a new frame (`sequence` counts up from 1) and the same `time` returns the same input.
+- `step` follows the recorded beat position interpolated between samples (never past the next sample's step), so it
+  advances on the clock; the state interpolates the fraction itself from `secondsPerStep`.
+- Hit counters are the player's own and never fall. Hits between two calls at most `continuityWindow` (0.5 s) apart are
+  added; a seek in either direction, or a longer gap, adds none, so a jump fires no burst.
+- A backward seek lowers `step`, which `SoundVisualState` treats as the engine's seek (`music.step < lastStep`).
+- At or past the end the last sample holds, with `isRunning` false, and the input stops changing.
+
+`SoundTimelineRecorder.record(fileAt:)` (AVFoundation platforms) analyzes a whole file faster than real time (the 96 s demo
+loop in 0.07 s), downmixing like `SampleRing` and stamping frame `k` at `(k + 1) / 60` s like `OfflineRenderer`.
+
