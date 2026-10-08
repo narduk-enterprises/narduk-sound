@@ -464,6 +464,10 @@ public struct DropConductor: Sendable {
         }
         // Voices are written and then dropped, so every other part keeps its draws (see `SongSettings.vocals`).
         if !settings.vocals { notes.removeAll { $0.instrument.isVoice } }
+        if let solo = ProcessInfo.processInfo.environment["NARDUK_SOLO_DEBUG"] {  // DEBUG-REMOVE
+            let keep = Set(solo.split(separator: ",").map(String.init))  // DEBUG-REMOVE
+            notes.removeAll { !keep.contains($0.instrument.rawValue) && !keep.contains("v\($0.params.voice ?? -1)") }  // DEBUG-REMOVE
+        }  // DEBUG-REMOVE
         nextStep = throughStep + 1
         snapshot.step = throughStep
         snapshot.section = sections.section
