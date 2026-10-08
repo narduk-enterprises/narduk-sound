@@ -255,7 +255,21 @@ public enum DropEngineError: LocalizedError {
         observeConfigurationChanges()
         startTimer()
         if let tap = ProcessInfo.processInfo.environment["NARDUK_TAP_OUT"], recorder == nil {  // DEBUG-REMOVE
-            try? startRecording(to: URL(fileURLWithPath: tap + "-\(Int(Date().timeIntervalSince1970)).m4a"))  // DEBUG-REMOVE
+            // Raw interleaved float32 stereo at the engine rate: survives a kill, and no codec blurs a click.  // DEBUG-REMOVE
+            let format = captureMixer.outputFormat(forBus: 0)  // DEBUG-REMOVE
+            let path = tap + "-\(Int(Date().timeIntervalSince1970))-\(Int(format.sampleRate)).f32"  // DEBUG-REMOVE
+            FileManager.default.createFile(atPath: path, contents: nil)  // DEBUG-REMOVE
+            if let handle = FileHandle(forWritingAtPath: path) {  // DEBUG-REMOVE
+                nonisolated(unsafe) let handle = handle  // DEBUG-REMOVE
+                captureMixer.installTap(onBus: 0, bufferSize: 4_096, format: format) { buffer, _ in  // DEBUG-REMOVE
+                    guard let ch = buffer.floatChannelData else { return }  // DEBUG-REMOVE
+                    let n = Int(buffer.frameLength)  // DEBUG-REMOVE
+                    let right = buffer.format.channelCount > 1 ? ch[1] : ch[0]  // DEBUG-REMOVE
+                    var data = [Float](repeating: 0, count: n * 2)  // DEBUG-REMOVE
+                    for i in 0..<n { data[2 * i] = ch[0][i]; data[2 * i + 1] = right[i] }  // DEBUG-REMOVE
+                    data.withUnsafeBytes { handle.write(Data($0)) }  // DEBUG-REMOVE
+                }  // DEBUG-REMOVE
+            }  // DEBUG-REMOVE
         }  // DEBUG-REMOVE
     }
 
