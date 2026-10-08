@@ -5,13 +5,18 @@ import Testing
 
 @Suite struct PartEmphasisTests {
     /// The level each phrase of the test set rides: a quiet intro, builds, drops, breakdowns, and back.
-    static let phraseLevels: [Double] = [0.2, 0.2, 0.9, 0.9, 0.9, 0.9, 0.3, 0.3, 0.95, 0.95, 0.95, 0.5, 0.1, 0.1, 0.9, 0.9]
+    static let phraseLevels: [Double] = [
+        0.2, 0.2, 0.9, 0.9, 0.9, 0.9, 0.3, 0.3, 0.95, 0.95, 0.95, 0.5, 0.1, 0.1, 0.9, 0.9,
+    ]
 
     /// Plays `bars` bars of `genre` at `emphasis` (nil leaves the conductor untouched), with a level curve and a few cues.
-    static func record(_ genre: Genre, bars: Int = 128, seed: UInt64 = 7, emphasis: PartEmphasis? = nil)
+    static func record(
+        _ genre: Genre, bars: Int = 128, seed: UInt64 = 7, vocals: Bool = false,
+        emphasis: PartEmphasis? = nil
+    )
         -> [ScheduledNote]
     {
-        var conductor = DropConductor(settings: SongSettings(genre: genre, seed: seed, variety: 1))
+        var conductor = DropConductor(settings: SongSettings(genre: genre, seed: seed, variety: 1, vocals: vocals))
         if let emphasis { conductor.setPartEmphasis(emphasis) }
         let perBar = conductor.settings.stepsPerBar
         let perPhrase = conductor.settings.stepsPerPhrase
@@ -32,13 +37,14 @@ import Testing
         String(format: "0x%016llx", StableHash.fnv1a(notes.map { String(describing: $0) }.joined(separator: "\n")))
     }
 
-    /// The note stream of `record(genre)` before part emphasis existed, on macOS. Neutral must still write it exactly.
+    /// The note stream of `record(genre)` on origin/main before part emphasis existed (voices off, as by default), on
+    /// macOS. Neutral must still write it exactly.
     static let neutralGoldens: [Genre: String] = [
-        .dubstep: "0x63930f51217eac2f", .riddim: "0xfa2ccdbf3e844793", .drumAndBass: "0x49588231bbf20060",
-        .trap: "0x8dab3a7e4a9535ff", .house: "0xecc1cde23e733f6b", .chill: "0x9ee9cff1008787ab",
-        .techno: "0x0b5dcf8678b2c902", .ukGarage: "0x8bdbbf131f438e39", .synthwave: "0x795631d2616b91b0",
-        .lofi: "0xb686711f82ac4625", .rock: "0x77ae70666396366e", .folk: "0x7572d0ed92bfb24e",
-        .funk: "0xd748351b04bd4ce5", .tropicalHouse: "0x4fbdfb3524aa4ee3",
+        .dubstep: "0x9916f4183bebb48b", .riddim: "0xc68239ac6333b951", .drumAndBass: "0xba3fabc60845827f",
+        .trap: "0xb23889a93f5b1b3b", .house: "0x38e48a6b232994e1", .chill: "0x283498fb3e5b5b23",
+        .techno: "0xb278281fd5921e9a", .ukGarage: "0x28002186d5f7e0b8", .synthwave: "0x1e41cc898db0be82",
+        .lofi: "0xc82695463ad30cad", .rock: "0xebc76f311d7de20e", .folk: "0xdc75ccf704366e43",
+        .funk: "0x0e7614df20854a10", .tropicalHouse: "0x809f86d081824ea9",
     ]
 
     static func count(_ notes: [ScheduledNote], _ part: PartEmphasis.Part) -> Int {
@@ -49,7 +55,9 @@ import Testing
     func neutralWritesTodaysSong(genre: Genre) {
         let untouched = Self.record(genre)
         #expect(Self.record(genre, emphasis: .neutral) == untouched)
-        #expect(Self.record(genre, emphasis: PartEmphasis(drums: 1, bass: 1, keys: 1, guitar: 1, vocals: 1, fx: 1)) == untouched)
+        #expect(
+            Self.record(genre, emphasis: PartEmphasis(drums: 1, bass: 1, keys: 1, guitar: 1, vocals: 1, fx: 1))
+                == untouched)
         #if os(macOS)
             #expect(Self.fingerprint(untouched) == Self.neutralGoldens[genre], "\(genre)")
         #endif
@@ -70,12 +78,12 @@ import Testing
 
     @Test(arguments: Genre.allCases)
     func vocalsAtZeroWriteNoVocalNotes(genre: Genre) {
-        let notes = Self.record(genre, emphasis: PartEmphasis(vocals: 0))
+        let notes = Self.record(genre, vocals: true, emphasis: PartEmphasis(vocals: 0))
         #expect(Self.count(notes, .vocals) == 0)
     }
 
     @Test func vocalsAreWrittenAtOneSoTheZeroTestMeansSomething() {
-        let total = [Genre.chill, .tropicalHouse, .dubstep].map { Self.count(Self.record($0), .vocals) }
+        let total = [Genre.chill, .tropicalHouse, .dubstep].map { Self.count(Self.record($0, vocals: true), .vocals) }
         #expect(total.allSatisfy { $0 > 0 }, "\(total)")
     }
 
@@ -84,7 +92,9 @@ import Testing
         var emphasis = PartEmphasis.neutral
         emphasis[part] = 0
         for genre in [Genre.rock, .house, .chill] {
-            #expect(Self.count(Self.record(genre, bars: 64, emphasis: emphasis), part) == 0, "\(genre) \(part)")
+            #expect(
+                Self.count(Self.record(genre, bars: 64, vocals: true, emphasis: emphasis), part) == 0,
+                "\(genre) \(part)")
         }
     }
 
@@ -96,14 +106,17 @@ import Testing
     }
 
     @Test func eachPartFollowsItsWeight() {
-        for (part, genre) in [(PartEmphasis.Part.bass, Genre.house), (.keys, .house), (.guitar, .rock), (.vocals, .chill)] {
+        for (part, genre) in [
+            (PartEmphasis.Part.bass, Genre.house), (.keys, .house), (.guitar, .rock), (.vocals, .chill),
+        ] {
             var down = PartEmphasis.neutral
             down[part] = 0.5
             var up = PartEmphasis.neutral
             up[part] = 2
-            let low = Self.count(Self.record(genre, emphasis: down), part)
-            let mid = Self.count(Self.record(genre), part)
-            let high = Self.count(Self.record(genre, emphasis: up), part)
+            let voices = part == .vocals
+            let low = Self.count(Self.record(genre, vocals: voices, emphasis: down), part)
+            let mid = Self.count(Self.record(genre, vocals: voices), part)
+            let high = Self.count(Self.record(genre, vocals: voices, emphasis: up), part)
             #expect(high > mid && mid > low, "\(part) in \(genre): \(low) / \(mid) / \(high)")
         }
     }
@@ -144,4 +157,3 @@ import Testing
         #expect(PartEmphasis.neutral.isNeutral && !wild.isNeutral)
     }
 }
-
