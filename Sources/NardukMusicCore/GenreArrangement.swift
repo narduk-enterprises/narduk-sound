@@ -618,7 +618,9 @@ enum GenreArrangement {
         }
         if genre == .tropicalHouse {
             for pitch in notes {
-                add(.keys, velocity, NoteParams(pitch: pitch + 12, lengthSteps: c.perBar * 2, voice: KeysVoice.sampledPiano))
+                add(
+                    .keys, velocity,
+                    NoteParams(pitch: pitch + 12, lengthSteps: c.perBar * 2, voice: KeysVoice.sampledPiano))
             }
         }
     }
@@ -800,7 +802,8 @@ enum GenreArrangement {
             let params =
                 isBand(genre)
                 ? NoteParams(
-                    pitch: c.track.pitch(c.keyRoot + 12, degree: degree), lengthSteps: c.scaled(2), drive: c.track.drive)
+                    pitch: c.track.pitch(c.keyRoot + 12, degree: degree), lengthSteps: c.scaled(2), drive: c.track.drive
+                )
                 : NoteParams(pitch: c.track.pitch(c.keyRoot + 12, degree: degree), lengthSteps: c.scaled(2), voice: 2)
             add(instrument, 0.34, params)
         }
@@ -1037,7 +1040,8 @@ enum GenreArrangement {
             } else {
                 add(
                     .sub, 0.6,
-                    NoteParams(pitch: subRegister(track.pitch(c.keyRoot - 36, degree: c.chord) + 12), lengthSteps: length(1)))
+                    NoteParams(
+                        pitch: subRegister(track.pitch(c.keyRoot - 36, degree: c.chord) + 12), lengthSteps: length(1)))
             }
         }
         if isBand(genre) {
