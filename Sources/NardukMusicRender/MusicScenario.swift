@@ -319,15 +319,17 @@ public struct MusicScenario: Sendable, Hashable, Codable {
 extension OfflineRenderer {
     /// Renders `seconds` of a scenario. A signal is delivered in the tick during which its time falls; actions apply
     /// at the start of the tick that contains them. `observe` sees the renderer after every tick (the A/B harness
-    /// records the track history and energy from it).
+    /// records the track history and energy from it). `filter` decides which conductor notes reach the synth, as
+    /// `conductorNoteFilter` does; it sees every note the conductor writes, so it can also log them.
     public static func render(
         _ scenario: MusicScenario, seconds: Double? = nil, base: SongSettings = SongSettings(),
         sampleRate: Double = 48_000, progress: ((Double) -> Void)? = nil,
-        observe: ((OfflineRenderer) -> Void)? = nil
+        observe: ((OfflineRenderer) -> Void)? = nil, filter: (@Sendable (ScheduledNote) -> Bool)? = nil
     ) -> RenderedAudio {
         let renderer = OfflineRenderer(
             settings: scenario.settings(base: base), sampleRate: sampleRate, playsConductor: scenario.conductor != false
         )
+        renderer.conductorNoteFilter = filter
         renderer.schedule(scenario.scheduledNotes(settings: renderer.settings))
         if let build = scenario.buildThreshold {
             renderer.setThresholds(build: build, drop: scenario.dropThreshold ?? build * 0.7)
