@@ -672,13 +672,16 @@ enum GenreArrangement {
     /// under it: the first blind test (2026-10-07) heard the bassline tower over the flutes and the drums hit too hard,
     /// and the song measured 10-20 dB less melody against its bass than a reference track. The recorded melody comes
     /// up in its own trims (`SampledInstrument.trim`); the low end and the kick come down here.
+    ///
+    /// House's clap came in nearly as loud as the whole mix (peak 0.62 against 0.71 on its own), and its noise was most of
+    /// the drop's energy above 2 kHz: without it the spectral centroid fell from 5.5 kHz to 1.7 kHz (records: 2.9 kHz).
     static func balance(_ genre: Genre, _ instrument: Instrument) -> Double {
-        guard genre == .tropicalHouse else { return 1 }
-        switch instrument {
-        case .sub, .wobble, .bassGuitar: return 0.8
-        case .kick: return 0.4
-        case .snare: return 0.8
-        default: return 1
+        switch (genre, instrument) {
+        case (.tropicalHouse, .sub), (.tropicalHouse, .wobble), (.tropicalHouse, .bassGuitar): 0.8
+        case (.tropicalHouse, .kick): 0.4
+        case (.tropicalHouse, .snare): 0.8
+        case (.house, .snare): 0.5
+        default: 1
         }
     }
 
