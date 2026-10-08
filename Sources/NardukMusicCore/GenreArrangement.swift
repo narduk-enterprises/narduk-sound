@@ -641,9 +641,11 @@ enum GenreArrangement {
                 let stab = chord(c, degree: degree, base: c.keyRoot)
                 for (i, pitch) in stab.enumerated() {
                     let pan = genre == .house && stab.count > 1 ? 0.8 * Double(i) / Double(stab.count - 1) - 0.4 : 0
+                    // House plays the track's keys (a stab or an electric piano); UK garage keeps the stab.
+                    let voice = genre == .house && c.track.keysVoice == 2 ? 2 : 1
                     add(
                         .keys, velocity * accent,
-                        NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: 1, pan: pan)
+                        NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: voice, pan: pan)
                     )
                 }
             } else {

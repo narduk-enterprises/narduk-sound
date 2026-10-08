@@ -141,6 +141,9 @@ enum Variety {
             let voice = Int(rng.next() % 3)
             if track.genre == .tropicalHouse {
                 track.keysVoice = voice == 0 ? KeysVoice.sampledFlute : KeysVoice.sampledSteelDrum
+            } else if track.genre == .house {
+                // House's chords are a stab or an electric piano (deep house), never the bell pluck.
+                track.keysVoice = voice == 1 ? 1 : 2
             } else {
                 track.keysVoice = voice
             }
