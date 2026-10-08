@@ -48,7 +48,8 @@ import Testing
             let drops = Self.dropBars(r)
             #expect(drops.count >= 8, "\(genre) never dropped")
             #expect(r.notes.contains { $0.instrument == .kick }, "\(genre) has no kick")
-            #expect(r.notes.contains { $0.instrument == .snare && $0.velocity >= 0.5 }, "\(genre) has no snare")
+            // 0.25, not louder: house and tropical house trim their clap under the groove (`GenreArrangement.balance`).
+            #expect(r.notes.contains { $0.instrument == .snare && $0.velocity >= 0.25 }, "\(genre) has no snare")
             #expect(
                 r.notes.contains { $0.instrument == .sub || $0.instrument == .bassGuitar }, "\(genre) has no low end")
             for note in r.notes {

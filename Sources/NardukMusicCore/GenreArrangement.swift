@@ -636,9 +636,16 @@ enum GenreArrangement {
             let accent = note.accent ? 1.0 : 0.82
             let degree = c.chord + note.degree
             if genre == .house || genre == .ukGarage {
-                for pitch in chord(c, degree: degree, base: c.keyRoot) {
+                // House spreads each stab across the field, low note left and top note right: without it the drop's
+                // mids measured as mono (mid-band side/mid 0.001 once the clap was out; records 0.57).
+                let stab = chord(c, degree: degree, base: c.keyRoot)
+                for (i, pitch) in stab.enumerated() {
+                    let pan = genre == .house && stab.count > 1 ? 0.8 * Double(i) / Double(stab.count - 1) - 0.4 : 0
+                    // House plays the track's keys (a stab or an electric piano); UK garage keeps the stab.
+                    let voice = genre == .house && c.track.keysVoice == 2 ? 2 : 1
                     add(
-                        .keys, velocity * accent, NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: 1)
+                        .keys, velocity * accent,
+                        NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: voice, pan: pan)
                     )
                 }
             } else {
@@ -672,13 +679,16 @@ enum GenreArrangement {
     /// under it: the first blind test (2026-10-07) heard the bassline tower over the flutes and the drums hit too hard,
     /// and the song measured 10-20 dB less melody against its bass than a reference track. The recorded melody comes
     /// up in its own trims (`SampledInstrument.trim`); the low end and the kick come down here.
+    ///
+    /// House's clap came in nearly as loud as the whole mix (peak 0.62 against 0.71 on its own), and its noise was most of
+    /// the drop's energy above 2 kHz: without it the spectral centroid fell from 5.5 kHz to 1.7 kHz (records: 2.9 kHz).
     static func balance(_ genre: Genre, _ instrument: Instrument) -> Double {
-        guard genre == .tropicalHouse else { return 1 }
-        switch instrument {
-        case .sub, .wobble, .bassGuitar: return 0.8
-        case .kick: return 0.4
-        case .snare: return 0.8
-        default: return 1
+        switch (genre, instrument) {
+        case (.tropicalHouse, .sub), (.tropicalHouse, .wobble), (.tropicalHouse, .bassGuitar): 0.8
+        case (.tropicalHouse, .kick): 0.4
+        case (.tropicalHouse, .snare): 0.8
+        case (.house, .snare): 0.5
+        default: 1
         }
     }
 
@@ -913,7 +923,9 @@ enum GenreArrangement {
                 add(.hat, (pos % 2 == 0 ? 0.3 : 0.2) + 0.3 * level, NoteParams())
             }
         case .house:
-            if pos == 2 || pos == 10 { add(.hat, 0.35 + 0.2 * level, NoteParams()) }
+            // 8ths, the off-beats leaning in, and the in-between 16ths once the energy is up: two hats a bar left the
+            // drop at 3.2 onsets a second against records' 5.4 (record-loop, 2026-10-08).
+            if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.35 : 0.2) + 0.2 * level, NoteParams()) }
             if level > 0.6, pos % 2 == 1 { add(.hat, 0.12 + 0.1 * level, NoteParams()) }
         case .riddim:
             if level > 0.4, pos == 4 || pos == 12 { add(.hat, 0.25 + 0.3 * level, NoteParams()) }
@@ -1056,9 +1068,11 @@ enum GenreArrangement {
             }
         case .house:
             // Off-beat bass: sub and a short wub in every gap between the kicks.
+            // The sub sits an octave above the other genres' (55-125 Hz): at keyRoot - 36 it lived under 60 Hz with
+            // the kick's fundamental and left the 60-250 Hz bass band to the kick alone (record-loop, 2026-10-08).
             if pos % 4 == 2 {
                 let octave = pos == 6 || pos == 14 ? 12 : 0
-                add(.sub, 0.85, NoteParams(pitch: subPitch, lengthSteps: length(2)))
+                add(.sub, 0.85, NoteParams(pitch: subPitch + 12, lengthSteps: length(2)))
                 wobble(track.pitch(wobbleBase, degree: c.chord) + octave, 2, velocity: 0.7, accent: pos == 2)
             }
         case .trap:
