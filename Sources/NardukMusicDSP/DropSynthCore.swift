@@ -129,7 +129,9 @@ struct SynthState {
     /// Monotonic per-instrument hit counters (lane = `Instrument.index`), bumped where `hits` is set.
     var hitCounts = SIMD32<UInt32>(repeating: 0)
 
-    init(sampleRate: Double, bpm: Double, stepsPerBar: Int, instrumentBank bank: InstrumentBank? = InstrumentBank.shared) {
+    init(
+        sampleRate: Double, bpm: Double, stepsPerBar: Int, instrumentBank bank: InstrumentBank? = InstrumentBank.shared
+    ) {
         c = SynthCoefficients(sampleRate: sampleRate)
         self.stepsPerBar = max(stepsPerBar, 1)
         clock = StepClock(sampleRate: Int(sampleRate.rounded()), bpm: bpm)
@@ -540,7 +542,8 @@ struct SynthState {
     /// 5 ms while the new note takes its place.
     mutating func startInstrument(_ instrument: SampledInstrument, _ e: SynthEvent) -> Bool {
         guard let bank = instrumentBank, bank.has(instrument) else { return false }
-        let pitch = instrument.isPercussion ? (e.pitch < 0 ? 60 : e.pitch) : bank.fold(e.pitch < 0 ? 60 : e.pitch, instrument)
+        let pitch =
+            instrument.isPercussion ? (e.pitch < 0 ? 60 : e.pitch) : bank.fold(e.pitch < 0 ? 60 : e.pitch, instrument)
         let clip = bank.lookup(instrument, pitch: pitch, velocity: e.velocity, round: e.step)
         guard clip >= 0 else { return false }
         let ratio = bank.sampleRate / Double(c.sampleRate)
