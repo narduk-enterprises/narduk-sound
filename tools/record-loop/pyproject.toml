@@ -14,7 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 # Stem separation (Demucs, MIT) and Frechet Audio Distance (fadtk, MIT). Heavy: torch.
 stems = ["demucs", "torch", "torchaudio"]
-fad = ["fadtk"]
+fad = ["fadtk", "torchcodec"]
 
 [project.scripts]
 record-loop = "record_loop.cli:main"
