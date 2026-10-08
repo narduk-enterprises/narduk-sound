@@ -636,9 +636,14 @@ enum GenreArrangement {
             let accent = note.accent ? 1.0 : 0.82
             let degree = c.chord + note.degree
             if genre == .house || genre == .ukGarage {
-                for pitch in chord(c, degree: degree, base: c.keyRoot) {
+                // House spreads each stab across the field, low note left and top note right: without it the drop's
+                // mids measured as mono (mid-band side/mid 0.001 once the clap was out; records 0.57).
+                let stab = chord(c, degree: degree, base: c.keyRoot)
+                for (i, pitch) in stab.enumerated() {
+                    let pan = genre == .house && stab.count > 1 ? 0.8 * Double(i) / Double(stab.count - 1) - 0.4 : 0
                     add(
-                        .keys, velocity * accent, NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: 1)
+                        .keys, velocity * accent,
+                        NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: 1, pan: pan)
                     )
                 }
             } else {
