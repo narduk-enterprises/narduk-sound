@@ -159,6 +159,8 @@ struct Track: Sendable, Hashable {
     var kickTune = 0.5
     var snareTune = 0.5
     var hatTune = 0.5
+    /// House: the open hats play on a tambourine (`GenreArrangement.percussion`).
+    var tambourine = false
     /// 0 ... 0.4 of a step the off-16ths sound late.
     var swing = 0.0
     var ghostDensity = 0.5

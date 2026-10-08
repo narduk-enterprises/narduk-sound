@@ -148,6 +148,9 @@ enum Variety {
                 track.keysVoice = voice
             }
         }
+        // Some house tracks lift their off-beats on a tambourine instead of an open hat (soulful house). Drawn last,
+        // and only for house, so every other genre's draws are unchanged.
+        if track.genre == .house { track.tambourine = rng.unit() < 0.5 * variety }
     }
 
     /// Genres whose backbeat has a half-time reading: the snare moves from 2 and 4 to 3.
