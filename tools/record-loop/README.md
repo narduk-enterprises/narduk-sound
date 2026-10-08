@@ -13,6 +13,8 @@ uv run record-loop validate --anchor ref-house.json --corpus corpus-house.json -
 uv run record-loop run --bin ../../.build/release/narduk-music --genre house --ref ref-house-merged.json --dir /tmp/rl --trend trend-house.jsonl --label pass-1
 # Logan's blind kit: shuffled 45 s clips at -16 LUFS, sources sealed in .key.json.
 uv run record-loop listen --out kit/ --engine /tmp/rl/house-{1..10}/mix.wav --model corpus/*.wav --anchor a.mp3 b.mp3
+# FAD (fadtk VGGish), each set cut to its gap window. Needs: uv sync --extra fad. Compare run to run on equal n.
+uv run record-loop fad --ref a/*.mp3 --eval /tmp/rl/house-*/mix.wav --work /tmp/fad/pass-1
 uv run --group dev pytest -q
 ```
 
@@ -24,3 +26,5 @@ uv run --group dev pytest -q
   of it, and red otherwise. `lufs` is reported but never coloured, because the -17.5 LUFS trim is a decision.
 - Both sides are measured like for like: a 48 s main-groove window (references from 35% in, renders on the song
   plan's second drop at 136 s), with renders round-tripped through 320k MP3 to match the references' codec.
+- Pump depth is not steered on yet: a kick-only render reads 48-80 dB because the kick's click lands in the
+  300-3000 Hz band. It needs a Demucs non-drum stem first (program section 3.2).

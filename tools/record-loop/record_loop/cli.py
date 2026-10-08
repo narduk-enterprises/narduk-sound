@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -311,6 +312,41 @@ def _clip(job: tuple[str, str, str | None, float, float]) -> None:
     os.remove(wav)
 
 
+def _window_wav(job: tuple[str, str, str | None, str | None]) -> None:
+    import soundfile as sf
+
+    source, out, window, codec = job
+    stereo, sr = _load(_encoded(source, codec), window)
+    sf.write(out, stereo, sr)
+
+
+def cmd_fad(args: argparse.Namespace) -> int:
+    """Frechet Audio Distance (fadtk, VGGish) between two file sets, each cut to its gap-table window first.
+
+    FAD is biased at small n, so compare it run to run on identical sets and sizes, never as an absolute.
+    """
+    work = Path(args.work)
+    sets = {"ref": (args.ref, args.ref_window, None), "eval": (args.eval, args.eval_window, args.codec or None)}
+    for name, (paths, window, codec) in sets.items():
+        d = work / name
+        # fadtk caches embeddings by file name under the set folder; clips reuse names, so start clean.
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+        jobs = [(p, str(d / f"{i:03d}.wav"), window, codec) for i, p in enumerate(sorted(paths))]
+        with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+            list(pool.map(_window_wav, jobs))
+    run = subprocess.run(
+        ["fadtk", args.model, str(work / "ref"), str(work / "eval")],
+        capture_output=True,
+        text=True,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )
+    score = [line.rsplit(" ", 1)[-1] for line in (run.stdout + run.stderr).splitlines() if "score between" in line]
+    print(f"FAD {args.model}: {score[-1]}" if score else (run.stdout + run.stderr)[-2000:])
+    return run.returncode
+
+
 def cmd_listen(args: argparse.Namespace) -> int:
     """A blind kit: shuffled, loudness-matched clips with hidden sources, a scoresheet, a page and a sealed key."""
     import random
@@ -394,6 +430,16 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--trend")
     a.add_argument("--label", default="")
     a.set_defaults(fn=cmd_run)
+    a = sub.add_parser("fad")
+    a.add_argument("--ref", nargs="+", required=True)
+    a.add_argument("--eval", nargs="+", required=True)
+    a.add_argument("--work", required=True)
+    a.add_argument("--ref-window", default="35%:48")
+    a.add_argument("--eval-window", default="136:48")
+    a.add_argument("--codec", default="320k")
+    a.add_argument("--model", default="vggish")
+    a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    a.set_defaults(fn=cmd_fad)
     a = sub.add_parser("listen")
     a.add_argument("--out", required=True)
     a.add_argument("--engine", nargs="*")
