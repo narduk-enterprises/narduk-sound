@@ -50,7 +50,9 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     /// The tempo the inference locked for a microphone or file source, whole BPM; nil for the demo song or before a lock.
     /// Observed, so the strip's readout updates when it changes and not every frame.
     private(set) var heardTempo: Int?
-    @ObservationIgnored private let engine = AVAudioEngine()
+    /// A new engine per start: once an engine has played through its output, its I/O unit (shared by the input
+    /// node) refuses an input device (-10851), so File then Microphone would fail on the one engine.
+    @ObservationIgnored private var engine = AVAudioEngine()
     @ObservationIgnored private var player: AVAudioPlayerNode?
     @ObservationIgnored private var tap: AudioTapSource?
     @ObservationIgnored private var fileAccess: URL?
@@ -185,6 +187,7 @@ enum GalleryInput: String, CaseIterable, Identifiable {
             engine.detach(player)
             self.player = nil
         }
+        engine = AVAudioEngine()
         fileAccess?.stopAccessingSecurityScopedResource()
         fileAccess = nil
         source = nil
