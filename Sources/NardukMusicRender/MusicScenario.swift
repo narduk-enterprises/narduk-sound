@@ -225,6 +225,7 @@ public struct MusicScenario: Sendable, Hashable, Codable {
         }
         if let bpm { settings.bpm = bpm }
         if let family { settings.family = family }
+        if flag("vocals") { settings.vocals = true }
         return settings
     }
 

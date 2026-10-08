@@ -51,6 +51,9 @@ public enum Instrument: String, Sendable, Hashable, Codable, CaseIterable {
     /// syllable chop whose slice is `formant` 0 ... 1, or a whole scale run fitted to `lengthSteps`); build one with
     /// `NoteParams.sampleVoice(_:technique:kind:)`. `drive` is a gain trim, 0 ... 1 (absent: 0.8).
     case vocalSample
+
+    /// The voices: formant vocals, chops, the vox synth and the sampled singer. `SongSettings.vocals` silences them.
+    public var isVoice: Bool { self == .vocal || self == .vocalChop || self == .vox || self == .vocalSample }
 }
 
 /// How a `vocalSample` note is sung.
@@ -317,11 +320,15 @@ public struct SongSettings: Sendable, Hashable, Codable {
     /// original draw order. 0 is the original single-template-per-genre song, bit for bit; settings saved before this
     /// field existed decode as 0.
     public var variety: Double = 0.75
+    /// Whether the conductor writes voices (`Instrument.isVoice`). Off by default: in the first blind test
+    /// (2026-10-07) the voices were the top complaint in every genre. The rest of the song is unchanged either way,
+    /// because the voices are dropped after the whole step is written. Settings saved before this field decode as off.
+    public var vocals: Bool = false
 
     public init(
         bpm: Double = 140, genre: Genre = .dubstep, keyRoot: Int = 65, stepsPerBar: Int = 16, barsPerPhrase: Int = 8,
         seed: UInt64 = 0x5EED, family: GenreFamily = .electronic, mode: HarmonyMode? = nil,
-        voicing: ChordVoicing? = nil, comping: CompingPattern? = nil, variety: Double = 0.75
+        voicing: ChordVoicing? = nil, comping: CompingPattern? = nil, variety: Double = 0.75, vocals: Bool = false
     ) {
         self.bpm = bpm
         self.genre = genre
@@ -334,6 +341,7 @@ public struct SongSettings: Sendable, Hashable, Codable {
         self.voicing = voicing
         self.comping = comping
         self.variety = min(1, max(0, variety.isFinite ? variety : 0))
+        self.vocals = vocals
     }
 
     /// Settings saved before the harmony fields existed decode with those fields unset.
@@ -350,7 +358,8 @@ public struct SongSettings: Sendable, Hashable, Codable {
             mode: try container.decodeIfPresent(HarmonyMode.self, forKey: .mode),
             voicing: try container.decodeIfPresent(ChordVoicing.self, forKey: .voicing),
             comping: try container.decodeIfPresent(CompingPattern.self, forKey: .comping),
-            variety: try container.decodeIfPresent(Double.self, forKey: .variety) ?? 0)
+            variety: try container.decodeIfPresent(Double.self, forKey: .variety) ?? 0,
+            vocals: try container.decodeIfPresent(Bool.self, forKey: .vocals) ?? false)
     }
 
     /// A seed for a new play session, from the wall clock, so two sessions write different songs.

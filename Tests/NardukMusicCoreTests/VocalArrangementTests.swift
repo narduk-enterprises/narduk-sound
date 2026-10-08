@@ -9,7 +9,9 @@ import Testing
     static func play(_ genre: Genre, variety: Double, seed: UInt64, bars: Int = 96) -> (
         notes: [ScheduledNote], track: Track
     ) {
-        var conductor = DropConductor(settings: SongSettings.varied(genre: genre, seed: seed, variety: variety))
+        var settings = SongSettings.varied(genre: genre, seed: seed, variety: variety)
+        settings.vocals = true
+        var conductor = DropConductor(settings: settings)
         var notes: [ScheduledNote] = []
         for step in 0..<(bars * 16) {
             let phase = (step / 16) % 32
@@ -17,6 +19,30 @@ import Testing
             notes += conductor.advance(throughStep: step)
         }
         return (notes, conductor.track)
+    }
+
+    /// Voices are off unless a song asks (first blind test, 2026-10-07), and dropping them leaves every other part
+    /// exactly as it was.
+    @Test func voicesAreOffByDefaultAndTheRestIsUntouched() {
+        #expect(!SongSettings().vocals)
+        for genre in [Genre.house, .tropicalHouse, .chill, .dubstep] {
+            var off = DropConductor(settings: SongSettings.varied(genre: genre, seed: 3, variety: 1))
+            var settings = SongSettings.varied(genre: genre, seed: 3, variety: 1)
+            settings.vocals = true
+            var on = DropConductor(settings: settings)
+            var quiet: [ScheduledNote] = []
+            var sung: [ScheduledNote] = []
+            for step in 0..<(64 * 16) {
+                let signal = MusicSignal(level: (step / 16) % 32 < 12 ? 0.3 : 0.95, levelLabel: "CPU")
+                off.ingest(signal)
+                on.ingest(signal)
+                quiet += off.advance(throughStep: step)
+                sung += on.advance(throughStep: step)
+            }
+            #expect(quiet.allSatisfy { !$0.instrument.isVoice }, "\(genre)")
+            #expect(sung.contains { $0.instrument.isVoice }, "\(genre)")
+            #expect(quiet == sung.filter { !$0.instrument.isVoice }, "\(genre)")
+        }
     }
 
     @Test func noVarietyMeansNoVocalsAndNoCuts() {

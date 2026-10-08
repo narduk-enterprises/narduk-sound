@@ -4,7 +4,7 @@ import Testing
 @testable import NardukMusicCore
 
 @Suite struct DropConductorTests {
-    static let settings = SongSettings()
+    static let settings = SongSettings(vocals: true)
     static var phrase: Int { settings.stepsPerPhrase }
     static var bar: Int { settings.stepsPerBar }
 

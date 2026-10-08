@@ -51,6 +51,7 @@ import Testing
     ) -> (Base.Recording, DropConductor) {
         var settings = SongSettings(genre: genre)
         settings.seed = seed
+        settings.vocals = true
         var conductor = DropConductor(settings: settings)
         let traffic = throughput(level: level)
         let recording = Base.play(&conductor, steps: bars * 16) { step in
