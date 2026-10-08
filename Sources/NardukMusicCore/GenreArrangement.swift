@@ -32,7 +32,7 @@ extension Genre {
         case .rock: 124
         case .folk: 96
         case .funk: 104
-        case .tropicalHouse: 106
+        case .tropicalHouse: 116
         }
     }
 
@@ -111,6 +111,8 @@ struct StepContext {
     /// How the chords are voiced, and the chord layer played over the arrangement; nil is the arrangement's own.
     var voicing: ChordVoicing?
     var comping: CompingPattern?
+    /// Whether the voices sing (`SongSettings.vocals`); a part they would answer can fill their bars when they don't.
+    var vocals = false
 
     /// Position on a 16-step bar grid, or nil when this step is between grid positions (odd bar sizes).
     var pos: Int? { (barStep * 16) % perBar == 0 ? barStep * 16 / perBar : nil }
@@ -608,6 +610,12 @@ enum GenreArrangement {
                         .keys, velocity * accent, NoteParams(pitch: pitch, lengthSteps: c.scaled(note.length), voice: 1)
                     )
                 }
+            } else if genre == .tropicalHouse {
+                add(
+                    .keys, velocity * accent,
+                    NoteParams(
+                        pitch: tropicalLead(c, note), lengthSteps: c.scaled(note.length),
+                        voice: voice ?? c.track.keysVoice))
             } else {
                 let low: Set<Genre> = [.chill, .drumAndBass, .lofi, .synthwave]
                 let base = low.contains(genre) ? c.keyRoot : c.keyRoot + 12
@@ -618,6 +626,26 @@ enum GenreArrangement {
                         voice: voice ?? c.track.keysVoice))
             }
         }
+    }
+
+    /// Tropical house's lead sings in the key, the way a pop topline does, instead of riding up and down with every
+    /// chord: the hook's degree is the key's, a note on the beat (or accented, or held) moves to the nearest tone of
+    /// the bar's chord, and the line folds into about an octave and a half above the tonic (the reference songs keep
+    /// their melodies inside ~20 semitones; the transposed hook spanned over 30).
+    static func tropicalLead(_ c: StepContext, _ note: HookNote) -> Int {
+        var degree = note.degree
+        if note.accent || note.pos % 4 == 0 || note.length >= 4 {
+            let moves = [c.chord, c.chord + 2, c.chord + 4].map { tone in
+                let up = ((tone - degree) % 7 + 7) % 7
+                return up > 3 ? up - 7 : up
+            }
+            degree += moves.min { abs($0) < abs($1) } ?? 0
+        }
+        var pitch = c.track.pitch(c.keyRoot + 12, degree: degree)
+        let low = c.keyRoot + 7
+        while pitch < low { pitch += 12 }
+        while pitch > low + 19 { pitch -= 12 }
+        return pitch
     }
 
     /// Tropical house plays its drums' top on hand percussion (`PercussionVoice`): the hat on a shaker, the open hat on
@@ -1067,8 +1095,10 @@ enum GenreArrangement {
         case .tropicalHouse:
             // Four bars at a time: the pluck calls for two, the vocal chops answer in the third (`VocalLine`), and
             // the fourth rests on the groove with a conga or two. Piano chords and the pumping pad underneath.
+            // With the voices off (the default) the lead also takes the third bar, so a melody is playing for three
+            // bars in four, nearer the reference songs' 70-90%.
             let call = c.barInPhrase % 4
-            if call < 2 { keysHook(genre, c, velocity: 0.6, add: add) }
+            if call < 2 || call == 2 && !c.vocals { keysHook(genre, c, velocity: 0.6, add: add) }
             if call == 3, !c.isLastBar {
                 if pos == 10 { add(.keys, 0.42, NoteParams(pitch: 64, lengthSteps: 2, voice: KeysVoice.sampledConga)) }
                 if pos == 14 { add(.keys, 0.5, NoteParams(pitch: 55, lengthSteps: 2, voice: KeysVoice.sampledConga)) }

@@ -100,6 +100,20 @@ enum Banks {
         [0, 4, 5, 3, 0, 4, 3, 4], [3, 3, 0, 0, 4, 4, 5, 5],
     ]
 
+    /// Tropical house: the four-chord pop loops of the reference songs (Firestone, Solo Dance, Reality, Rivers, RIVA,
+    /// Treasured Soul, Waves...), one chord a bar, the loop played twice. Degrees as above for each mode's quality.
+    static let tropicalMajorLoops: [[Int]] = [
+        [3, 4, 5, 0], [0, 2, 5, 3], [5, 3, 0, 4], [3, 0, 5, 4], [0, 4, 5, 3], [5, 2, 3, 4], [3, 4, 0, 5],
+    ]
+    static let tropicalMinorLoops: [[Int]] = [
+        [0, 6, 5, 6], [0, 6, 3, 2], [0, 2, 6, 5], [0, 6, 4, 5], [0, 5, 2, 6], [0, 4, 6, 3],
+    ]
+    static func tropicalProgression(major: Bool, pick: Int) -> [Int] {
+        let loops = major ? tropicalMajorLoops : tropicalMinorLoops
+        let loop = loops[pick % loops.count]
+        return loop + loop
+    }
+
     /// Techno stays on the root for long stretches and moves late.
     static let technoProgressions: [[Int]] = [
         [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 5, 5, 0, 0], [0, 0, 0, 0, 3, 3, 4, 4], [0, 0, 6, 6, 0, 0, 5, 5],

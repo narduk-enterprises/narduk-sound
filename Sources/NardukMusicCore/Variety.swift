@@ -223,6 +223,12 @@ enum Variety {
     /// A progression for the genre: a shape, then distinct chords drawn by the genre's weights. In a major mode the
     /// supertonic and leading-tone chords stay rare, since they are minor and diminished there.
     static func progression(genre: Genre, mode: Mode, rng: inout MusicRNG) -> [Int] {
+        // Tropical house keeps to its pop loops; variety picks the loop and where in it the song starts.
+        if genre == .tropicalHouse {
+            let loop = Banks.tropicalProgression(major: mode.isMajorQuality, pick: Int(rng.next() % 64))
+            let start = rng.unit() < 0.7 ? 0 : Int(rng.next() % 4)
+            return (0..<8).map { loop[($0 + start) % 4] }
+        }
         let palette = palette(genre)
         var weights = palette.weights
         if mode.isMajorQuality {

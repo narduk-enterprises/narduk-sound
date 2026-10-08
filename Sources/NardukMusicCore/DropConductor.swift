@@ -464,6 +464,10 @@ public struct DropConductor: Sendable {
         }
         // Voices are written and then dropped, so every other part keeps its draws (see `SongSettings.vocals`).
         if !settings.vocals { notes.removeAll { $0.instrument.isVoice } }
+        if let path = ProcessInfo.processInfo.environment["NARDUK_NOTES_OUT"] {  // DEBUG-REMOVE
+            DebugCensus.dump(notes, path: path, secondsPerStep: settings.secondsPerStep, bpm: track.bpm, chord: track.progression)  // DEBUG-REMOVE
+        }  // DEBUG-REMOVE
+        for n in notes { DebugCensus.counts[n.instrument.rawValue + (n.params.voice.map { "/v\($0)" } ?? ""), default: 0] += 1 }  // DEBUG-REMOVE
         if let solo = ProcessInfo.processInfo.environment["NARDUK_SOLO_DEBUG"] {  // DEBUG-REMOVE
             let keep = Set(solo.split(separator: ",").map(String.init))  // DEBUG-REMOVE
             notes.removeAll { !keep.contains($0.instrument.rawValue) && !keep.contains("v\($0.params.voice ?? -1)") }  // DEBUG-REMOVE
@@ -824,7 +828,7 @@ public struct DropConductor: Sendable {
             introHook: section == .intro && trackPhrases >= 2,
             phraseInSection: sections.phrasesInSection - 1,
             sectionPhrases: section == .build ? sections.buildLength : 1,
-            voicing: settings.effectiveVoicing, comping: settings.effectiveComping)
+            voicing: settings.effectiveVoicing, comping: settings.effectiveComping, vocals: settings.vocals)
         if ambient {
             out += AmbientArrangement.notes(context)
             out += VocalArrangement.ambientNotes(
@@ -1065,5 +1069,26 @@ public struct DropConductor: Sendable {
         if snapshot.legend.count > Self.legendLimit {
             snapshot.legend.removeFirst(snapshot.legend.count - Self.legendLimit)
         }
+    }
+}
+
+// DEBUG-REMOVE: overnight note census (local only, remove before push).
+public enum DebugCensus {
+    nonisolated(unsafe) public static var counts: [String: Int] = [:]
+    nonisolated(unsafe) static var handle: FileHandle?
+    nonisolated(unsafe) static var clock = 0.0
+    nonisolated(unsafe) static var lastStep = -1
+    static func dump(_ notes: [ScheduledNote], path: String, secondsPerStep: Double, bpm: Double, chord: [Int]) {
+        if handle == nil {
+            FileManager.default.createFile(atPath: path, contents: nil)
+            handle = FileHandle(forWritingAtPath: path)
+        }
+        var text = ""
+        for n in notes {
+            clock = Double(n.step) * secondsPerStep
+            let p = n.params
+            text += "{\"t\":\(clock),\"step\":\(n.step),\"i\":\"\(n.instrument.rawValue)\",\"v\":\(p.voice ?? -1),\"p\":\(p.pitch ?? -1),\"len\":\(p.lengthSteps),\"vel\":\(n.velocity),\"bpm\":\(bpm),\"prog\":\(chord)}\n"
+        }
+        handle?.write(text.data(using: .utf8)!)
     }
 }

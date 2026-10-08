@@ -295,6 +295,10 @@ enum TrackGenerator {
             progression = (progression + 1) % progressions.count
         }
         t.progression = progressions[progression]
+        // Tropical house changes chord every bar on a pop loop (the reference songs), drawn from the same pick.
+        if genre == .tropicalHouse {
+            t.progression = Banks.tropicalProgression(major: t.mode.isMajorQuality, pick: progression)
+        }
 
         // The hook, and its two relatives.
         let rhythms = Banks.hookRhythms(genre)
@@ -424,7 +428,7 @@ enum TrackGenerator {
         case .rock: 112...136
         case .folk: 84...108
         case .funk: 96...114
-        case .tropicalHouse: 100...112
+        case .tropicalHouse: 112...122
         }
     }
 
@@ -441,7 +445,7 @@ enum TrackGenerator {
         case (.funk, _): [.dorian, .mixolydian, .dorian, .aeolian]
         // Major or bright: mostly major, a mixolydian or lydian lift, dorian as the one minor colour.
         case (.tropicalHouse, _):
-            character == .chaos ? [.dorian, .mixolydian] : [.ionian, .ionian, .mixolydian, .lydian, .dorian]
+            character == .chaos ? [.dorian, .mixolydian] : [.ionian, .ionian, .ionian, .mixolydian, .aeolian, .dorian]
         case (.house, _), (.chill, _): character == .chaos ? [.aeolian, .phrygian] : [.dorian, .dorian, .aeolian]
         case (_, .chaos): [.phrygian, .harmonicMinor]
         case (_, .surge): [.phrygian, .aeolian]

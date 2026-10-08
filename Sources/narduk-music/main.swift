@@ -85,6 +85,12 @@ func main() -> Int32 {
         scenario.variety = variety
     }
     if arguments.contains("--varied") { scenario.varied = true }
+    if arguments.contains("--song") {  // DEBUG-REMOVE: the A/B song plan (intro, build, drop, breakdown, build, drop2)
+        let keep = scenario  // DEBUG-REMOVE
+        scenario = ABTest.song(genre: keep.genre ?? .tropicalHouse, seed: keep.seed ?? 1)  // DEBUG-REMOVE
+        scenario.variety = keep.variety  // DEBUG-REMOVE
+        scenario.flags = keep.flags  // DEBUG-REMOVE
+    }  // DEBUG-REMOVE
     var seconds = scenario.seconds ?? 30
     if let text = value("--seconds", in: arguments) {
         guard let parsed = Double(text), parsed > 0, parsed <= 3_600 else {
@@ -115,6 +121,8 @@ func main() -> Int32 {
         String(
             format: "done: %@  %.1f s, peak %.2f, fingerprint %@, %.1f s to render", outPath, audio.seconds,
             audio.peak, fingerprint, took))
+    log(DebugMeters.report)  // DEBUG-REMOVE
+    log("CENSUS " + DebugCensus.counts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))  // DEBUG-REMOVE
     if arguments.contains("--json") {
         let result: [String: Any] = [
             "out": out.path, "seconds": audio.seconds, "sampleRate": audio.sampleRate, "peak": Double(audio.peak),

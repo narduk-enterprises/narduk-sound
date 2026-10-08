@@ -559,6 +559,8 @@ struct SynthState {
             }
         }
         if slot < 0 {
+            DebugMeters.steals += 1  // DEBUG-REMOVE
+            if instruments[SynthState.instrumentCount].active { DebugMeters.tailOverwrites += 1 }  // DEBUG-REMOVE
             slot = oldest
             instruments[SynthState.instrumentCount] = instruments[slot]
             instruments[SynthState.instrumentCount].steal(engineRate: c.sampleRate)
@@ -615,6 +617,7 @@ struct SynthState {
             break
         }
         if slot < 0 {
+            DebugMeters.fxSteals += 1  // DEBUG-REMOVE
             slot = nextFX
             nextFX = (nextFX + 1) % SynthState.fxCount
         }
@@ -881,6 +884,11 @@ struct SynthState {
             // The master filter (bypassed unless a drop's build is sweeping it), then soft saturation into the limiter.
             (mixL, mixR) = masterFilter.process(
                 mixL, mixR, target: controls.filter, sampleRate: Float(c.sampleRate), glide: filterGlide)
+            DebugMeters.frames += 1  // DEBUG-REMOVE
+            let drive = max(abs(mixL), abs(mixR)) * 0.72  // DEBUG-REMOVE
+            if drive > 0.6 { DebugMeters.hotFrames += 1 }  // DEBUG-REMOVE
+            if drive > 1 { DebugMeters.clipFrames += 1 }  // DEBUG-REMOVE
+            DebugMeters.peakDrive = max(DebugMeters.peakDrive, drive)  // DEBUG-REMOVE
             let satL = DSP.softClip(mixL * 0.72) * 1.32
             let satR = DSP.softClip(mixR * 0.72) * 1.32
             let limited = limiter.process(satL, satR)
@@ -1150,4 +1158,18 @@ private struct AmbientSpaceAtomics: ~Copyable {
     let delayFeedback = Atomic<UInt32>(AmbientSpace().delayFeedback.bitPattern)
     let delaySteps = Atomic<UInt32>(AmbientSpace().delaySteps.bitPattern)
     let padLevel = Atomic<UInt32>(AmbientSpace().padLevel.bitPattern)
+}
+
+// DEBUG-REMOVE: overnight meters (local only, remove before push).
+public enum DebugMeters {
+    nonisolated(unsafe) public static var frames = 0
+    nonisolated(unsafe) public static var hotFrames = 0
+    nonisolated(unsafe) public static var clipFrames = 0
+    nonisolated(unsafe) public static var peakDrive: Float = 0
+    nonisolated(unsafe) public static var steals = 0
+    nonisolated(unsafe) public static var tailOverwrites = 0
+    nonisolated(unsafe) public static var fxSteals = 0
+    public static var report: String {
+        "METERS frames=\(frames) hot%=\(String(format: "%.3f", Double(hotFrames) * 100 / Double(max(1, frames)))) clip%=\(String(format: "%.3f", Double(clipFrames) * 100 / Double(max(1, frames)))) peakDrive=\(peakDrive) steals=\(steals) tailOverwrites=\(tailOverwrites) fxSteals=\(fxSteals)"
+    }
 }
