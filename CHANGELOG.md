@@ -28,6 +28,14 @@ shipped on narduk-libs tags.
 - `NardukMusicPlayback` (Darwin): `NowPlayingBridge` publishes Now Playing info and maps play, pause, toggle and
   next track from the lock screen and HomePods to a `NowPlayingTransport`; `AirPlayPicker` wraps `AVRoutePickerView`.
   `docs/now-playing.md` has the `UIBackgroundModes: audio` requirement (narduk-sound#8).
+- Song critic (`NardukMusicCritic`): `SongCritic` scores a conductor song from
+  its notes (melody, repetition, arc and effects, ported from Data Beats'
+  critic, with the lead read from each genre's hook carrier), `AudioCheck`
+  meters a render (clipping, clicks, silence, loudness, kick and snare timing
+  against the grid, render cost per block), and `SongVerdict` keeps or drops
+  the song against one `Thresholds` struct, reporting `repetition` but never
+  dropping a song for it (`docs/song-critic.md`). The master `cut` stutter now
+  fades where its sped-up repeat wraps to the slice start, which clicked.
 - Song videos (`NardukSoundVisuals/Video`): `SoundVisualTimelineRecorder` logs
   what the lights drew from while a song records (the music context at 60 Hz,
   the light, its look, calm) into a compact `SoundVisualTimeline` file, and

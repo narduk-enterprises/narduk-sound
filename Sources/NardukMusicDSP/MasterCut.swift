@@ -79,8 +79,11 @@ struct MasterCut: Sendable {
             let read = rate == 1 ? position : Int(Float(position) * rate) % slice
             let index = (start + read) & mask
             let level = 1 - 0.6 * amount * progress
-            wetLeft = historyLeft[index] * level * edge
-            wetRight = historyRight[index] * level * edge
+            // Sped up, the read wraps to the slice's start partway through it: fade over each wrap as over a slice
+            // edge (at rate 1 the read is the position, so this is `edge` and the sound is unchanged).
+            let readEdge = min(Float(min(read + 1, slice - read)) / (rate * ramp), 1)
+            wetLeft = historyLeft[index] * level * min(edge, readEdge)
+            wetRight = historyRight[index] * level * min(edge, readEdge)
         case .reverse:
             let index = (start + slice - 1 - position) & mask
             wetLeft = historyLeft[index] * edge
