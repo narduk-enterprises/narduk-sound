@@ -5,7 +5,7 @@
     record-loop gap ref.json ours.json [--trend trend.jsonl --label pass-3]
 
 A profile is {"tracks": {path: {property: value}}, "source": ...}. Measurements are cached next to each audio file
-(<file>.features.json, keyed by size and mtime), so re-profiling a reference set is free.
+(<file>.<window>.<codec>.features.json, keyed by size and mtime), so re-profiling a reference set is free.
 """
 
 from __future__ import annotations
@@ -23,44 +23,86 @@ import numpy as np
 
 from record_loop import features
 
-# Properties a level decision sets rather than the sound (the engine's -17.5 LUFS trim, Logan 2026-10-07): reported,
-# never coloured.
-INFO_ONLY = {"lufs", "clipped_ratio"}
+# Reported, never coloured: lufs and clipping are set by a level decision rather than the sound (the engine's -17.5
+# LUFS trim, Logan 2026-10-07), and sections_per_min reads about 1.25 for any 48 s window (the novelty peak picker
+# always finds a few peaks), so it cannot tell a sectioned track from a flat one.
+INFO_ONLY = {"lufs", "clipped_ratio", "sections_per_min"}
 
 
-def _load(path: str) -> tuple[np.ndarray, int]:
+def _window(path: str, window: str | None) -> tuple[float, float | None]:
+    """'35%:48' starts 35% into the file; '136:48' starts at 136 s. Both measure 48 s. None measures everything."""
+    if not window:
+        return 0.0, None
+    start, _, length = window.partition(":")
+    if start.endswith("%"):
+        import soundfile as sf
+
+        try:
+            total = sf.info(path).duration
+        except RuntimeError:
+            import librosa
+
+            total = librosa.get_duration(path=path)
+        offset = total * float(start[:-1]) / 100
+    else:
+        offset = float(start)
+    return offset, float(length) if length else None
+
+
+def _encoded(path: str, codec: str | None) -> str:
+    """Round-trip through the references' codec so codec loss is not measured as a sound difference."""
+    if not codec or not path.endswith(".wav"):
+        return path
+    out = path[: -len(".wav")] + f".{codec}.mp3"
+    if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(path):
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", path, "-c:a", "libmp3lame", "-b:a", codec, out],
+            check=True,
+        )
+    return out
+
+
+def _load(path: str, window: str | None = None) -> tuple[np.ndarray, int]:
     import librosa
 
-    y, sr = librosa.load(path, sr=None, mono=False)
+    offset, duration = _window(path, window)
+    y, sr = librosa.load(path, sr=None, mono=False, offset=offset, duration=duration)
     y = np.atleast_2d(y)
     if y.shape[0] == 1:
         y = np.vstack([y, y])
     return y.T.astype(np.float64), int(sr)
 
 
-def measure(path: str) -> dict[str, float]:
-    cache = Path(path + ".features.json")
-    st = os.stat(path)
-    key = f"{st.st_size}:{int(st.st_mtime)}:v1"
+def measure(path: str, window: str | None = None, codec: str | None = None) -> dict[str, float]:
+    source = _encoded(path, codec)
+    tag = f"{window or 'all'}.{codec or 'raw'}".replace(":", "_").replace("%", "pct")
+    cache = Path(f"{path}.{tag}.features.json")
+    st = os.stat(source)
+    key = f"{st.st_size}:{int(st.st_mtime)}:v4"
     if cache.exists():
         cached = json.loads(cache.read_text())
         if cached.get("key") == key:
             return cached["features"]
-    stereo, sr = _load(path)
+    stereo, sr = _load(source, window)
     feats = features.all_features(stereo, sr)
     cache.write_text(json.dumps({"key": key, "features": feats}))
     return feats
 
 
-def _profile(paths: list[str], jobs: int) -> dict[str, dict[str, float]]:
+def _measure(job: tuple[str, str | None, str | None]) -> dict[str, float]:
+    return measure(*job)
+
+
+def _profile(paths: list[str], jobs: int, window: str | None = None, codec: str | None = None) -> dict:
     with ProcessPoolExecutor(max_workers=jobs) as pool:
-        return dict(zip(paths, pool.map(measure, paths)))
+        return dict(zip(paths, pool.map(_measure, [(p, window, codec) for p in paths])))
 
 
 def cmd_profile(args: argparse.Namespace) -> int:
     paths = sorted(str(Path(p)) for p in args.files)
-    tracks = _profile(paths, args.jobs)
-    Path(args.out).write_text(json.dumps({"source": "files", "tracks": tracks}, indent=1))
+    tracks = _profile(paths, args.jobs, args.window, args.codec)
+    meta = {"source": "files", "window": args.window, "codec": args.codec}
+    Path(args.out).write_text(json.dumps({**meta, "tracks": tracks}, indent=1))
     print(f"profiled {len(tracks)} files -> {args.out}", file=sys.stderr)
     return 0
 
@@ -104,7 +146,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     with ProcessPoolExecutor(max_workers=args.jobs) as pool:
         wavs = list(pool.map(_render, jobs))
     rendered = time.time()
-    tracks = _profile(wavs, args.jobs)
+    tracks = _profile(wavs, args.jobs, args.window, args.codec)
     sha = subprocess.run(
         ["git", "-C", str(Path(args.bin).resolve().parent), "rev-parse", "--short", "HEAD"],
         capture_output=True,
@@ -112,7 +154,17 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         check=False,
     ).stdout.strip()
     Path(args.out).write_text(
-        json.dumps({"source": "engine", "genre": args.genre, "engine": sha, "tracks": tracks}, indent=1)
+        json.dumps(
+            {
+                "source": "engine",
+                "genre": args.genre,
+                "engine": sha,
+                "window": args.window,
+                "codec": args.codec,
+                "tracks": tracks,
+            },
+            indent=1,
+        )
     )
     print(
         f"swept {len(wavs)} seeds: render {rendered - started:.0f} s, measure {time.time() - rendered:.0f} s "
@@ -196,6 +248,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("files", nargs="+")
     a.add_argument("--out", required=True)
     a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    # A record's main groove: from a third of the way in, as long as one song-plan drop.
+    a.add_argument("--window", default="35%:48")
+    a.add_argument("--codec", help="round-trip WAVs through MP3 at this bitrate first, e.g. 320k")
     a.set_defaults(fn=cmd_profile)
     a = sub.add_parser("sweep")
     a.add_argument("--bin", required=True)
@@ -205,6 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--dir", required=True)
     a.add_argument("--out", required=True)
     a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    # The song plan's second drop (136-184 s): the engine's main groove, the same length as a reference window.
+    a.add_argument("--window", default="136:48")
+    a.add_argument("--codec", default="320k", help="match the references' MP3 encode; pass '' for raw WAV")
     a.set_defaults(fn=cmd_sweep)
     a = sub.add_parser("gap")
     a.add_argument("ref")

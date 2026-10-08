@@ -6,6 +6,8 @@ of numbers that can be compared across sources. Names say the unit: _db, _lufs, 
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pyloudnorm
 import scipy.signal as ss
@@ -79,7 +81,14 @@ def rhythm(stereo: np.ndarray, sr: int) -> dict[str, float]:
     mono = librosa.resample(stereo.mean(axis=1), orig_sr=sr, target_sr=22050)
     onset_env = librosa.onset.onset_strength(y=mono, sr=22050)
     tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=22050, start_bpm=120)
-    tempo = float(np.atleast_1d(tempo)[0])
+    beat_times = librosa.frames_to_time(beats, sr=22050)
+    intervals = np.diff(beat_times)
+    # The tracked beats give a finer tempo than beat_track's own estimate, which snaps to its frame grid.
+    tempo = (
+        60 * (len(beat_times) - 1) / float(beat_times[-1] - beat_times[0])
+        if len(intervals) > 4
+        else float(np.atleast_1d(tempo)[0])
+    )
     # House sits at 115-135; fold half/double-time readings into that octave.
     while tempo < 95:
         tempo *= 2
@@ -87,33 +96,33 @@ def rhythm(stereo: np.ndarray, sr: int) -> dict[str, float]:
         tempo /= 2
     onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=22050)
     seconds = len(mono) / 22050
-    beat_times = librosa.frames_to_time(beats, sr=22050)
-    intervals = np.diff(beat_times)
     return {
         "tempo_bpm": tempo,
         "onsets_per_s": float(len(onsets) / seconds),
         "beat_stability_ratio": float(np.std(intervals) / np.mean(intervals)) if len(intervals) > 4 else 1.0,
-        **_pump(stereo, sr, tempo),
+        **_pump(stereo, sr, beat_times),
     }
 
 
-def _pump(stereo: np.ndarray, sr: int, tempo: float) -> dict[str, float]:
-    """Sidechain depth: how far the non-kick low-mid/mid band dips and recovers each beat, averaged over beats."""
+def _pump(stereo: np.ndarray, sr: int, beat_times: np.ndarray) -> dict[str, float]:
+    """Sidechain depth: how far the non-kick low-mid/mid band dips and recovers each beat, averaged over beats.
+
+    Each tracked beat is resampled to 32 phase bins before averaging. Folding on one global tempo instead drifts by
+    half a beat over 48 s when the estimate is 1 BPM off, which smears a real dip flat.
+    """
     sos = ss.butter(4, [300, 3000], btype="band", fs=sr, output="sos")
     band = ss.sosfilt(sos, stereo.mean(axis=1))
-    hop = sr // 200
-    env = np.sqrt(ss.decimate(band**2, hop, ftype="fir", zero_phase=True).clip(min=0) + 1e-12)
-    beat = 200 * 60 / tempo
-    n = int(len(env) // beat)
-    if n < 16:
+    rate = 200
+    env = np.sqrt(ss.decimate(band**2, sr // rate, ftype="fir", zero_phase=True).clip(min=0) + 1e-12)
+    marks = (beat_times * rate).astype(int)
+    rows = [
+        np.interp(np.linspace(a, b, 32, endpoint=False), np.arange(len(env)), env)
+        for a, b in itertools.pairwise(marks)
+        if b <= len(env) and b - a >= 8
+    ]
+    if len(rows) < 16:
         return {"pump_depth_db": 0.0}
-    phase = np.zeros(32)
-    counts = np.zeros(32)
-    for i in range(int(n * beat)):
-        k = int(((i % beat) / beat) * 32)
-        phase[k] += env[i]
-        counts[k] += 1
-    profile = 20 * np.log10(phase / np.maximum(counts, 1) + 1e-12)
+    profile = 20 * np.log10(np.mean(rows, axis=0) + 1e-12)
     return {"pump_depth_db": float(profile.max() - profile.min())}
 
 
@@ -130,7 +139,11 @@ def structure(stereo: np.ndarray, sr: int) -> dict[str, float]:
     f = np.array([feats[:, i : i + block].mean(1) for i in range(0, feats.shape[1] - block, block)]).T
     if f.shape[1] < 8:
         return {"sections_per_min": 0.0, "repetition_ratio": 0.0, "chroma_change_per_s": 0.0}
-    sim = np.corrcoef(f.T)
+    # Standardise each feature over time: raw MFCC 0 is a large near-constant offset that makes every block
+    # correlate above 0.9 with every other, so a never-repeating track read as fully repeated.
+    z = (f - f.mean(axis=1, keepdims=True)) / (f.std(axis=1, keepdims=True) + 1e-9)
+    z /= np.linalg.norm(z, axis=0, keepdims=True) + 1e-9
+    sim = z.T @ z
     k = 4
     kernel = np.kron(np.array([[1, -1], [-1, 1]]), np.ones((k, k)))
     novelty = np.array(
@@ -138,11 +151,13 @@ def structure(stereo: np.ndarray, sr: int) -> dict[str, float]:
     )
     peaks, _ = ss.find_peaks(novelty, height=np.percentile(novelty, 90), distance=8)
     minutes = len(stereo) / sr / 60
-    off_diag = sim[np.triu_indices(len(sim), k=8)]
+    # A block recurs when some block at least 8 blocks (~12 s) away, either side, matches it closely.
+    far = np.abs(np.subtract.outer(np.arange(len(sim)), np.arange(len(sim)))) >= 8
+    best = np.where(far, sim, -1).max(axis=1)
     dchroma = np.linalg.norm(np.diff(chroma, axis=1), axis=0)
     return {
         "sections_per_min": float(len(peaks) / minutes),
-        "repetition_ratio": float(np.mean(off_diag > 0.9)),
+        "repetition_ratio": float(np.mean(best > 0.8)),
         "chroma_change_per_s": float(np.mean(dchroma > 0.5) * 11025 / 2048),
     }
 
