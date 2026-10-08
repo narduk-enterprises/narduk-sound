@@ -12,7 +12,7 @@ import Testing
 @Suite struct GoldenRenderTests {
     static let goldens: [String: UInt64] = [
         // Moved with section variation (#40, 2026-10-07); the Linux value is read from the first Linux CI run.
-        "darwin-arm64": 0x7430_00a9_7187_847e,
+        "darwin-arm64": 0x7430_00a9_7187_847e
     ]
 
     static var platform: String {
