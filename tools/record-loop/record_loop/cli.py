@@ -29,8 +29,10 @@ from record_loop import features
 
 # Reported, never coloured: lufs and clipping are set by a level decision rather than the sound (the engine's -17.5
 # LUFS trim, Logan 2026-10-07), and sections_per_min reads about 1.25 for any 48 s window (the novelty peak picker
-# always finds a few peaks), so it cannot tell a sectioned track from a flat one.
-INFO_ONLY = {"lufs", "clipped_ratio", "sections_per_min"}
+# always finds a few peaks), so it cannot tell a sectioned track from a flat one. pump_depth_db reads the 300-3000 Hz
+# envelope over each beat, and a kick-only render reads 48-80 dB there from the kick's own click: on a full mix it
+# measures the kick, not a sidechain, until it is measured on a separated non-drum stem.
+INFO_ONLY = {"lufs", "clipped_ratio", "sections_per_min", "pump_depth_db"}
 
 
 def _window(path: str, window: str | None) -> tuple[float, float | None]:
