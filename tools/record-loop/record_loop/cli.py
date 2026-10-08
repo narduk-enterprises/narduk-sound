@@ -324,18 +324,24 @@ def _clip(job: tuple[str, str, str | None, float, float]) -> None:
     os.remove(wav)
 
 
-def _window_wav(job: tuple[str, str, str | None, str | None]) -> None:
+def _window_wav(job: tuple[str, str, str | None, str | None, float | None]) -> None:
+    import pyloudnorm
     import soundfile as sf
 
-    source, out, window, codec = job
+    source, out, window, codec, lufs = job
     stereo, sr = _load(_encoded(source, codec), window)
-    sf.write(out, stereo, sr)
+    if lufs is not None:
+        stereo = pyloudnorm.normalize.loudness(stereo, pyloudnorm.Meter(sr).integrated_loudness(stereo), lufs)
+    # Float, so a clip gained up past full scale is not clipped on the way to the embedder.
+    sf.write(out, stereo, sr, subtype="FLOAT")
 
 
 def cmd_fad(args: argparse.Namespace) -> int:
     """Frechet Audio Distance (fadtk, VGGish) between two file sets, each cut to its gap-table window first.
 
     FAD is biased at small n, so compare it run to run on identical sets and sizes, never as an absolute.
+    Every clip is matched to one loudness first: VGGish's log-mel input is not level-invariant, so without it a
+    change that only moved the limiter drive reads as a change in sound.
     """
     work = Path(args.work)
     sets = {"ref": (args.ref, args.ref_window, None), "eval": (args.eval, args.eval_window, args.codec or None)}
@@ -344,7 +350,7 @@ def cmd_fad(args: argparse.Namespace) -> int:
         # fadtk caches embeddings by file name under the set folder; clips reuse names, so start clean.
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
-        jobs = [(p, str(d / f"{i:03d}.wav"), window, codec) for i, p in enumerate(sorted(paths))]
+        jobs = [(p, str(d / f"{i:03d}.wav"), window, codec, args.lufs) for i, p in enumerate(sorted(paths))]
         with ProcessPoolExecutor(max_workers=args.jobs) as pool:
             list(pool.map(_window_wav, jobs))
     run = subprocess.run(
@@ -450,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--eval-window", default="136:48")
     a.add_argument("--codec", default="320k")
     a.add_argument("--model", default="vggish")
+    a.add_argument("--lufs", type=float, default=-14.0, help="loudness every clip is matched to before embedding")
     a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     a.set_defaults(fn=cmd_fad)
     a = sub.add_parser("listen")
