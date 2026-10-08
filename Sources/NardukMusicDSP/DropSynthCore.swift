@@ -724,7 +724,8 @@ struct SynthState {
             if instrumentsLive > 0 {
                 var live = 0
                 for i in 0...SynthState.instrumentCount where instruments[i].active {
-                    let v = instruments[i].next()
+                    let raw = instruments[i].next()
+                    let v = (raw.0 * SampledInstrument.busGain, raw.1 * SampledInstrument.busGain)
                     if instruments[i].isPercussion {
                         drumsL += v.0
                         drumsR += v.1

@@ -12,7 +12,8 @@ import Testing
 @Suite struct GoldenRenderTests {
     static let goldens: [String: UInt64] = [
         // Moved with section variation (#40, 2026-10-07); the Linux value is read from the first Linux CI run.
-        "darwin-arm64": 0x7430_00a9_7187_847e
+        "darwin-arm64": 0x5c55_d69a_5457_68c9,
+        "linux-x86_64": 0xf501_2e78_1fea_2f37,
     ]
 
     static var platform: String {
@@ -54,21 +55,21 @@ import Testing
     static let genreGoldens: [Genre: [String: UInt64]] = [
         // Every genre moved with section variation (#40, 2026-10-07); Linux values are read from
         // the first Linux CI run. Goldens pin determinism, not a judgement of how the music sounds.
-        .dubstep: ["darwin-arm64": 0xa1c1_e358_a404_14dd],
-        .riddim: ["darwin-arm64": 0xd935_4a8e_b788_7d7b],
-        .drumAndBass: ["darwin-arm64": 0x04c8_f698_361d_2fe9],
-        .trap: ["darwin-arm64": 0x7eaa_4631_d0e4_b6ea],
-        .house: ["darwin-arm64": 0x6c3d_fb37_094a_73d9],
-        .chill: ["darwin-arm64": 0x5a38_2691_60da_2759],
-        .techno: ["darwin-arm64": 0xb790_30ef_5462_0dbb],
-        .ukGarage: ["darwin-arm64": 0xd6ff_9ea5_cc59_bf2d],
-        .synthwave: ["darwin-arm64": 0xaeec_5a14_1c10_257c],
-        .lofi: ["darwin-arm64": 0x4c24_a1e8_c904_a5dd],
-        .rock: ["darwin-arm64": 0xb2fc_c28c_9ff1_5d7c],
-        .folk: ["darwin-arm64": 0x1e9c_66f6_83fa_1db1],
-        .funk: ["darwin-arm64": 0x6f22_24d0_01ce_7450],
+        .dubstep: ["darwin-arm64": 0x186e_89cd_9779_0060, "linux-x86_64": 0x443c_91f0_3234_3d25],
+        .riddim: ["darwin-arm64": 0xbb32_056b_bc1f_5273, "linux-x86_64": 0x2703_9b89_5a68_048d],
+        .drumAndBass: ["darwin-arm64": 0xad85_2179_1429_1eb4, "linux-x86_64": 0xe7bc_d1e0_16a7_aad3],
+        .trap: ["darwin-arm64": 0x7a9f_d9ca_f7aa_e08c, "linux-x86_64": 0xfcc5_0deb_bc21_b8a4],
+        .house: ["darwin-arm64": 0x4bb8_7609_f5fe_c25c, "linux-x86_64": 0xffc4_6d34_2e2a_f2d6],
+        .chill: ["darwin-arm64": 0x98c1_6fce_ca4e_cbe4, "linux-x86_64": 0x5aa0_5c53_564e_8732],
+        .techno: ["darwin-arm64": 0x8185_b361_eccd_fc28, "linux-x86_64": 0x1c9d_79e3_b0bf_d3c1],
+        .ukGarage: ["darwin-arm64": 0xe9b9_f81b_e7c8_fa50, "linux-x86_64": 0x29ea_6b73_bf24_0554],
+        .synthwave: ["darwin-arm64": 0x38e0_250e_e45d_9e56, "linux-x86_64": 0x264a_d3e8_19c9_b406],
+        .lofi: ["darwin-arm64": 0x1c8a_0fe2_bc4e_6fe9, "linux-x86_64": 0x10d3_f6a4_25fd_4cd8],
+        .rock: ["darwin-arm64": 0x7ffd_5113_454d_0e66, "linux-x86_64": 0x6e72_883e_2e4b_2c00],
+        .folk: ["darwin-arm64": 0x36fb_8ebc_f56c_eb71, "linux-x86_64": 0x413c_aa07_d8ba_1c15],
+        .funk: ["darwin-arm64": 0x150e_33ad_5c31_abd4, "linux-x86_64": 0x9ef6_2583_4d50_1c21],
         // Tropical house moved again with its recorded instruments and call-and-answer drop (narduk-sound#34).
-        .tropicalHouse: ["darwin-arm64": 0xa71b_d751_1101_c9b2],
+        .tropicalHouse: ["darwin-arm64": 0xd5da_42c4_ba8a_0735, "linux-x86_64": 0x47a2_cde5_fc98_ec20],
     ]
 
     @Test(arguments: Genre.allCases)

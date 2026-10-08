@@ -14,6 +14,13 @@ import NardukMusicRender
 // narduk-music samey [--tracks 30] [--genres all|a,b] [--seed-base 1] [--threshold 0.15] [--window 24:36]
 //                    [--note TEXT] --out <file.json>
 
+/// CPU seconds this process has used, from the POSIX process clock so it builds on Darwin and Glibc alike.
+func processCPUSeconds() -> Double {
+    var ts = timespec()
+    guard clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0 else { return 0 }
+    return Double(ts.tv_sec) + Double(ts.tv_nsec) / 1e9
+}
+
 let measureUsage = """
            narduk-music abtest (--genre NAME | --scenario <file.json>) --b <options> [--a <options>] --out <dir>
                                [--seeds 1,2,3 | --count 4 --seed-base 1] [--excerpts transition,groove1,breakdown,groove2]
@@ -294,7 +301,7 @@ func samey(_ arguments: [String]) -> Int32 {
             }
         }
         let clock = ProcessInfo.processInfo.systemUptime
-        let cpuStart = clock_gettime_nsec_np(CLOCK_PROCESS_CPUTIME_ID)
+        let cpuStart = processCPUSeconds()
         var reports: [SameyReport] = []
         for genre in genres {
             let features = (0..<UInt64(tracks)).map {
@@ -310,7 +317,7 @@ func samey(_ arguments: [String]) -> Int32 {
                     report.largestCluster, report.distinctBassPatches, report.distinctPatchCombinations,
                     report.distinctForms, report.meanFillBarsPerTrack, report.tempo.min, report.tempo.max))
         }
-        let cpu = Double(clock_gettime_nsec_np(CLOCK_PROCESS_CPUTIME_ID) - cpuStart) / 1e9
+        let cpu = processCPUSeconds() - cpuStart
         let file = SameyFile(
             note: value("--note", in: arguments) ?? "", measuredAt: ISO8601DateFormatter().string(from: Date()),
             tracksPerGenre: tracks, seedBase: seedBase, variety: SongSettings().variety, audioWindowSeconds: window,

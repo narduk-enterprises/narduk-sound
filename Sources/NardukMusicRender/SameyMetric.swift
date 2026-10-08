@@ -177,7 +177,7 @@ public struct TrackFeatures: Sendable, Hashable, Codable {
             zip(x, y).reduce(0) { $0 + ($1.0 - $1.1) * ($1.0 - $1.1) }.squareRoot()
         }
         func octaves(_ x: Double, _ y: Double) -> Double {
-            x <= 0 && y <= 0 ? 0 : (x <= 0 || y <= 0 ? 1 : abs(log2(x / y)))
+            x <= 0 && y <= 0 ? 0 : (x <= 0 || y <= 0 ? 1 : log2(max(x, y) / min(x, y)))
         }
         let setA = Set(a.instruments)
         let setB = Set(b.instruments)

@@ -10,7 +10,7 @@ import Testing
     /// The exact fingerprint, Linux only (one container image). The same 150 s render gave a different fingerprint on
     /// every macOS machine and run that has checked it (narduk-libs#1610), so macOS compares the loudness envelope
     /// below instead: it must stay within `envelopeToleranceDB` of it, window by window.
-    static let linuxFingerprint: UInt64 = 0x010e_8b77_6615_be55
+    static let linuxFingerprint: UInt64 = 0xb5d5_cd12_fdbd_4890
 
     /// RMS of the left channel in dB over each 10 s window of the 150 s render.
     static let envelopeDB: [Double] = [
