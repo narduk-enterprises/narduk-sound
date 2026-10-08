@@ -88,6 +88,9 @@ struct ControlStrip: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .disabled(model.isRunning)
+                #if os(macOS)
+                    if model.input == .microphone { inputDevicePicker }
+                #endif
             }
             if model.input == .demo { section("Song") { songControls } }
             section("Look") { PaletteControls(model: model) }
@@ -96,6 +99,20 @@ struct ControlStrip: View {
         }
         .padding(GalleryTheme.Space.m)
     }
+
+    #if os(macOS)
+        /// Which input the microphone source taps: the system default, or any device with input channels, so a
+        /// loopback driver (BlackHole) shows what the Mac is playing without touching the system input setting.
+        private var inputDevicePicker: some View {
+            Picker("Device", selection: $model.inputDevice) {
+                Text("System default input").tag(AudioInputDevice?.none)
+                ForEach(model.inputDevices) { Text($0.name).tag(Optional($0)) }
+            }
+            .labelsHidden()
+            .disabled(model.isRunning)
+            .onAppear { model.refreshInputDevices() }
+        }
+    #endif
 
     private var transport: some View {
         VStack(alignment: .leading, spacing: GalleryTheme.Space.s) {

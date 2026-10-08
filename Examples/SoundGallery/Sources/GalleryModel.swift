@@ -28,6 +28,18 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     private(set) var repaintHold = false
     @ObservationIgnored private var repaintTask: Task<Void, Never>?
     private(set) var status = "Pick a source and press Play."
+    #if os(macOS)
+        /// The device the microphone source taps; nil is the system default input. A loopback device (BlackHole)
+        /// here draws whatever the Mac plays, with no change to the system's own input setting.
+        var inputDevice: AudioInputDevice?
+        private(set) var inputDevices: [AudioInputDevice] = []
+
+        /// Re-lists the inputs (a device can come and go); a selection that vanished falls back to the default.
+        func refreshInputDevices() {
+            inputDevices = AudioInputDevices.list()
+            if let inputDevice, !inputDevices.contains(inputDevice) { self.inputDevice = nil }
+        }
+    #endif
 
     @ObservationIgnored private var source: (any SoundFrameSource)?
     @ObservationIgnored private var latest = SoundFrame()
@@ -199,13 +211,18 @@ enum GalleryInput: String, CaseIterable, Identifiable {
         #if os(iOS)
             try AudioSessionConfiguration.configureForMicrophone()
         #endif
+        var heard = "the microphone"
+        #if os(macOS)
+            try AudioInputDevices.select(inputDevice, on: engine.inputNode)
+            if let inputDevice { heard = inputDevice.name }
+        #endif
         let tap = try AudioTapSource.microphone(of: engine)
         engine.prepare()
         try engine.start()
         try tap.start()
         self.tap = tap
         source = tap
-        status = "Listening to the microphone."
+        status = "Listening to \(heard)."
     }
 
     private func startFile(_ url: URL) throws {
