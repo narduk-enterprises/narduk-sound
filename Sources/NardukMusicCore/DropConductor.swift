@@ -455,12 +455,15 @@ public struct DropConductor: Sendable {
             if track.genre == .tropicalHouse {
                 for i in first..<notes.count {
                     notes[i].params = GenreArrangement.percussion(track.genre, notes[i].instrument, notes[i].params)
+                    notes[i].velocity *= GenreArrangement.balance(track.genre, notes[i].instrument)
                 }
             }
             if let timbre = track.timbre?.packed {
                 for i in first..<notes.count where notes[i].params.timbre == nil { notes[i].params.timbre = timbre }
             }
         }
+        // Voices are written and then dropped, so every other part keeps its draws (see `SongSettings.vocals`).
+        if !settings.vocals { notes.removeAll { $0.instrument.isVoice } }
         nextStep = throughStep + 1
         snapshot.step = throughStep
         snapshot.section = sections.section

@@ -14,7 +14,9 @@ import Testing
     static func playTracked(_ genre: Genre, variety: Double, seed: UInt64, bars: Int = 96) -> [(
         note: ScheduledNote, track: Track
     )] {
-        var conductor = DropConductor(settings: SongSettings.varied(genre: genre, seed: seed, variety: variety))
+        var settings = SongSettings.varied(genre: genre, seed: seed, variety: variety)
+        settings.vocals = true
+        var conductor = DropConductor(settings: settings)
         var out: [(ScheduledNote, Track)] = []
         for step in 0..<(bars * 16) {
             let phase = (step / 16) % 32

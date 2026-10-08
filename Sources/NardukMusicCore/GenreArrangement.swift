@@ -635,6 +635,20 @@ enum GenreArrangement {
         return params
     }
 
+    /// A level trim per part, against the arrangement's own velocities. Tropical house is a melody track with the bass
+    /// under it: the first blind test (2026-10-07) heard the bassline tower over the flutes and the drums hit too hard,
+    /// and the song measured 10-20 dB less melody against its bass than a reference track. The recorded melody comes
+    /// up in its own trims (`SampledInstrument.trim`); the low end and the kick come down here.
+    static func balance(_ genre: Genre, _ instrument: Instrument) -> Double {
+        guard genre == .tropicalHouse else { return 1 }
+        switch instrument {
+        case .sub, .wobble, .bassGuitar: return 0.8
+        case .kick: return 0.4
+        case .snare: return 0.8
+        default: return 1
+        }
+    }
+
     /// The breakdown's vocal lead: the hook's long notes on vox, an octave down from the keys.
     static func lead(_ c: StepContext) -> [ScheduledNote] {
         // The formant vox is an electronic sound: in a band's breakdown it was the loudest thing and did not belong

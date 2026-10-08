@@ -53,16 +53,18 @@ public enum SampledInstrument: Int, CaseIterable, Sendable {
 
     /// Level against the synth voices it replaces.
     var trim: Float {
+        // Tropical house is the only genre that plays these, and it is a melody track: the melody sits on top of the
+        // kick and the bass (`GenreArrangement.balance`), so the trims run well above the synth voices'.
         switch self {
-        case .piano: 1.1
-        case .steelDrum: 0.9
-        case .flute: 0.7
-        case .sax: 0.75
-        case .nylonGuitar: 1.0
-        case .shaker: 0.55
-        case .tambourine: 0.5
-        case .snap: 0.8
-        case .conga: 0.7
+        case .piano: 5.4
+        case .steelDrum: 4.8
+        case .flute: 5.4
+        case .sax: 4.8
+        case .nylonGuitar: 5.4
+        case .shaker: 2.7
+        case .tambourine: 2.4
+        case .snap: 2.4
+        case .conga: 2.1
         }
     }
 }
