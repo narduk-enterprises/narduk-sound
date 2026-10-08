@@ -37,7 +37,9 @@ it needs no credential.
 `Examples/SoundGallery` is a SwiftUI app for macOS, iPad and iPhone that plays the
 demo song, the microphone or an audio file through `NardukSoundAnalysis` into
 every Metal visualizer side by side (`xcodegen generate`, then build the
-`SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch).
+`SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch, and on
+macOS `-audiodevice <name>` picks the microphone source's input device, so
+`-autoplay microphone -audiodevice "BlackHole 2ch"` draws what the Mac is playing).
 It is unsigned and local only; CI builds it for macOS and the iOS simulator.
 
 ## Reading the engine
