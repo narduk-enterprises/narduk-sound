@@ -48,7 +48,12 @@ import Testing
             let drops = Self.dropBars(r)
             #expect(drops.count >= 8, "\(genre) never dropped")
             #expect(r.notes.contains { $0.instrument == .kick }, "\(genre) has no kick")
-            #expect(r.notes.contains { $0.instrument == .snare && $0.velocity >= 0.5 }, "\(genre) has no snare")
+            // Tropical house's snare is a finger snap, balanced down to 0.8 (`GenreArrangement.balance`) from the
+            // 0.5 it is written at, so it hits at 0.4 by design (391ad4a); every other genre keeps a snare of 0.5+.
+            let snareFloor = genre == .tropicalHouse ? 0.4 : 0.5
+            #expect(
+                r.notes.contains { $0.instrument == .snare && $0.velocity >= snareFloor - 0.001 },
+                "\(genre) has no snare")
             #expect(
                 r.notes.contains { $0.instrument == .sub || $0.instrument == .bassGuitar }, "\(genre) has no low end")
             for note in r.notes {
@@ -242,8 +247,12 @@ import Testing
         for bar in Self.plainBars(drops) { #expect(Self.hits(r, .snare, bar: bar, minVelocity: 0.4) == [8]) }
         let wobbles = r.notes.filter { $0.instrument == .wobble }
         #expect(wobbles.allSatisfy { [.half, .quarter].contains($0.params.wobbleRate) })
-        let vox = r.notes.filter { $0.instrument == .vox }
-        #expect(!vox.isEmpty && vox.allSatisfy { $0.velocity <= 0.4 })
+        // Voices are off by default (391ad4a) and a gentle genre never sings its breakdown lead, so chill writes no
+        // vox; with voices on, any vox it does write stays soft.
+        #expect(!r.notes.contains { $0.instrument.isVoice })
+        var singing = DropConductor(settings: SongSettings(genre: genre, vocals: true))
+        let sung = Base.play(&singing, steps: 256 + 8 * Self.bar, batch: { _ in Base.loud })
+        #expect(sung.notes.filter { $0.instrument == .vox }.allSatisfy { $0.velocity <= 0.4 })
         #expect(r.notes.contains { $0.instrument == .riser && $0.velocity < 0.5 })
     }
 
