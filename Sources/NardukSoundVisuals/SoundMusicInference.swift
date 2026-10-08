@@ -115,7 +115,12 @@ public final class SoundMusicInference {
     private var energyPeak: Float = 0
     /// Loudness alone, smoothed like `energy`: sections follow it, since a snare roll makes a build as busy as a drop.
     private(set) var level: Float = 0
+    /// The loudness and onset density heard, 0 ... 1: what drives the sections. Not the context's `energy` (see `update`).
+    public var loudness: Float { energy }
     private(set) var levelPeak: Float = 0
+    /// `level` smoothed over ~2 s: what a drop has to rise above.
+    private(set) var levelSlow: Float = 0
+    private var heardSince = -Double.infinity
     private var midLevel: Float = 0
     private var silentSince = -Double.infinity
     private var highSince = -Double.infinity
@@ -173,6 +178,8 @@ public final class SoundMusicInference {
         energyPeak = 0
         level = 0
         levelPeak = 0
+        levelSlow = 0
+        heardSince = -.infinity
         midLevel = 0
         silentSince = -.infinity
         highSince = -.infinity
@@ -219,11 +226,14 @@ public final class SoundMusicInference {
         updateEnergy(frame, dt: Float(dt), silent: silent, resting: resting)
         updateSection(now: now, resting: resting)
 
-        let running = locked && !resting
+        let running = heard && !resting
         let secondsPerStep = 60 / bpm / 4
         let phase = Float(stepPosition / 4 - (stepPosition / 4).rounded(.down))
+        // `energy` in the context is a conductor's, which the engine's own songs leave at 0 and the visualizers are
+        // tuned for: feeding loudness there makes a tile thrash twice as hard as it does for the demo song. The
+        // loudness stays internal (sections, `dropQueued`) and public as `loudness` for a caller that wants it.
         latest = MusicContext(
-            hitCounts: counts, step: lastStep, section: section, energy: energy,
+            hitCounts: counts, step: lastStep, section: section, energy: 0,
             wobblePhase: (phase * 2).truncatingRemainder(dividingBy: 1), wobbleCutoff: midLevel, isRunning: running,
             secondsPerStep: secondsPerStep, stepsPerBar: 16, stepsPerPhrase: 128,
             phraseProgress: Float(lastStep % 128) / 128, buildThreshold: 0.55, dropThreshold: 0.4,
@@ -258,7 +268,7 @@ public final class SoundMusicInference {
         if Self.detect(&kick, flux: kickFlux, now: now, dt: dt, silent: silent) {
             counts.record(.kick)
             fired += 1
-            if locked { pullBeat() }
+            pullBeat()
         }
         if Self.detect(&snare, flux: snareFlux, now: now, dt: dt, silent: silent) {
             counts.record(.snare)
@@ -385,10 +395,12 @@ public final class SoundMusicInference {
         candidateBPM = 0
         agreements = 0
         if !locked {
+            // The clock ran at the default tempo until now: keep its count (a tile's beat clock stays continuous)
+            // and snap the phase to the nearest beat, which the kicks then pull into place.
             locked = true
             lockTime = lastTime
-            stepPosition = 0
-            lastStep = 0
+            stepPosition = (stepPosition / 4).rounded() * 4
+            lastStep = Int(stepPosition)
         }
     }
 
@@ -412,8 +424,10 @@ public final class SoundMusicInference {
         stepPosition -= error * 4 * 0.35
     }
 
+    /// Runs the clock from the first sound heard: at the default tempo until a lock, then at the measured one, so a
+    /// tile's beat clock and travel move from the start as they do for the engine (which knows its tempo).
     private func advanceClock(dt: Double, resting: Bool) {
-        guard locked, !resting else { return }
+        guard heard, !resting else { return }
         stepPosition += dt / (60 / bpm / 4)
         lastStep = max(lastStep, Int(stepPosition.rounded(.down)))
     }
@@ -432,6 +446,7 @@ public final class SoundMusicInference {
             let rms = frame.rmsDB
             if !heard {
                 heard = true
+                heardSince = lastTime
                 loud = rms
                 ceiling = rms
                 floorDB = rms
@@ -455,6 +470,7 @@ public final class SoundMusicInference {
         energyPeak = max(energy, energyPeak - dt * 0.02)
         level += (fromLoudness - level) * min(1, dt * 3)
         levelPeak = max(level, levelPeak - dt * 0.02)
+        levelSlow += (level - levelSlow) * min(1, dt / 2)
     }
 
     private func updateSection(now: Double, resting: Bool) {
@@ -486,8 +502,13 @@ public final class SoundMusicInference {
         let lowFor = hold(&lowSince, low)
         let inDrop = section == .drop || section == .drop2
         let dwell = now - sectionSince
+        // A drop's loudness settles over its first bars; only a passage above that settled peak is a new drop.
+        if inDrop, dwell < 2 { dropEntryPeak = max(dropEntryPeak, level) }
         var next = section
-        if !inDrop, highFor >= 0.4, dwell >= 1 {
+        // The first drop must rise out of what came before it (a loud build is the loudest thing heard so far and
+        // would read as a drop within a second); a song that opens in its drop is called one after four seconds.
+        let risen = now - heardSince >= 2 && level >= levelSlow * 1.15
+        if !inDrop, highFor >= 0.4, dwell >= 1, dropsEntered > 0 || risen || highFor >= 4 {
             next = dropsEntered % 2 == 0 ? .drop : .drop2
         } else if inDrop, level >= dropEntryPeak * 1.12, highFor >= 0.4, dwell >= 2 {
             next = dropsEntered % 2 == 0 ? .drop : .drop2  // louder than the drop we are in: a new one
@@ -497,6 +518,8 @@ public final class SoundMusicInference {
             next = .build
         } else if section == .build, lowFor >= 1.5, dwell >= 2 {
             next = .breakdown
+        } else if section == .intro, highFor >= 1, dwell >= 1 {
+            next = .build  // loud from the start but not yet risen: a build
         } else if section == .intro || section == .breakdown, midFor >= 1, level > 0.3, dwell >= 1.5 {
             next = .build
         }
