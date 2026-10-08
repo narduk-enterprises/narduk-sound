@@ -97,7 +97,19 @@ def _measure(job: tuple[str, str | None, str | None]) -> dict[str, float]:
     return measure(*job)
 
 
+def _warm_numba() -> None:
+    # librosa compiles its beat tracker with numba's on-disk cache. Workers that compile it at the same time can
+    # leave a corrupt cache entry that segfaults every later run, so compile once here before any worker starts.
+    import librosa
+    import numpy as np
+
+    clicks = np.zeros(22050 * 4)
+    clicks[:: 22050 // 2] = 1
+    librosa.beat.beat_track(y=clicks, sr=22050)
+
+
 def _profile(paths: list[str], jobs: int, window: str | None = None, codec: str | None = None) -> dict:
+    _warm_numba()
     with ProcessPoolExecutor(max_workers=jobs) as pool:
         return dict(zip(paths, pool.map(_measure, [(p, window, codec) for p in paths])))
 

@@ -672,12 +672,29 @@ enum GenreArrangement {
     /// under it: the first blind test (2026-10-07) heard the bassline tower over the flutes and the drums hit too hard,
     /// and the song measured 10-20 dB less melody against its bass than a reference track. The recorded melody comes
     /// up in its own trims (`SampledInstrument.trim`); the low end and the kick come down here.
+    ///
+    /// House (record-loop, 2026-10-07): soloed in the drops, the kick alone measured within 0.3 dB of the whole mix,
+    /// the keys 24 dB under it and the hats 33 dB under it, and the snare carried more presence-band energy than the
+    /// mix keeps. Records put the groove around the kick, not under it. Velocities are clamped at 1, so the kick and
+    /// snare come down and the keys and hats come up as far as that allows; the cut-only -17.5 LUFS playback trim
+    /// keeps the loudness the same.
     static func balance(_ genre: Genre, _ instrument: Instrument) -> Double {
-        guard genre == .tropicalHouse else { return 1 }
-        switch instrument {
-        case .sub, .wobble, .bassGuitar: return 0.8
-        case .kick: return 0.4
-        case .snare: return 0.8
+        switch genre {
+        case .tropicalHouse:
+            switch instrument {
+            case .sub, .wobble, .bassGuitar: return 0.8
+            case .kick: return 0.4
+            case .snare: return 0.8
+            default: return 1
+            }
+        case .house:
+            switch instrument {
+            case .kick: return 0.4
+            case .snare: return 0.45
+            case .keys: return 2
+            case .hat, .openHat: return 3
+            default: return 1
+            }
         default: return 1
         }
     }
