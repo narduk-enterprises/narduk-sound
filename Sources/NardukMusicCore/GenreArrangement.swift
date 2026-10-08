@@ -634,11 +634,14 @@ enum GenreArrangement {
     }
 
     /// Tropical house's lead sings in the key, the way a pop topline does, instead of riding up and down with every
-    /// chord: the hook's degree is the key's, a note on the beat (or accented, or held) moves to the nearest tone of
+    /// chord: the hook's degree is the key's, kept to the pentatonic, and a note on the beat (or accented, or held) moves to the nearest tone of
     /// the bar's chord, and the line folds into about an octave and a half above the tonic (the reference songs keep
     /// their melodies inside ~20 semitones; the transposed hook spanned over 30).
     static func tropicalLead(_ c: StepContext, _ note: HookNote) -> Int {
         var degree = note.degree
+        // Off the beat the line keeps to the pentatonic: no 4th or 7th in a major key, no 2nd or 6th in a minor one.
+        let avoid: Set<Int> = c.track.mode.isMajorQuality ? [3, 6] : [1, 5]
+        if avoid.contains(((degree % 7) + 7) % 7) { degree -= 1 }
         if note.accent || note.pos % 4 == 0 || note.length >= 4 {
             let moves = [c.chord, c.chord + 2, c.chord + 4].map { tone in
                 let up = ((tone - degree) % 7 + 7) % 7

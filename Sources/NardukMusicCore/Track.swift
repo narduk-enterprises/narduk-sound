@@ -663,6 +663,7 @@ enum TrackGenerator {
             cells[index].length = max(1, min(cells[index].length, next - cells[index].pos))
         }
 
+        if genre == .tropicalHouse { return tropicalHook(cells: cells, rng: &rng) }
         // Contour: a seeded walk that starts on the chord root and comes back to the first bar's opening in bar two.
         let steps = Self.steps(genre)
         var degrees: [Int] = []
@@ -699,6 +700,45 @@ enum TrackGenerator {
                 pos: cell.pos, length: cell.length, degree: degrees[index],
                 accent: cell.pos % 16 == 0 || degrees[index] == top)
         }
+        return Hook(notes: notes)
+    }
+
+    /// Tropical house's hook, the way the reference songs' toplines go: a one-bar cell sung twice, the second time with
+    /// a new ending. The cell walks mostly by step (repeated notes allowed), later folded onto the pentatonic (the
+    /// notes that rub against the chords, applied by `GenreArrangement.tropicalLead`), from the root, third or fifth;
+    /// the repeat lands on the root or the fifth.
+    static func tropicalHook(cells all: [(pos: Int, length: Int)], rng: inout MusicRNG) -> Hook {
+        var cell = all.filter { $0.pos < 16 }.map { (pos: $0.pos, length: min($0.length, 16 - $0.pos)) }
+        if cell.count < 3 { cell = [(0, 3), (6, 2), (10, 4)] }
+        func snap(_ d: Int) -> Int { d }  // the pentatonic and the chords are applied where the key is known
+        let steps = [0, 1, -1, 1, -1, 2, -2]
+        var degree = [0, 2, 4][Int(rng.next() % 3)]
+        var degrees: [Int] = []
+        for index in cell.indices {
+            if index > 0 {
+                degree += steps[Int(rng.next() % UInt64(steps.count))]
+                degree = min(7, max(-3, degree))
+            }
+            degree = snap(degree)
+            degrees.append(degree)
+        }
+        if Set(degrees).count < 3, degrees.count >= 3 { degrees[degrees.count - 1] = snap(degrees[0] + 2) }
+        var second = degrees
+        let landing = rng.unit() < 0.6 ? 0 : 4
+        second[second.count - 1] = landing
+        if second.count >= 3 { second[second.count - 2] = snap((second[second.count - 3] + landing) / 2) }
+        let top = (degrees + second).max() ?? 0
+        let notes =
+            cell.indices.map { i in
+                HookNote(
+                    pos: cell[i].pos, length: cell[i].length, degree: degrees[i],
+                    accent: cell[i].pos == 0 || degrees[i] == top)
+            }
+            + cell.indices.map { i in
+                HookNote(
+                    pos: cell[i].pos + 16, length: cell[i].length, degree: second[i],
+                    accent: cell[i].pos == 0 || second[i] == top)
+            }
         return Hook(notes: notes)
     }
 

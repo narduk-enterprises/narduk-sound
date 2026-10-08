@@ -1169,7 +1169,23 @@ public enum DebugMeters {
     nonisolated(unsafe) public static var steals = 0
     nonisolated(unsafe) public static var tailOverwrites = 0
     nonisolated(unsafe) public static var fxSteals = 0
+    nonisolated(unsafe) public static var callbacks = 0
+    nonisolated(unsafe) public static var maxLoad = 0.0
+    nonisolated(unsafe) public static var overloads = 0
+    nonisolated(unsafe) static var timebase: Double = 0
+    /// The render callback's share of its buffer's duration; over 0.5 counts as an overload risk.
+    public static func noteRender(ticks: UInt64, frames: Int, sampleRate: Double) {
+        if timebase == 0 {
+            var info = mach_timebase_info_data_t()
+            mach_timebase_info(&info)
+            timebase = Double(info.numer) / Double(info.denom)
+        }
+        let load = Double(ticks) * timebase / 1e9 / (Double(frames) / Double(sampleRate))
+        callbacks += 1
+        maxLoad = max(maxLoad, load)
+        if load > 0.5 { overloads += 1 }
+    }
     public static var report: String {
-        "METERS frames=\(frames) hot%=\(String(format: "%.3f", Double(hotFrames) * 100 / Double(max(1, frames)))) clip%=\(String(format: "%.3f", Double(clipFrames) * 100 / Double(max(1, frames)))) peakDrive=\(peakDrive) steals=\(steals) tailOverwrites=\(tailOverwrites) fxSteals=\(fxSteals)"
+        "callbacks=\(callbacks) maxLoad=\(String(format: "%.3f", maxLoad)) overloads=\(overloads) " + "METERS frames=\(frames) hot%=\(String(format: "%.3f", Double(hotFrames) * 100 / Double(max(1, frames)))) clip%=\(String(format: "%.3f", Double(clipFrames) * 100 / Double(max(1, frames)))) peakDrive=\(peakDrive) steals=\(steals) tailOverwrites=\(tailOverwrites) fxSteals=\(fxSteals)"
     }
 }

@@ -119,6 +119,7 @@ public enum DropEngineError: LocalizedError {
     /// main mixer (the speaker path) without silencing the capture. Graph: source -> capture mixer -> main mixer -> out.
     @ObservationIgnored private let captureMixer = AVAudioMixerNode()
     @ObservationIgnored private var sourceNode: AVAudioSourceNode?
+    @ObservationIgnored private var debugReported = Date()  // DEBUG-REMOVE
     @ObservationIgnored private var core: DropSynthCore?
     @ObservationIgnored private var analyzer: SoundAnalyzer?
     @ObservationIgnored private var analysisScratch = [Float](repeating: 0, count: SpectrumAnalyzer.fftSize)
@@ -253,6 +254,9 @@ public enum DropEngineError: LocalizedError {
         isRunning = true
         observeConfigurationChanges()
         startTimer()
+        if let tap = ProcessInfo.processInfo.environment["NARDUK_TAP_OUT"], recorder == nil {  // DEBUG-REMOVE
+            try? startRecording(to: URL(fileURLWithPath: tap + "-\(Int(Date().timeIntervalSince1970)).m4a"))  // DEBUG-REMOVE
+        }  // DEBUG-REMOVE
     }
 
     /// Holds the song where it is: the audio engine pauses (the render thread stops, so the playhead and the synth's
@@ -375,6 +379,10 @@ public enum DropEngineError: LocalizedError {
 
     private func tick() {
         guard isRunning, let core else { return }
+        if ProcessInfo.processInfo.environment["NARDUK_TAP_OUT"] != nil, Date().timeIntervalSince(debugReported) > 10 {  // DEBUG-REMOVE
+            debugReported = Date()  // DEBUG-REMOVE
+            FileHandle.standardError.write(("\(Date()) " + DebugMeters.report + "\n").data(using: .utf8)!)  // DEBUG-REMOVE
+        }  // DEBUG-REMOVE
         let secondsPerStep = settings.secondsPerStep
         let latency = engine.outputNode.presentationLatency + Double(core.lastBufferFrames) / core.sampleRate
         let audible = max(core.renderedStepPosition - latency / secondsPerStep, 0)
@@ -452,7 +460,9 @@ public enum DropEngineError: LocalizedError {
                 return noErr
             }
             let right = buffers.count > 1 ? buffers[1].mData?.assumingMemoryBound(to: Float.self) ?? left : left
+            let t0 = mach_absolute_time()  // DEBUG-REMOVE
             synth.render(frames: Int(frameCount), left: left, right: right)
+            DebugMeters.noteRender(ticks: mach_absolute_time() - t0, frames: Int(frameCount), sampleRate: synth.sampleRate)  // DEBUG-REMOVE
             return noErr
         }
     }
