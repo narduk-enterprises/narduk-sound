@@ -837,7 +837,9 @@ public struct DropConductor: Sendable {
                 add(.impact, entry == .pickup ? velocity * 0.6 : velocity)
                 quantizer.spend(.instrument(.impact), bar: bar)
             case .bandFill:
-                if section.isDrop, track.kit(drop2: section == .drop2).openHats.count < 2 { add(.openHat, 0.8 * profile.gain) }
+                if section.isDrop, track.kit(drop2: section == .drop2).openHats.count < 2 {
+                    add(.openHat, 0.8 * profile.gain)
+                }
             case .filterOpen, .none:
                 break
             }

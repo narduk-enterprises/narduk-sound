@@ -38,14 +38,16 @@ func seedList(_ arguments: [String], defaultCount: Int) throws -> [UInt64] {
         guard !seeds.isEmpty else { throw Usage(description: "--seeds needs a comma-separated list of integers") }
         return seeds
     }
-    let count: Int = try value("--count", in: arguments).map {
-        guard let n = Int($0), (1...100).contains(n) else { throw Usage(description: "--count needs 1 to 100") }
-        return n
-    } ?? defaultCount
-    let base: UInt64 = try value("--seed-base", in: arguments).map {
-        guard let n = UInt64($0) else { throw Usage(description: "--seed-base needs an unsigned integer") }
-        return n
-    } ?? 1
+    let count: Int =
+        try value("--count", in: arguments).map {
+            guard let n = Int($0), (1...100).contains(n) else { throw Usage(description: "--count needs 1 to 100") }
+            return n
+        } ?? defaultCount
+    let base: UInt64 =
+        try value("--seed-base", in: arguments).map {
+            guard let n = UInt64($0) else { throw Usage(description: "--seed-base needs an unsigned integer") }
+            return n
+        } ?? 1
     return (0..<UInt64(count)).map { base + $0 }
 }
 
@@ -263,14 +265,18 @@ struct SameyFile: Encodable {
 func samey(_ arguments: [String]) -> Int32 {
     do {
         guard let outPath = value("--out", in: arguments) else { throw Usage(description: "samey needs --out") }
-        let tracks: Int = try value("--tracks", in: arguments).map {
-            guard let n = Int($0), (2...1_000).contains(n) else { throw Usage(description: "--tracks needs 2 to 1000") }
-            return n
-        } ?? 30
-        let seedBase: UInt64 = try value("--seed-base", in: arguments).map {
-            guard let n = UInt64($0) else { throw Usage(description: "--seed-base needs an unsigned integer") }
-            return n
-        } ?? 1
+        let tracks: Int =
+            try value("--tracks", in: arguments).map {
+                guard let n = Int($0), (2...1_000).contains(n) else {
+                    throw Usage(description: "--tracks needs 2 to 1000")
+                }
+                return n
+            } ?? 30
+        let seedBase: UInt64 =
+            try value("--seed-base", in: arguments).map {
+                guard let n = UInt64($0) else { throw Usage(description: "--seed-base needs an unsigned integer") }
+                return n
+            } ?? 1
         let threshold = try positive("--threshold", in: arguments, default: 0.15, max: 1)
         var window = SameyMetric.AudioWindow()
         if let text = value("--window", in: arguments) {
@@ -291,12 +297,15 @@ func samey(_ arguments: [String]) -> Int32 {
         let cpuStart = clock_gettime_nsec_np(CLOCK_PROCESS_CPUTIME_ID)
         var reports: [SameyReport] = []
         for genre in genres {
-            let features = (0..<UInt64(tracks)).map { SameyMetric.features(genre: genre, seed: seedBase + $0, window: window) }
+            let features = (0..<UInt64(tracks)).map {
+                SameyMetric.features(genre: genre, seed: seedBase + $0, window: window)
+            }
             let report = SameyReport(genre: genre, features: features, threshold: threshold)
             reports.append(report)
             log(
                 String(
-                    format: "  %-14@ nn %.3f  clusters %d/%d (largest %d)  bass %d  combos %d  forms %d  fills %.1f  tempo %.0f-%.0f",
+                    format:
+                        "  %-14@ nn %.3f  clusters %d/%d (largest %d)  bass %d  combos %d  forms %d  fills %.1f  tempo %.0f-%.0f",
                     genre.rawValue, report.meanNearestNeighbour, report.clusters, report.tracks,
                     report.largestCluster, report.distinctBassPatches, report.distinctPatchCombinations,
                     report.distinctForms, report.meanFillBarsPerTrack, report.tempo.min, report.tempo.max))

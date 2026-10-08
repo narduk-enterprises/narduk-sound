@@ -106,7 +106,11 @@ public struct TrackFeatures: Sendable, Hashable, Codable {
         bpm = capture.settings.bpm
         var runs: [(SongSection, Int)] = []
         for section in capture.sections {
-            if let last = runs.last, last.0 == section { runs[runs.count - 1].1 += 1 } else { runs.append((section, 1)) }
+            if let last = runs.last, last.0 == section {
+                runs[runs.count - 1].1 += 1
+            } else {
+                runs.append((section, 1))
+            }
         }
         form = runs.map { "\($0.0.rawValue) \($0.1)" }.joined(separator: ", ")
         let bars = Double(max(1, capture.sections.count))
@@ -143,9 +147,10 @@ public struct TrackFeatures: Sendable, Hashable, Codable {
             drumBars[note.step / stepsPerBar, default: []].insert(code)
         }
         let barCount = capture.sections.count
-        fillBars = stride(from: 3, to: barCount, by: 4).filter { bar in
-            drumBars[bar, default: []] != drumBars[bar - 1, default: []]
-        }.count
+        fillBars =
+            stride(from: 3, to: barCount, by: 4).filter { bar in
+                drumBars[bar, default: []] != drumBars[bar - 1, default: []]
+            }.count
     }
 
     /// How different two songs are, 0 (identical features) ... 1: the mean of nine group distances, each scaled to
@@ -186,7 +191,8 @@ public struct TrackFeatures: Sendable, Hashable, Codable {
             "instruments": union == 0 ? 0 : 1 - Double(setA.intersection(setB).count) / Double(union),
             "density": clamp(octaves(a.noteDensity, b.noteDensity) / scales["densityOctaves"]!),
             "pitchClasses": clamp(l1(a.pitchClasses, b.pitchClasses) / 2),
-            "mfccMeans": clamp(euclid(a.audio.mfccMeans.dropFirst(), b.audio.mfccMeans.dropFirst()) / scales["mfccMeans"]!),
+            "mfccMeans": clamp(
+                euclid(a.audio.mfccMeans.dropFirst(), b.audio.mfccMeans.dropFirst()) / scales["mfccMeans"]!),
             "mfccSpread": clamp(euclid(spreadA.dropFirst(), spreadB.dropFirst()) / scales["mfccSpread"]!),
             "centroid": clamp(octaves(a.audio.centroid, b.audio.centroid) / scales["centroidOctaves"]!),
             "flux": fluxScale > 0 ? clamp(abs(a.audio.flux - b.audio.flux) / fluxScale) : 0,

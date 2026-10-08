@@ -118,15 +118,19 @@ public final class SampleBank: @unchecked Sendable {
             for pass in 0..<2 {
                 // Pass 0 insists on the technique; pass 1 takes any.
                 var matching = 0
-                for i in 0..<clipCount where clips[i].kind == .chop && abs(clips[i].root - p) <= 4
-                    && (pass == 1 || clips[i].technique == technique) {
+                for i in 0..<clipCount
+                where clips[i].kind == .chop && abs(clips[i].root - p) <= 4
+                    && (pass == 1 || clips[i].technique == technique)
+                {
                     matching += 1
                 }
                 guard matching > 0 else { continue }
                 let want = min(Int(max(min(slice, 0.999), 0) * Float(matching)), matching - 1)
                 var seen = 0
-                for i in 0..<clipCount where clips[i].kind == .chop && abs(clips[i].root - p) <= 4
-                    && (pass == 1 || clips[i].technique == technique) {
+                for i in 0..<clipCount
+                where clips[i].kind == .chop && abs(clips[i].root - p) <= 4
+                    && (pass == 1 || clips[i].technique == technique)
+                {
                     if seen == want { return i }
                     seen += 1
                 }
