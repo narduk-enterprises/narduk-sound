@@ -1056,9 +1056,11 @@ enum GenreArrangement {
             }
         case .house:
             // Off-beat bass: sub and a short wub in every gap between the kicks.
+            // The sub sits an octave above the other genres' (55-125 Hz): at keyRoot - 36 it lived under 60 Hz with
+            // the kick's fundamental and left the 60-250 Hz bass band to the kick alone (record-loop, 2026-10-08).
             if pos % 4 == 2 {
                 let octave = pos == 6 || pos == 14 ? 12 : 0
-                add(.sub, 0.85, NoteParams(pitch: subPitch, lengthSteps: length(2)))
+                add(.sub, 0.85, NoteParams(pitch: subPitch + 12, lengthSteps: length(2)))
                 wobble(track.pitch(wobbleBase, degree: c.chord) + octave, 2, velocity: 0.7, accent: pos == 2)
             }
         case .trap:
