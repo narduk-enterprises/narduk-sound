@@ -923,7 +923,9 @@ enum GenreArrangement {
                 add(.hat, (pos % 2 == 0 ? 0.3 : 0.2) + 0.3 * level, NoteParams())
             }
         case .house:
-            if pos == 2 || pos == 10 { add(.hat, 0.35 + 0.2 * level, NoteParams()) }
+            // 8ths, the off-beats leaning in, and the in-between 16ths once the energy is up: two hats a bar left the
+            // drop at 3.2 onsets a second against records' 5.4 (record-loop, 2026-10-08).
+            if pos % 2 == 0 { add(.hat, (pos % 4 == 2 ? 0.35 : 0.2) + 0.2 * level, NoteParams()) }
             if level > 0.6, pos % 2 == 1 { add(.hat, 0.12 + 0.1 * level, NoteParams()) }
         case .riddim:
             if level > 0.4, pos == 4 || pos == 12 { add(.hat, 0.25 + 0.3 * level, NoteParams()) }
