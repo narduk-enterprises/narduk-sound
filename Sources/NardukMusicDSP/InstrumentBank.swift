@@ -43,7 +43,7 @@ public enum SampledInstrument: Int, CaseIterable, Sendable {
     var releaseSeconds: Float {
         switch self {
         case .piano: 0.35
-        case .steelDrum: 0.3
+        case .steelDrum: 0.8  // a pan rings on: a short damp made the hook choppy (Logan, 2026-10-07)
         case .flute: 0.12
         case .sax: 0.1
         case .nylonGuitar: 0.25

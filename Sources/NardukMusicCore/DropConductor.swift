@@ -465,7 +465,7 @@ public struct DropConductor: Sendable {
         // Voices are written and then dropped, so every other part keeps its draws (see `SongSettings.vocals`).
         if !settings.vocals { notes.removeAll { $0.instrument.isVoice } }
         if let path = ProcessInfo.processInfo.environment["NARDUK_NOTES_OUT"] {  // DEBUG-REMOVE
-            DebugCensus.dump(notes, path: path, secondsPerStep: settings.secondsPerStep, bpm: track.bpm, chord: track.progression)  // DEBUG-REMOVE
+            DebugCensus.dump(notes, path: path, secondsPerStep: settings.secondsPerStep, bpm: track.bpm, chord: track.progression, key: track.keyRoot, scale: (0..<7).map { track.mode.semitones($0) }, perBar: settings.stepsPerBar)  // DEBUG-REMOVE
         }  // DEBUG-REMOVE
         for n in notes { DebugCensus.counts[n.instrument.rawValue + (n.params.voice.map { "/v\($0)" } ?? ""), default: 0] += 1 }  // DEBUG-REMOVE
         if let solo = ProcessInfo.processInfo.environment["NARDUK_SOLO_DEBUG"] {  // DEBUG-REMOVE
@@ -1078,7 +1078,7 @@ public enum DebugCensus {
     nonisolated(unsafe) static var handle: FileHandle?
     nonisolated(unsafe) static var clock = 0.0
     nonisolated(unsafe) static var lastStep = -1
-    static func dump(_ notes: [ScheduledNote], path: String, secondsPerStep: Double, bpm: Double, chord: [Int]) {
+    static func dump(_ notes: [ScheduledNote], path: String, secondsPerStep: Double, bpm: Double, chord: [Int], key: Int, scale: [Int], perBar: Int) {
         if handle == nil {
             FileManager.default.createFile(atPath: path, contents: nil)
             handle = FileHandle(forWritingAtPath: path)
@@ -1087,7 +1087,7 @@ public enum DebugCensus {
         for n in notes {
             clock = Double(n.step) * secondsPerStep
             let p = n.params
-            text += "{\"t\":\(clock),\"step\":\(n.step),\"i\":\"\(n.instrument.rawValue)\",\"v\":\(p.voice ?? -1),\"p\":\(p.pitch ?? -1),\"len\":\(p.lengthSteps),\"vel\":\(n.velocity),\"bpm\":\(bpm),\"prog\":\(chord)}\n"
+            text += "{\"t\":\(clock),\"step\":\(n.step),\"i\":\"\(n.instrument.rawValue)\",\"v\":\(p.voice ?? -1),\"p\":\(p.pitch ?? -1),\"len\":\(p.lengthSteps),\"vel\":\(n.velocity),\"bpm\":\(bpm),\"prog\":\(chord),\"key\":\(key),\"scale\":\(scale),\"perBar\":\(perBar)}\n"
         }
         handle?.write(text.data(using: .utf8)!)
     }

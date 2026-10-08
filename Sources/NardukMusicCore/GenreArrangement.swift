@@ -134,6 +134,8 @@ struct StepContext {
         let bar = min(phraseInSection, max(1, sectionPhrases) - 1) * barsPerPhrase + barInPhrase
         return total > 1 ? min(1, Double(bar) / Double(total - 1)) : 1
     }
+    /// The bars a pad starts on: every other bar, every bar where the chords move each bar (tropical house).
+    var padBar: Bool { barInPhrase % 2 == 0 || track.genre == .tropicalHouse }
     /// The second half of the phrase.
     var inSecondHalf: Bool { barsPerPhrase >= 4 && barInPhrase >= barsPerPhrase / 2 }
 
@@ -475,12 +477,13 @@ enum GenreArrangement {
                 add(.hat, (pos % 4 == 2 ? 0.18 : 0.12) + 0.3 * max(c.level, style == 2 ? 0.3 : 0))
             }
             // Once the input wakes up, a soft sub hums the progression two bars at a time.
-            if c.level > (style == 3 ? 0 : 0.3), pos == 0, c.barInPhrase % 2 == 0 {
-                add(low, style == 3 ? 0.55 : 0.4, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar * 2)))
+            if c.level > (style == 3 ? 0 : 0.3), pos == 0, c.padBar {
+                let bars = c.barInPhrase % 2 == 0 && genre != .tropicalHouse ? 2 : 1
+                add(low, style == 3 ? 0.55 : 0.4, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar * bars)))
             }
             // The second half of every phrase moves: the pad swells and a soft hat pickup leads into the bars between.
             let swell = c.inSecondHalf ? 1.3 : 1
-            if style != 2, pos == 0, c.barInPhrase % 2 == 0 {
+            if style != 2, pos == 0, c.padBar {
                 pad(c, velocity: (style == 1 ? 0.36 : 0.22) * swell, add: add)
             }
             if c.inSecondHalf, pos == 15, style == 2 || c.barInPhrase % 2 == 1 { add(.hat, 0.12 + 0.2 * c.level) }
@@ -493,7 +496,7 @@ enum GenreArrangement {
             if style == 0, c.level > 0.08, pos % 4 == 2 { add(.hat, 0.15 + 0.2 * c.level) }
             if style == 3, pos % 2 == 0 { add(.hat, 0.12 + 0.2 * c.level) }
             if pos == 0 { add(low, 0.45, NoteParams(pitch: subPitch, lengthSteps: held(c.perBar))) }
-            if style != 2, pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
+            if style != 2, pos == 0, c.padBar { pad(c, velocity: style == 1 ? 0.42 : 0.3, add: add) }
             // Tropical house keeps its hook through the breakdown, softly, handed to a recorded sax or nylon guitar
             // (by the track's breakdown style) over the pads.
             if genre == .tropicalHouse {
@@ -580,14 +583,16 @@ enum GenreArrangement {
         }
         let voice = genre == .tropicalHouse ? KeysVoice.pumpPad : KeysVoice.pad
         let notes = chord(c, degree: c.chord, base: c.keyRoot - 12, seventh: Self.lush(c.track.genre))
-        // Tropical house's chords are a recorded piano, the pumping pad a quieter bed beneath it.
-        let padVelocity = genre == .tropicalHouse ? velocity * 0.6 : velocity
+        // Tropical house's chords are a recorded piano, the pumping pad a softer bed beneath it. Its chords move every
+        // bar (`Banks.tropicalProgression`), so it plays a bar at a time; the other genres hold two.
+        let padVelocity = genre == .tropicalHouse ? velocity * 1.2 : velocity
+        let bars = genre == .tropicalHouse ? 1 : 2
         for pitch in notes {
-            add(.keys, padVelocity, NoteParams(pitch: pitch, lengthSteps: c.perBar * 2, voice: voice))
+            add(.keys, padVelocity, NoteParams(pitch: pitch, lengthSteps: bars * c.perBar, voice: voice))
         }
         if genre == .tropicalHouse {
             for pitch in notes {
-                add(.keys, velocity, NoteParams(pitch: pitch + 12, lengthSteps: c.perBar * 2, voice: KeysVoice.sampledPiano))
+                add(.keys, velocity, NoteParams(pitch: pitch + 12, lengthSteps: bars * c.perBar, voice: KeysVoice.sampledPiano))
             }
         }
     }
@@ -1028,6 +1033,11 @@ enum GenreArrangement {
                 let pitch = turn ? track.pitch(c.keyRoot - 36, degree: c.chord + 4) : subPitch
                 add(.sub, 0.8, NoteParams(pitch: pitch, lengthSteps: length(2)))
             }
+            // A soft octave bounce on the last 16th of each even bar pushes into the next beat (the reference songs
+            // put 4 to 6 low hits a second under the groove; offbeats alone gave about 3.7).
+            if pos == 15, c.barInPhrase % 2 == 0 {
+                add(.sub, 0.55, NoteParams(pitch: subPitch + 12, lengthSteps: 1))
+            }
         case .rock, .folk, .funk:
             break  // the band's bass guitar is written above
         }
@@ -1099,11 +1109,13 @@ enum GenreArrangement {
             // bars in four, nearer the reference songs' 70-90%.
             let call = c.barInPhrase % 4
             if call < 2 || call == 2 && !c.vocals { keysHook(genre, c, velocity: 0.6, add: add) }
+            // The fourth bar's first half finishes the phrase; the congas answer in its second.
+            if call == 3, !c.vocals, pos < 8 { keysHook(genre, c, velocity: 0.5, add: add) }
             if call == 3, !c.isLastBar {
                 if pos == 10 { add(.keys, 0.42, NoteParams(pitch: 64, lengthSteps: 2, voice: KeysVoice.sampledConga)) }
                 if pos == 14 { add(.keys, 0.5, NoteParams(pitch: 55, lengthSteps: 2, voice: KeysVoice.sampledConga)) }
             }
-            if pos == 0, c.barInPhrase % 2 == 0 { pad(c, velocity: 0.32, add: add) }
+            if pos == 0, c.padBar { pad(c, velocity: 0.32, add: add) }
         case .drumAndBass:
             if pos == 0, c.barInPhrase % 2 == 0 {
                 for pitch in chord(c, degree: c.chord, base: c.keyRoot, seventh: true) {
