@@ -93,8 +93,12 @@ and sample count are named constants (`SoundFrame.bandCount`,
 
 `chroma` was added for the musical visualizers (A9b, additive with a default, so
 no existing frame or golden changes): the analysis half of "what key is this",
-for a file or a microphone. Onsets, beat and a single pitch are not here; they
-are added the same way when a visualizer needs one.
+for a file or a microphone. Onsets, beat and a single pitch are not here: a
+source without a conductor gets them from `SoundMusicInference` (Visuals),
+which hears kick, snare and hat onsets, a tempo and beat clock, an energy and a
+section in the frames and says them as a `MusicContext`, so the same
+visualizers move for recorded music. A field is added here the same way when a
+visualizer needs one that inference cannot supply.
 
 ### MusicContext (NardukMusicCore)
 
@@ -174,7 +178,11 @@ does not set `keyPitchClass`: each generated track picks its own tonic, and the
 visualizers estimate the key from the notes.
 
 When the source is not music, `music` is `nil`. Visualizers that want a wobble,
-a section or a beat fall back as in section 3.
+a section or a beat fall back as in section 3. An app that plays recorded music
+(a file, a loopback device) runs each frame through `SoundMusicInference` and
+passes what it hears as `music`; the gallery does this for its microphone and
+file sources. Inferred music is a hearing, not a score: its `step` counts 16ths
+from the first locked beat, so bars are a convention, and its notes are empty.
 
 ## 3. SoundVisualState (NardukSoundVisuals)
 

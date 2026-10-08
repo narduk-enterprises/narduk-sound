@@ -39,7 +39,8 @@ demo song, the microphone or an audio file through `NardukSoundAnalysis` into
 every Metal visualizer side by side (`xcodegen generate`, then build the
 `SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch, and on
 macOS `-audiodevice <name>` picks the microphone source's input device, so
-`-autoplay microphone -audiodevice "BlackHole 2ch"` draws what the Mac is playing).
+`-autoplay microphone -audiodevice "BlackHole 2ch"` draws what the Mac is playing,
+with the beat, hits, energy and sections `SoundMusicInference` hears in it).
 It is unsigned and local only; CI builds it for macOS and the iOS simulator.
 
 ## Reading the engine

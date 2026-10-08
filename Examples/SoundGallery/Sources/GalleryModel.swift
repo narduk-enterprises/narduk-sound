@@ -44,6 +44,12 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     @ObservationIgnored private var source: (any SoundFrameSource)?
     @ObservationIgnored private var latest = SoundFrame()
     @ObservationIgnored private let drop = DropEngine()
+    /// Hears a beat, hits, energy and sections in the microphone and file sources, which have no conductor.
+    @ObservationIgnored private let inference = SoundMusicInference()
+    @ObservationIgnored private var inferred: MusicContext?
+    /// The tempo the inference locked for a microphone or file source, whole BPM; nil for the demo song or before a lock.
+    /// Observed, so the strip's readout updates when it changes and not every frame.
+    private(set) var heardTempo: Int?
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private var player: AVAudioPlayerNode?
     @ObservationIgnored private var tap: AudioTapSource?
@@ -53,9 +59,12 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     /// The frame the last `poll` returned, for a view that draws on its own clock (the Metal tunnel).
     var latestFrame: SoundFrame { latest }
 
-    /// The engine's `MusicContext` while the demo song plays (hit counters, section, beat clock); nil for a
-    /// microphone or file, which have no conductor. The visualizers treat nil as "not music".
-    var latestMusic: MusicContext? { isRunning && input == .demo ? drop.latestMusic : nil }
+    /// The engine's `MusicContext` while the demo song plays (hit counters, section, beat clock); for a microphone or
+    /// file, which have no conductor, the context `SoundMusicInference` hears in their frames. Nil while stopped.
+    var latestMusic: MusicContext? {
+        guard isRunning else { return nil }
+        return input == .demo ? drop.latestMusic : inferred
+    }
 
     /// The frame and, for the demo song, its music: what every visualizer polls.
     var latestInput: SoundVisualInput { SoundVisualInput(frame: latest, music: latestMusic) }
@@ -126,13 +135,18 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     }
 
     /// The latest frame at `date`; silence while nothing plays. Also advances `visualState` (with the demo song's
-    /// `MusicContext`; other sources drive the visualizers from their frames alone, as the contract allows).
+    /// `MusicContext`, or the one inferred from a microphone or file).
     func poll(at date: Date) -> SoundFrame {
         let now = date.timeIntervalSinceReferenceDate
         if isPaused {
             // Hold the last frame; the state still advances below so a color change eases in.
         } else if let source {
             latest = source.poll(time: now - clockOrigin)
+            if input != .demo {
+                inferred = inference.update(latest)
+                let tempo = inference.tempoBPM.map { Int($0.rounded()) }
+                if tempo != heardTempo { heardTempo = tempo }
+            }
         } else {
             latest = SoundFrame()
         }
@@ -174,6 +188,9 @@ enum GalleryInput: String, CaseIterable, Identifiable {
         fileAccess?.stopAccessingSecurityScopedResource()
         fileAccess = nil
         source = nil
+        inference.reset()
+        inferred = nil
+        heardTempo = nil
         isRunning = false
     }
 
