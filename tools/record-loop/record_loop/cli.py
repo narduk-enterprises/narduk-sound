@@ -371,7 +371,13 @@ def cmd_listen(args: argparse.Namespace) -> int:
     """A blind kit: shuffled, loudness-matched clips with hidden sources, a scoresheet, a page and a sealed key."""
     import random
 
-    groups = {"engine": (args.engine, args.engine_window), "model": (args.model, "35%"), "anchor": (args.anchor, "35%")}
+    # `before` is an earlier engine build for a before/after kit: cut at the engine's window, like `engine`.
+    groups = {
+        "engine": (args.engine, args.engine_window),
+        "before": (args.before, args.engine_window),
+        "model": (args.model, "35%"),
+        "anchor": (args.anchor, "35%"),
+    }
     items = [(group, path, window) for group, (paths, window) in groups.items() for path in paths or []]
     random.Random(args.seed).shuffle(items)
     out = Path(args.out)
@@ -464,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("listen")
     a.add_argument("--out", required=True)
     a.add_argument("--engine", nargs="*")
+    a.add_argument("--before", nargs="*", help="an earlier engine build's renders, for a before/after kit")
     a.add_argument("--model", nargs="*")
     a.add_argument("--anchor", nargs="*")
     # Inside the song plan's second drop, like the gap window.
