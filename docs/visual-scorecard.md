@@ -82,9 +82,10 @@ RGB change from the previous frame, 0 to 1) and the hue and saturation of the me
 
 `VisualScorecard.Transform` is `(SoundVisualInput) -> SoundVisualInput`, applied to the player's input right before
 `SoundVisualState.update`. The yardstick (rms, hit times) is always read from the raw input, so a transform changes the
-picture and not what it is scored against. Two ship:
+picture and not what it is scored against. Three ship:
 
 - `identity`: no change.
+- `energy`: the music energy a re-recorded song would carry (see the caveats). Not run by default.
 - `rescale`: per spectrum band, the song's p5 maps to 0 and its p98 to 1 (clamped), computed over the whole song's
   spectrum. A stand-in for an app's per-song contrast normalisation.
 
@@ -98,6 +99,9 @@ transform with `identity`.
   spectrum at 8 bits and the waveform at 32 points.
 - Motion is a pixel difference, so a fast but uniform flicker and a slow wide change can score alike; read `motion_p99`
   and the frame series when a number looks odd.
-- A recorded timeline has `music.energy` of 0 throughout (the conductor energy is not inferred from audio), so a
-  shader gated on `energy` draws almost nothing from one: Fireworks is a static night sky in every run.
+- A timeline recorded before `SoundMusicInference` published its loudness as `music.energy` holds 0 there throughout,
+  and a shader gated on `energy` draws almost nothing from one: Fireworks is a static night sky in every `identity`
+  run of such a file. The audio is not needed to see what a re-recording would give: the `energy` transform replays the
+  song's stored frames through a fresh `SoundMusicInference` and puts its energy into the context (`SCORE_TRANSFORMS=energy`).
+  It hears the 8-bit, grid-rate frames and not the live ones, so it is a close stand-in for a re-recording, not the same.
 - 480x270 is below the live drawable size; thin features can drop out, so compare visualizers on the same size only.
