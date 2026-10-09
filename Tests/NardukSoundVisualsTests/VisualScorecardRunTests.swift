@@ -276,6 +276,7 @@
                     switch name {
                     case "identity": (name, VisualScorecard.identity)
                     case "rescale": (name, VisualScorecard.rescale(timeline))
+                    case "energy": (name, VisualScorecard.reinferredEnergy(timeline))
                     default: nil
                     }
                 }

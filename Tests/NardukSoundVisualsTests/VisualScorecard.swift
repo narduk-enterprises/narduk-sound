@@ -224,6 +224,27 @@ enum VisualScorecard {
 
     static let identity: Transform = { $0 }
 
+    /// The music energy a re-recording of the song would store: the whole song's frames run through a fresh
+    /// `SoundMusicInference` at 60 Hz, and its `latest.energy` is put into the context of the frame at that time. A
+    /// timeline recorded before the inference published an energy holds 0 there. Everything else is untouched.
+    static func reinferredEnergy(_ timeline: SoundTimeline) -> Transform {
+        let player = SoundTimelinePlayer(timeline)
+        let inference = SoundMusicInference()
+        let count = Int(timeline.duration * fps) + 1
+        var table = [Float](repeating: 0, count: count)
+        for k in 0..<count {
+            let input = player.input(at: Double(k) / fps)
+            table[k] = inference.update(input.frame).energy
+        }
+        let energies = table
+        return { input in
+            var out = input
+            let k = min(max(Int((input.frame.time * fps).rounded()), 0), energies.count - 1)
+            out.music?.energy = energies[k]
+            return out
+        }
+    }
+
     /// A per-band rescale of the spectrum: each band's p5 maps to 0 and its p98 to 1 (clamped), taken over the whole
     /// song. A stand-in for the per-song contrast normalisation an app would ship.
     static func rescale(_ timeline: SoundTimeline) -> Transform {
