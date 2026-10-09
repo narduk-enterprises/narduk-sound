@@ -166,7 +166,9 @@ import Testing
         let low = hookPitches(charge: 0.05)
         let high = hookPitches(charge: 1)
         try #require(!low.isEmpty && !high.isEmpty)
-        #expect(high.reduce(0, +) / high.count > low.reduce(0, +) / low.count)
+        let highMean = high.reduce(0, +) / high.count
+        let lowMean = low.reduce(0, +) / low.count
+        #expect(highMean > lowMean)
     }
 
     @Test func genreBiasesTheMovesWithoutReplacingTheSong() {

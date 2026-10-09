@@ -88,7 +88,7 @@
             let source = [
                 shared, HyperspaceShader.source, FluidGlitchShader.source, FractalDiveShader.source,
                 SynthwaveShader.source, LiquidSplashShader.source, SunShader.source, SpectrumMetalShader.source,
-                VortexMetalShader.source, HaloMetalShader.source, ScopeMetalShader.source,
+                VortexMetalShader.source, HaloMetalShader.source, HaloOrbitShader.source, ScopeMetalShader.source,
                 WobbleMeterMetalShader.source,
                 PadsMetalShader.source, MirrorMetalShader.source, PhosphorMetalShader.source,
                 PianoRollMetalShader.source, PitchWheelMetalShader.source, AudioTerrainMetalShader.source,
