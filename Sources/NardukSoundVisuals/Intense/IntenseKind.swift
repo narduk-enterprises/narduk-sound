@@ -75,6 +75,9 @@ public struct IntenseKind: Sendable, Hashable, Identifiable {
     /// A radial spectrum of lit needles around a glossy plasma core with a waveform ring, beat rings and shed sparks.
     public static let halo = IntenseKind(
         id: "halo", title: "Halo", fragment: "haloMetalFragment", auxMask: 1)
+    /// An opt-in Halo motion-design trial: a breathing core, tilted spectrum crown and sparse orbital beads.
+    public static let haloOrbit = IntenseKind(
+        id: "haloOrbit", title: "Halo orbit (trial)", fragment: "haloOrbitFragment")
     /// A stereo-goniometer Lissajous with persistence trails on a lit CRT graticule.
     public static let phosphor = IntenseKind(
         id: "phosphor", title: "Phosphor", fragment: "phosphorMetalFragment", auxMask: 3)
@@ -135,7 +138,7 @@ public struct IntenseKind: Sendable, Hashable, Identifiable {
 
     public static let allCases: [IntenseKind] = [
         .hyperspaceLasers, .fluidGlitch, .fractalDive, .synthwaveFlyover, .liquidSplash, .sun,
-        .spectrum, .vortex, .halo, .scope, .wobbleMeter, .pads, .mirror, .phosphor, .pianoRoll, .pitchWheel,
+        .spectrum, .vortex, .halo, .haloOrbit, .scope, .wobbleMeter, .pads, .mirror, .phosphor, .pianoRoll, .pitchWheel,
         .audioTerrain, .particleField, .kaleidoscope, .jellyfish, .flower, .flameSun, .bioluminescentSea, .blackHole,
         .geometricChaos, .amberHelix, .astraUnbound, .mercuryLoom, .pocketAutomaton, .synapticGate,
         .tidalObservatory, .vaultedEngine,
