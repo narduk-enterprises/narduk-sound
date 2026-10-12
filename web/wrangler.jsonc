@@ -1,0 +1,13 @@
+// The public demo at https://visualizers.nard.uk: a static-assets Worker serving the built demo (npm run demo:build).
+// Deploy: npm run deploy, under a Cloudflare token holding Workers Scripts Write on the narduk-enterprises account and
+// Workers Routes Write and Zone Read on the nard.uk zone (docs/web-port.md, "The public demo").
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "narduk-sound-visualizers",
+  "account_id": "73a85923e2b7cf8f29d0b8c89de9d265",
+  "compatibility_date": "2026-09-28",
+  "assets": { "directory": "./dist-demo" },
+  "routes": [{ "pattern": "visualizers.nard.uk", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false
+}
