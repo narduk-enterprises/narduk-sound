@@ -3,6 +3,7 @@ import { AudioTap, type SampleSource, type SoundSourceInput } from "./audio.js";
 import { FrameGovernor } from "./budget.js";
 import { Canvas2DRenderer } from "./canvas2d.js";
 import { emptyFrame } from "./frame.js";
+import { LiveDrive } from "./live.js";
 import { SoundMusicInference } from "./inference.js";
 import { isStatic, watchReducedMotion, type MotionPreference } from "./motion.js";
 import type { SoundPaletteProvider } from "./palette.js";
@@ -66,6 +67,8 @@ export class SoundVisualizer {
   private readonly music = new SoundMusicInference();
   private readonly frame = emptyFrame();
   private readonly inputs = new ShaderInputs();
+  /** The web-only layer that stretches a compressed stream's drive after the state (see `LiveDrive`). */
+  private readonly live = new LiveDrive();
   private readonly watchdog = new LumaWatchdog();
   private visual: VisualizerId;
   private motion: MotionPreference;
@@ -162,6 +165,7 @@ export class SoundVisualizer {
     this.analyzer = new SoundAnalyzer(source.sampleRate);
     this.music.reset();
     this.state.resetMusic();
+    this.live.reset();
     const element = source.element;
     if (element) {
       const onPlaying = () => this.onPlaying();
@@ -361,6 +365,7 @@ export class SoundVisualizer {
     const luma = this._renderer.takeLuma();
     const gain = luma === null ? this.watchdog.gain : this.watchdog.observe(luma, now);
     this.inputs.fill(this.state, this._canvas.width, this._canvas.height);
+    this.live.apply(this.inputs, this.state, now);
     this._renderer.draw(this.inputs, this.state, gain);
   }
 
