@@ -13,7 +13,7 @@
       h1 { margin: 0 0 4px; font-size: 1.4rem; }
       p { margin: 0 0 12px; color: #c4cede; }
       a { color: #8fdcff; }
-      #player { height: min(70vh, 640px); }
+      #player { height: min(74vh, 720px); }
       #player .nsw-player { height: 100%; }
       .options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; color: #c4cede; font-size: 0.95rem; }
       .options label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
@@ -27,6 +27,7 @@
       .sources .file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
       .sources button:focus-visible, .sources input:focus-visible, .sources .file:focus-within { outline: 3px solid #ffd166; outline-offset: 2px; }
       .hint { font-size: 0.9rem; color: #9aa7bb; }
+      kbd { padding: 1px 6px; border: 1px solid #5b6b85; border-radius: 5px; background: #111a2a; font: 0.85em ui-monospace, monospace; }
     </style>
   </head>
   <body>
@@ -46,9 +47,13 @@
       </div>
       <div id="player"></div>
       <div class="options">
+        <label><input type="checkbox" id="cycle" /> Change look every 30 s</label>
         <label><input type="checkbox" id="still" /> Still picture (reduced motion)</label>
         <span id="budget" aria-live="off"></span>
       </div>
+      <p class="hint">
+        Keys: <kbd>←</kbd> <kbd>→</kbd> change the look, <kbd>F</kbd> full screen, <kbd>Space</kbd> pause.
+      </p>
       <p class="hint">
         A URL plays only if its server sends <code>Access-Control-Allow-Origin</code>; without it the sound plays but the
         picture stays dark. Files never leave your device. Flashes are limited to three a second, and with reduced motion
