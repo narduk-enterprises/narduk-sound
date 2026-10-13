@@ -66,6 +66,29 @@ Options: `renderer` `"auto" | "webgl2" | "canvas2d"`, `motion` `"auto" | "full" 
 `SoundPaletteProvider`), `maxDevicePixelRatio`. Statuses: `idle`, `loading`, `playing`, `paused`, `still`, `silent`,
 `error`.
 
+## Draw from a recorded timeline (no audio)
+
+When the sound cannot be read (Apple Music's DRM audio, a track playing elsewhere), draw from what a Mac recorded of it:
+a `SoundTimeline` (`NSTL` v1, written by `SoundTimelineRecorder` in the Swift package) and the track's playhead.
+
+```ts
+import { SoundVisualizer, decodeSoundTimeline } from "@narduk-enterprises/sound-web";
+
+const timeline = decodeSoundTimeline(await (await fetch(url)).arrayBuffer()); // throws SoundTimelineError on a bad container
+const viz = new SoundVisualizer(canvas, { visual: "halo" });
+viz.setTimeline(timeline, () => musicKit.currentPlaybackTime ?? null); // polled every frame: seconds, or null
+viz.setAmbient(true); // with no timeline (and no audio): the quiet ambient drift
+```
+
+No tap or gesture is needed (nothing plays); the status is `playing` (or `still` under reduced motion). `playhead` is
+seconds into the track, or `null` while paused or unknown: the last picture is held with its beat clock stopped, then
+fades over about three seconds to the ambient drift (a slow breathing near 0.15 energy, no beat, no hits); a playhead at
+or past `timeline.header.duration` counts as unknown. A seek in either direction fires no hits. `setTimeline` replaces a
+playing audio source, `start()` replaces a timeline, and `setTimeline(null, ...)` returns to the ambient drift when
+`setAmbient(true)` is on, else the visualizer goes `idle`. `viz.driver` says which one draws: `"audio"`, `"timeline"`,
+`"ambient"` or `null`. A timeline URL on another origin must send `Access-Control-Allow-Origin`. The demo draws one with
+`?timeline=<url>` (`?timeline=fixture` is a short built-in; `?ambient` is the drift alone).
+
 ## Music inference
 
 A stream has no conductor, so the visualizer runs a `SoundMusicInference` over the analysis frames (a port of the Swift

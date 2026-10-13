@@ -84,9 +84,14 @@ export class LiveDrive {
     this.bandsPrimed = false;
   }
 
-  /** Rewrites the drive channels of `inputs` (just filled from `state`) for the frame at `now` seconds. */
-  apply(inputs: ShaderInputs, state: SoundVisualState, now: number): void {
-    if (!this.enabled || state.calm) return;
+  /**
+   * Rewrites the drive channels of `inputs` (just filled from `state`) for the frame at `now` seconds. `amount` (0 ... 1,
+   * default 1) mixes the result with what `inputs` held: a timeline fading to the ambient drift lowers it to 0, so the
+   * quiet breathing is never stretched.
+   */
+  apply(inputs: ShaderInputs, state: SoundVisualState, now: number, amount = 1): void {
+    if (!this.enabled || state.calm || !(amount > 0)) return;
+    const mix = amount >= 1 ? (_before: number, after: number) => after : (before: number, after: number) => before + (after - before) * amount;
     const dt = this.lastNow === -Infinity ? 1 / 60 : Math.min(Math.max(now - this.lastNow, 0), 0.1);
     this.lastNow = now;
     if (state.isSilent || dt <= 0) return;
@@ -94,9 +99,12 @@ export class LiveDrive {
 
     // Envelopes.
     const kick = Math.pow(state.kick, LiveDrive.kickPunch);
-    u[U.kick] = kick;
-    u[U.snare] = Math.pow(state.snare, LiveDrive.snarePunch);
-    u[U.hat] = Math.min(1, state.hat * LiveDrive.hatGain);
+    const wildBefore = u[U.wild];
+    const energyBefore = u[U.energy];
+    u[U.kick] = mix(u[U.kick], kick);
+    const snare = Math.pow(state.snare, LiveDrive.snarePunch);
+    u[U.snare] = mix(u[U.snare], snare);
+    u[U.hat] = mix(u[U.hat], Math.min(1, state.hat * LiveDrive.hatGain));
 
     // Energy and wild: the slow energy and the fast level, each against its own range, plus a lift on a hit.
     this.level += (state.level - this.level) * Math.min(1, dt * (state.level > this.level ? 20 : 5));
@@ -105,10 +113,10 @@ export class LiveDrive {
     const relative = 0.4 * this.energyNorm.position(state.energy, 2.5, 0.01) + 0.6 * this.levelNorm.position(this.level, 2.5, 0.02);
     // A quarter absolute, so a loud passage still reads louder than a quiet one after the norm catches up.
     const stretched = 0.75 * relative + 0.25 * clamp01(state.energy / 0.45);
-    const lift = 0.1 * Math.max(kick, u[U.snare]);
+    const lift = 0.1 * Math.max(kick, Math.fround(snare));
     const energy = clamp01(0.06 + 0.8 * stretched + lift);
-    u[U.energy] = energy;
-    u[U.wild] = clamp01(state.wild + (energy - state.energy));
+    u[U.energy] = mix(energyBefore, energy);
+    u[U.wild] = mix(wildBefore, clamp01(state.wild + (energy - state.energy)));
 
     // Spectrum and caps: scale each band's deviation from its running mean up to the target size.
     const row = DataRow.spectrum * DATA_WIDTH;
@@ -124,8 +132,9 @@ export class LiveDrive {
       deviation[b] += (Math.abs(value - mean[b]) - deviation[b]) * deviationRate;
       const gain = Math.min(Math.max(LiveDrive.bandDeviation / (deviation[b] + 1e-3), 1), LiveDrive.maxBandGain);
       const bar = clamp01(mean[b] + (value - mean[b]) * gain);
-      data[row + b] = bar;
-      data[caps + b] = Math.max(bar, clamp01(mean[b] + (state.peaks[b] - mean[b]) * gain));
+      const cap = Math.max(bar, clamp01(mean[b] + (state.peaks[b] - mean[b]) * gain));
+      data[row + b] = mix(data[row + b], bar);
+      data[caps + b] = mix(data[caps + b], cap);
     }
     this.bandsPrimed = true;
   }

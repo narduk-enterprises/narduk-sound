@@ -2,6 +2,7 @@ import { SoundAnalyzer } from "./analysis.js";
 import { AudioTap, type SampleSource, type SoundSourceInput } from "./audio.js";
 import { FrameGovernor } from "./budget.js";
 import { Canvas2DRenderer } from "./canvas2d.js";
+import { AmbientFeed, TimelineFeed, type InputFeed } from "./feed.js";
 import { emptyFrame } from "./frame.js";
 import { LiveDrive } from "./live.js";
 import { SoundMusicInference } from "./inference.js";
@@ -12,6 +13,7 @@ import { LumaWatchdog } from "./safety.js";
 import type { VisualizerId } from "./shaders/index.js";
 import { SoundVisualState } from "./state.js";
 import { StreamSource, UnsupportedStreamError } from "./stream.js";
+import type { SoundTimeline } from "./timeline.js";
 import { ShaderInputs } from "./uniforms.js";
 import { WebGLRenderer } from "./webgl.js";
 
@@ -27,6 +29,9 @@ export type VisualizerStatus =
   /** Playing, but every sample is zero: usually a cross-origin stream without CORS headers. */
   | "silent"
   | "error";
+
+/** What the visualizer draws from: a playing sound, a recorded timeline, the quiet ambient drift, or nothing yet. */
+export type VisualizerDriver = "audio" | "timeline" | "ambient" | null;
 
 export interface SoundVisualizerOptions {
   visual?: VisualizerId;
@@ -62,6 +67,11 @@ export class SoundVisualizer {
   private _canvas: HTMLCanvasElement;
   private _renderer: SoundRenderer;
   private source: SampleSource | null = null;
+  /** The timeline and playhead `setTimeline` was given, and whether `setAmbient` is on. */
+  private timelineSpec: { timeline: SoundTimeline; playhead: () => number | null } | null = null;
+  private ambient = false;
+  /** Draws timeline or ambient frames when there is no audio source (null while audio plays or nothing is set). */
+  private feed: InputFeed | null = null;
   private analyzer: SoundAnalyzer | null = null;
   /** One per source: hears the hits, tempo and sections in the analyzer's frames (reset when the source changes). */
   private readonly music = new SoundMusicInference();
@@ -149,6 +159,12 @@ export class SoundVisualizer {
   get currentVisual(): VisualizerId {
     return this.visual;
   }
+  /** What is being drawn from: "audio" (a source was started), "timeline", "ambient", or null. */
+  get driver(): VisualizerDriver {
+    if (this.source) return "audio";
+    if (this.feed instanceof TimelineFeed) return "timeline";
+    return this.feed ? "ambient" : null;
+  }
 
   /**
    * Starts `input` (an element, a stream URL, a MediaStream or a ready `SampleSource`). Call it from a user gesture.
@@ -156,6 +172,9 @@ export class SoundVisualizer {
    */
   async start(input: SoundSourceInput | SampleSource): Promise<void> {
     await this.stopSource();
+    // Sound replaces a timeline (and the ambient drift) as the driver.
+    this.timelineSpec = null;
+    this.feed = null;
     this.setStatus("loading");
     // An http(s) URL is fetched and decoded (StreamSource): WebKit's media-element path reads a live stream as
     // silence. A blob: URL, an element or a MediaStream goes through the AudioTap.
@@ -201,16 +220,16 @@ export class SoundVisualizer {
   }
 
   async pause(): Promise<void> {
-    if (!this.source) return;
+    if (!this.driven) return;
     this.enterPaused();
-    await this.source.pause();
+    await this.source?.pause();
   }
 
   async resume(): Promise<void> {
-    if (!this.source) return;
+    if (!this.driven) return;
     this.setStatus("loading");
-    await this.source.resume();
-    if (!this.source.element) this.onPlaying();
+    await this.source?.resume();
+    if (!this.source?.element) this.onPlaying();
   }
 
   async togglePause(): Promise<void> {
@@ -218,10 +237,37 @@ export class SoundVisualizer {
     else await this.pause();
   }
 
+  /**
+   * Draws from a recorded `SoundTimeline` instead of audio, with no sound and no user gesture. `playhead` is polled every
+   * frame: seconds into the track, or `null` while paused or unknown, which holds the last picture (beat clock stopped)
+   * and then fades it to the quiet ambient drift (see `TimelineFeed`). A playhead at or past the timeline's duration
+   * counts as unknown. The visualizer's state and flash rules run exactly as for live audio.
+   *
+   * Replaces a playing audio source (stopped here), and a later `start()` replaces the timeline. `setTimeline(null, ...)`
+   * returns to the ambient drift when `setAmbient(true)` is on, else the visualizer goes idle. Under reduced motion it
+   * draws one still of the current playhead, redrawn when `setTimeline`, `setVisual` or a resize asks.
+   */
+  setTimeline(timeline: SoundTimeline | null, playhead: () => number | null): void {
+    this.timelineSpec = timeline ? { timeline, playhead } : null;
+    if (timeline && this.source) void this.stopSource();
+    this.applyFeed(true);
+  }
+
+  /**
+   * With no audio source and no timeline, draws the quiet `AmbientDrift` (a slow breathing near 0.15 energy; no beat, no
+   * hits) when `on`. A timeline or a started source takes precedence; the ambient drift is still what a timeline fades
+   * to while its playhead is null.
+   */
+  setAmbient(on: boolean): void {
+    if (on === this.ambient) return;
+    this.ambient = on;
+    this.applyFeed(false);
+  }
+
   setVisual(id: VisualizerId): void {
     this.visual = id;
     this._renderer.setVisual(id);
-    if (this.isStatic && this.source) this.drawStill();
+    if (this.isStatic && this.driven) this.drawStill();
   }
 
   setMotion(preference: MotionPreference): void {
@@ -241,6 +287,38 @@ export class SoundVisualizer {
   }
 
   // MARK: Internals
+
+  /** True while something feeds the picture: a started audio source, a timeline or the ambient drift. */
+  private get driven(): boolean {
+    return this.source !== null || this.feed !== null;
+  }
+
+  /**
+   * Picks the feed the current settings call for (a timeline, else the ambient drift, else none) and starts drawing it.
+   * `fresh` builds a new feed even when the kind is unchanged (a new timeline or playhead). A new feed tells the state
+   * to adopt its hit counters without firing, so switching never reads as a burst of hits.
+   */
+  private applyFeed(fresh: boolean): void {
+    if (this.source) return;
+    const kind = this.timelineSpec ? "timeline" : this.ambient ? "ambient" : null;
+    const current = this.feed === null ? null : this.feed instanceof TimelineFeed ? "timeline" : "ambient";
+    if (kind === current && !fresh) return;
+    this.feed = this.timelineSpec
+      ? new TimelineFeed(this.timelineSpec.timeline, this.timelineSpec.playhead)
+      : this.ambient
+        ? new AmbientFeed()
+        : null;
+    this.state.resetMusic();
+    this.live.reset();
+    if (this.feed) {
+      this.silentSince = -1;
+      this.onPlaying(0);
+    } else {
+      this.stopLoop();
+      clearTimeout(this.stillTimer);
+      this.setStatus("idle");
+    }
+  }
 
   private makeRenderer(kind: "auto" | "webgl2" | "canvas2d"): SoundRenderer {
     if (kind === "canvas2d") return new Canvas2DRenderer(this._canvas);
@@ -275,12 +353,12 @@ export class SoundVisualizer {
     }
   }
 
-  private onPlaying(): void {
+  private onPlaying(stillDelay = STILL_AFTER): void {
     this.silentSince = -1;
     if (this.isStatic) {
       this.setStatus("still");
       clearTimeout(this.stillTimer);
-      this.stillTimer = setTimeout(() => this.drawStill(), STILL_AFTER * 1000);
+      this.stillTimer = setTimeout(() => this.drawStill(), stillDelay * 1000);
     } else {
       this.setStatus("playing");
       this.startLoop();
@@ -294,7 +372,7 @@ export class SoundVisualizer {
   }
 
   private applyMotion(): void {
-    if (!this.source || this._status === "paused" || this._status === "idle" || this._status === "error") return;
+    if (!this.driven || this._status === "paused" || this._status === "idle" || this._status === "error") return;
     if (this.isStatic) {
       this.stopLoop();
       this.setStatus("still");
@@ -312,7 +390,7 @@ export class SoundVisualizer {
     const { width, height } = this.governor.backingSize(cssWidth, cssHeight);
     this._renderer.resize(width, height);
     // A resize clears the canvas: redraw a held picture once.
-    if (this.source && (this._status === "paused" || this._status === "still")) this.drawHeld();
+    if (this.driven && (this._status === "paused" || this._status === "still")) this.drawHeld();
   }
 
   private updateVisibility(): void {
@@ -323,7 +401,7 @@ export class SoundVisualizer {
   }
 
   private startLoop(): void {
-    if (this.raf || !this.source || this.isStatic) return;
+    if (this.raf || !this.driven || this.isStatic) return;
     if (!(this.pageVisible && this.onScreen)) return;
     this.lastDraw = -Infinity;
     this.raf = requestAnimationFrame(this.tick);
@@ -358,14 +436,19 @@ export class SoundVisualizer {
 
   /** One animated frame at `now` seconds. */
   private step(now: number): void {
-    if (!this.source || !this.analyzer) return;
-    const frame = this.analyzer.analyze(this.source.read(), now, this.frame);
-    this.state.update(frame, now, {}, this.music.update(frame));
-    this.watchSilence(now);
+    if (this.feed) {
+      // A timeline or the ambient drift: no analysis, and nothing to watch for silence (a recorded intro can be silent).
+      const input = this.feed.input(now);
+      this.state.update(input.frame, now, {}, input.music);
+    } else if (this.source && this.analyzer) {
+      const frame = this.analyzer.analyze(this.source.read(), now, this.frame);
+      this.state.update(frame, now, {}, this.music.update(frame));
+      this.watchSilence(now);
+    } else return;
     const luma = this._renderer.takeLuma();
     const gain = luma === null ? this.watchdog.gain : this.watchdog.observe(luma, now);
     this.inputs.fill(this.state, this._canvas.width, this._canvas.height);
-    this.live.apply(this.inputs, this.state, now);
+    this.live.apply(this.inputs, this.state, now, this.feed ? this.feed.liveAmount : 1);
     this._renderer.draw(this.inputs, this.state, gain);
   }
 
@@ -390,12 +473,19 @@ export class SoundVisualizer {
    * frames to reach it) and draws once.
    */
   private drawStill(): void {
-    if (!this.source || !this.analyzer || !this.isStatic) return;
+    if (!this.isStatic) return;
     const base = performance.now() / 1000;
-    for (let i = 0; i < 24; i++) {
-      const frame = this.analyzer.analyze(this.source.read(), base + i / 60, this.frame);
-      this.state.update(frame, base + i / 60, { calm: true });
-    }
+    if (this.feed) {
+      for (let i = 0; i < 24; i++) {
+        const input = this.feed.input(base + i / 60);
+        this.state.update(input.frame, base + i / 60, { calm: true }, input.music);
+      }
+    } else if (this.source && this.analyzer) {
+      for (let i = 0; i < 24; i++) {
+        const frame = this.analyzer.analyze(this.source.read(), base + i / 60, this.frame);
+        this.state.update(frame, base + i / 60, { calm: true });
+      }
+    } else return;
     this.drawHeld();
   }
 

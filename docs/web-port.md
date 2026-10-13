@@ -15,6 +15,7 @@ in sync. The Swift code is the source of truth; the web port follows it and neve
 | `IntenseFlashLimiter`, `IntenseLumaWatchdog`    | `safety.ts`                    | the fixture (limiter, watchdog, flash colours)      |
 | `SoundRenderBudget`                             | `budget.ts`                    | the fixture (budget, rates)                         |
 | `IntenseUniforms`, `IntenseAux`                 | `uniforms.ts`                  | `web/test/shaders.test.ts` reads the Swift sources  |
+| `SoundTimeline` (NSTL v1), `SoundTimelinePlayer` | `timeline.ts`                  | `web/fixtures/sound-timeline.json` (bytes and player states) |
 | each `*MetalShader.swift`                       | `src/shaders/<id>.ts`          | the recorded `metalSha256` of the Metal file        |
 
 `Tests/NardukSoundVisualsTests/WebContractFixtureTests.swift` runs scripted signals through the Swift types and
@@ -57,6 +58,44 @@ Inference's onset floors are in band units, so it must read the same window as t
 default `SoundAnalyzer(rate)` is the `"apple"` window (4.26 dB hotter than Linux, #67), which is what the Apple apps
 hear, and the demo keeps it. Regenerating the fixture on a Mac keeps the Linux `analysis` section (the writer reads it
 back instead of overwriting it with Apple's bands).
+
+## Timelines: `SoundTimeline`, `SoundTimelinePlayer`, `setTimeline`
+
+A page that cannot hear a track (Apple Music is DRM audio) draws it from a timeline a Mac recorded with
+`SoundTimelineRecorder`. `timeline.ts` is a port of `SoundTimeline.swift` (the NSTL v1 container: `decodeSoundTimeline`,
+planar little-endian blocks read through a `DataView`, the same four decoding errors as `SoundTimelineError.reason`) and
+of `SoundTimelinePlayer.swift` (interpolated spectrum, chroma and levels; nearest-sample waveform restored from 32 points
+to 512 with the same Catmull-Rom; the beat clock between samples; hit counters that only go up and add nothing across a
+seek; the end held and stopped). Arithmetic rounds to `Float` where Swift's does, so the two agree to under 1e-6.
+
+`Tests/NardukSoundVisualsTests/WebTimelineFixtureTests.swift` records a timeline from a scripted drum machine (frames,
+not audio, so Linux and macOS record the same) and writes `web/fixtures/sound-timeline.json`: the NSTL bytes and what the
+Swift player returns for a script of 533 playback times (an off-grid 144 Hz run, a repeated time, a forward jump, a
+backward seek, the end and past it, a negative time and NaN). `web/test/timeline.test.ts` decodes the same bytes and
+replays the same times: hit counters, step, section and flags exactly, frames and contexts to 2e-6. Regenerate after a
+deliberate Swift change:
+
+```sh
+NARDUK_WRITE_WEB_FIXTURES=1 swift test --filter WebTimelineFixtureTests   # rewrites web/fixtures/sound-timeline.json
+cd web && npm test
+```
+
+`SoundVisualizer.setTimeline(timeline, playhead)` feeds the player's frame and `MusicContext` through the same
+`SoundVisualState.update` and `ShaderInputs.fill` as live audio (`TimelineFeed` in `feed.ts`); `setAmbient(true)` draws
+`AmbientDrift` (`ambient.ts`, the sound-tv drift: energy 0.15 plus or minus 0.035, no beat, no hits). Behaviour with no
+playhead, precedence between audio, timeline and ambient, and reduced motion are in `web/README.md`. The state's `now` is
+the animation clock; the playhead only indexes the player, so a seek never looks like time running backwards. A new feed
+calls `state.resetMusic()` so the state adopts its hit counters without firing, and the silence watch is off (a recorded
+intro can be silent).
+
+LiveDrive applies to timelines. A recorded timeline is the same compressed signal a stream is: on four stored Apple
+Music tracks (3 to 5 minutes, 60 Hz, played through `SoundVisualState` and `ShaderInputs.fill` at 60 fps) the state's
+energy sat in 0.41 ... 0.44 (swing p98 - p5 0.03 ... 0.11), where LiveDrive widens it to 0.37 ... 0.44 swing. Bands that
+already move (a kick band, p98 - p5 0.7) stay the same, bands that sit near a level gain 2 ... 3 times the swing. The
+only timeline-specific rule is `LiveDrive.apply(..., amount)`: the feed passes 1 while the timeline plays, falls to 0
+with the fade to the ambient drift, and is 0 for the ambient feed, so the quiet breathing is never stretched. sound-tv
+instead stretches each song with a `ContrastMap` (per-song percentiles, needs the whole timeline in hand); that is not
+ported.
 
 ## Live drive: `LiveDrive` (web only, not in the contract)
 
