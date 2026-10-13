@@ -95,7 +95,9 @@ import Testing
         for k in 0..<24 { t.append(1.2 + Double(k) / 60) }  // a backward seek
         t.append(1.6 - 0.01)  // a small step back
         t.append(contentsOf: [2.0, 2.0 + 1.0 / 120, 2.0 + 1.0 / 60])  // a jump, then half and one grid step
-        t.append(contentsOf: [duration - 0.05, duration - 1.0 / 120, duration, duration + 1, duration + 2, duration - 0.5])
+        t.append(contentsOf: [
+            duration - 0.05, duration - 1.0 / 120, duration, duration + 1, duration + 2, duration - 0.5,
+        ])
         t.append(contentsOf: [-1, nil, 0.25, 0.25 + 1.0 / 60])
         return t
     }
