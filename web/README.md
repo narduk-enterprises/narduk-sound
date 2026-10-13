@@ -48,6 +48,20 @@ viz.setVisual("scope");
 viz.destroy();
 ```
 
+Your own look (a station logo, say) is GLSL compiled after the shared prelude, with an optional image it samples as
+`uImage` (premultiplied alpha, top row at `vUv.y = 0`). It comes first in the picker:
+
+```ts
+import { registerVisualizer } from "@narduk-enterprises/sound-web";
+
+registerVisualizer({ id: "station", title: "Station", image: "/logo.png", glsl: `
+uniform sampler2D uImage;
+void main() { fragColor = vec4(texture(uImage, vUv).rgb * (0.5 + u.env.x), 1.0); }
+` });
+```
+
+The Canvas2D fallback draws `halo` for a registered look.
+
 Options: `renderer` `"auto" | "webgl2" | "canvas2d"`, `motion` `"auto" | "full" | "static"`, `palettes` (a
 `SoundPaletteProvider`), `maxDevicePixelRatio`. Statuses: `idle`, `loading`, `playing`, `paused`, `still`, `silent`,
 `error`.
