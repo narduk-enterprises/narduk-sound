@@ -58,6 +58,19 @@ default `SoundAnalyzer(rate)` is the `"apple"` window (4.26 dB hotter than Linux
 hear, and the demo keeps it. Regenerating the fixture on a Mac keeps the Linux `analysis` section (the writer reads it
 back instead of overwriting it with Apple's bands).
 
+## Live drive: `LiveDrive` (web only, not in the contract)
+
+Broadcast audio is compressed, so the state's `energy`, `wild` and band levels barely move on a live stream (KZFR:
+`u.wobble.z` stayed within 0.27 ... 0.33). The state is the Swift contract, so the web does not change it. `live.ts`
+(`LiveDrive`) runs after `ShaderInputs.fill` in `SoundVisualizer.step` and rewrites only the drive channels the shaders
+already read: `u.env` kick, snare and hat (a sharper kick and snare curve, the hat lifted to full scale), `u.wobble.z`
+energy and `u.misc.x` wild (read against their own running mean and deviation, plus a short lift on a hit), and the
+spectrum row and `Aux.peaks` (each band's deviation from its running mean scaled up to a target, never down). It never
+touches the flash path (`u.fx`, `u.extra`), passes silence and calm through, and is a no-op on a source that already
+moves. A consumer that calls `ShaderInputs.fill` itself, not through `SoundVisualizer`, calls `LiveDrive.apply` after
+it. `node scripts/measure-reactivity.mjs` (live stream or `--synthetic`) logs the state's value ("before") beside the
+drawn one ("after") from the same run, plus the photosensitivity watchdog's dimming share.
+
 Not ported (no web renderer draws them): the particle pool and the pads, and the musical state (pitch classes, key,
 piano roll). A visualizer that needs them waits for that port.
 
