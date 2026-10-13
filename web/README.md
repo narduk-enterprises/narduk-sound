@@ -52,6 +52,14 @@ Options: `renderer` `"auto" | "webgl2" | "canvas2d"`, `motion` `"auto" | "full" 
 `SoundPaletteProvider`), `maxDevicePixelRatio`. Statuses: `idle`, `loading`, `playing`, `paused`, `still`, `silent`,
 `error`.
 
+## Music inference
+
+A stream has no conductor, so the visualizer runs a `SoundMusicInference` over the analysis frames (a port of the Swift
+class) and the state reacts to what it hears: kick, snare and hat hits, a tempo lock and beat phase, energy, sections
+and drops. `state.snare`, `hat`, `impact`, `dropAmount`, `beatPulse` and `isRunning` move on real audio. To drive your
+own state, call `state.update(frame, now, options, inference.update(frame))`. The analyzer's default `"apple"` window
+matches what the Apple apps hear and what the inference was tuned on.
+
 ## Browser rules
 
 - **iOS Safari:** audio starts only from a tap, so `start()` must run inside the click handler (the player's start

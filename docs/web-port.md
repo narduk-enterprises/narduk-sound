@@ -10,7 +10,8 @@ in sync. The Swift code is the source of truth; the web port follows it and neve
 | ----------------------------------------------- | ------------------------------ | --------------------------------------------------- |
 | `SoundFrame`, `SpectrumAnalyzer`, `Loudness`    | `frame.ts`, `analysis.ts`      | `web/fixtures/sound-contract.json` (analysis)       |
 | `SoundPalette`, `DefaultSoundPaletteProvider`   | `palette.ts`                   | the fixture (palettes)                              |
-| `SoundVisualState` (the no-music path)          | `state.ts`                     | the fixture (12 state checkpoints)                  |
+| `SoundVisualState` (with and without music)     | `state.ts`                     | the fixture (12 state + 33 music checkpoints)       |
+| `SoundMusicInference`, the `MusicContext` it makes | `inference.ts`              | the fixture (hit, lock and section events, checkpoints) |
 | `IntenseFlashLimiter`, `IntenseLumaWatchdog`    | `safety.ts`                    | the fixture (limiter, watchdog, flash colours)      |
 | `SoundRenderBudget`                             | `budget.ts`                    | the fixture (budget, rates)                         |
 | `IntenseUniforms`, `IntenseAux`                 | `uniforms.ts`                  | `web/test/shaders.test.ts` reads the Swift sources  |
@@ -32,9 +33,33 @@ One known platform difference: Swift's `SpectrumAnalyzer` window is `vDSP_HANN_N
 Apple, and `contract.test.ts` pins the difference against the macOS run. The Swift test compares spectrum and chroma
 only on the portable path.
 
-Not ported yet (the web state behaves as Swift does with no `MusicContext`, so these stay at rest):
-`SoundMusicInference`, the `MusicContext` paths (hits, sections, drops), the particle pool, and the musical state
-(pitch classes, key, piano roll). A visualizer that needs them waits for that port.
+## Music: hits, tempo, sections
+
+A web source has no conductor, so `SoundVisualizer` runs one `SoundMusicInference` per source over the analyzer's frames
+(reset when the source changes) and hands the `MusicContext` to `SoundVisualState.update(frame, now, options, music)`,
+which is what Swift does for a file or a loopback device. `inference.ts` is a line-for-line port: spectral-flux onsets in
+three band ranges (kick, snare, hat), the 50 Hz onset grid and autocorrelation tempo with its lock and switch rules, the
+kick phase pull, energy, sections and drops, and silence. `state.ts` has the `MusicContext` branches of the Swift state:
+the clock follows `step`, the hit counters fire the `kick`, `snare`, `hat`, `glitch`, `laser` and `impact` envelopes
+with the flash, shake and chroma triggers, sections blend the palette and set the tunnel speed, and the energy and
+section history rings fill. A frame with no `music` argument keeps the old no-music path exactly.
+
+What the fixture pins (`music` in `sound-contract.json`): a scripted drum machine fed as `SoundFrame`s (bands that rise
+on each hit; `DrumFrames` in `SoundMusicInferenceTests.swift`): eight loud seconds at 128 BPM, a quiet breakdown,
+silence, drums again. The frame each kick, snare, hat and impact fired on, the frame the tempo locked on and each
+section change are **events and compared exactly**; the rest (step, energy, tempo, the state's envelopes, palette and
+clock) at checkpoints every 40 frames, to 2e-3 (Swift accumulates in Float, the TypeScript rounds the same accumulators
+with `Math.fround`). The script is frames, not audio, so it does not depend on the window below and runs on every
+platform; `test/inference.test.ts` runs audio through the analyzer instead (kick, snare, hat, a 120 BPM lock, the
+synthetic source) with both windows.
+
+Inference's onset floors are in band units, so it must read the same window as the Swift side that tuned them: the web's
+default `SoundAnalyzer(rate)` is the `"apple"` window (4.26 dB hotter than Linux, #67), which is what the Apple apps
+hear, and the demo keeps it. Regenerating the fixture on a Mac keeps the Linux `analysis` section (the writer reads it
+back instead of overwriting it with Apple's bands).
+
+Not ported (no web renderer draws them): the particle pool and the pads, and the musical state (pitch classes, key,
+piano roll). A visualizer that needs them waits for that port.
 
 ## Porting one Metal visualizer
 

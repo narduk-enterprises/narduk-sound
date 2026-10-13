@@ -27,6 +27,7 @@ import Testing
         var flashColors: [[Float]]
         var budget: [Int]
         var rates: [Int]
+        var music: MusicContract
     }
 
     struct AnalysisFrame: Codable, Equatable {
@@ -64,6 +65,57 @@ import Testing
         var palette: [Float]
         var historyHead: Int
         var historyCount: Int
+    }
+
+    /// `SoundMusicInference` over a scripted drum machine, and the `SoundVisualState` it drives.
+    struct MusicContract: Codable, Equatable {
+        var frames: Int
+        /// Sequences of the frames on which a lane's counter rose: events, compared exactly.
+        var kickFrames: [Int]
+        var snareFrames: [Int]
+        var hatFrames: [Int]
+        var impactFrames: [Int]
+        /// The sequence on which the tempo locked (0 when it never did).
+        var lockSequence: Int
+        var sectionChanges: [SectionChange]
+        var inference: [InferenceCheckpoint]
+        var state: [MusicStateCheckpoint]
+    }
+
+    struct SectionChange: Codable, Equatable {
+        var sequence: Int
+        var section: String
+    }
+
+    struct InferenceCheckpoint: Codable, Equatable {
+        var sequence: Int
+        /// Kick, snare, hat, impact.
+        var hits: [Int]
+        var step: Int
+        var section: String
+        var energy: Float
+        var isRunning: Bool
+        var secondsPerStep: Double
+        var wobblePhase: Float
+        var wobbleCutoff: Float
+        var phraseProgress: Float
+        var dropQueued: Bool
+        /// 0 until the tempo locks.
+        var tempoBPM: Double
+    }
+
+    struct MusicStateCheckpoint: Codable, Equatable {
+        var sequence: Int
+        var section: String
+        var isRunning: Bool
+        var dropQueued: Bool
+        /// Kick, snare, hat, glitch, laser, impact, flash, shake, chroma.
+        var envelopes: [Float]
+        /// Energy, wild, dropAmount, beatPulse, phraseProgress, wobblePhase, wobbleCutoff, shakeX, shakeY.
+        var motion: [Float]
+        /// Beats, travel.
+        var clock: [Double]
+        var palette: [Float]
     }
 
     // MARK: The scripted inputs (web/test/contract.test.ts generates the same ones)
@@ -105,7 +157,73 @@ import Testing
         Contract(
             analysis: analysis(), palettes: palettes(), state: state(), flashLimiter: flashLimiter(),
             lumaWatchdog: lumaWatchdog(), flashColors: flashColors(), budget: budget(),
-            rates: [0, -3, 1, 24, 60, 120].map { SoundRenderBudget.rate($0) })
+            rates: [0, -3, 1, 24, 60, 120].map { SoundRenderBudget.rate($0) }, music: music())
+    }
+
+    // MARK: Music
+
+    /// The scripted drum machine (web/test/contract.test.ts `drumScript` mirrors it): eight loud seconds at 128 BPM,
+    /// a quiet breakdown, three seconds of silence, then six seconds of drums again. 60 frames a second.
+    static func drumScript() -> [SoundFrame] {
+        var frames = DrumFrames(bpm: 128, rmsDB: -12).frames(seconds: 8)
+        frames += DrumFrames(bpm: 128, rmsDB: -34, bed: 0.1, kicks: false, snares: false, hats: false)
+            .frames(seconds: 5, from: 481, startTime: 8)
+        frames += DrumFrames.silence(seconds: 3, from: 781, startTime: 13)
+        frames += DrumFrames(bpm: 128, rmsDB: -18).frames(seconds: 6, from: 961, startTime: 16)
+        return frames
+    }
+
+    /// The frames of the script drawn in calm mode.
+    static let musicCalm = 1000..<1100
+
+    static func music() -> MusicContract {
+        let inference = SoundMusicInference()
+        let state = SoundVisualState()
+        let frames = drumScript()
+        var out = MusicContract(
+            frames: frames.count, kickFrames: [], snareFrames: [], hatFrames: [], impactFrames: [], lockSequence: 0,
+            sectionChanges: [], inference: [], state: [])
+        var last = HitCounters()
+        var section = SongSection.intro
+        for frame in frames {
+            let sequence = Int(frame.sequence)
+            let music = inference.update(frame)
+            if music.hitCounts[.kick] != last[.kick] { out.kickFrames.append(sequence) }
+            if music.hitCounts[.snare] != last[.snare] { out.snareFrames.append(sequence) }
+            if music.hitCounts[.hat] != last[.hat] { out.hatFrames.append(sequence) }
+            if music.hitCounts[.impact] != last[.impact] { out.impactFrames.append(sequence) }
+            last = music.hitCounts
+            if out.lockSequence == 0, inference.isLocked { out.lockSequence = sequence }
+            if music.section != section {
+                section = music.section
+                out.sectionChanges.append(SectionChange(sequence: sequence, section: section.rawValue))
+            }
+            let options = SoundVisualOptions(calm: musicCalm.contains(sequence))
+            state.update(SoundVisualInput(frame: frame, music: music), now: frame.time + 1, options: options)
+            guard sequence % 40 == 20 else { continue }
+            out.inference.append(
+                InferenceCheckpoint(
+                    sequence: sequence,
+                    hits: [.kick, .snare, .hat, .impact].map { Int(music.hitCounts[$0]) }, step: music.step,
+                    section: music.section.rawValue, energy: music.energy, isRunning: music.isRunning,
+                    secondsPerStep: music.secondsPerStep, wobblePhase: music.wobblePhase,
+                    wobbleCutoff: music.wobbleCutoff, phraseProgress: music.phraseProgress,
+                    dropQueued: music.dropQueued, tempoBPM: inference.tempoBPM ?? 0))
+            out.state.append(
+                MusicStateCheckpoint(
+                    sequence: sequence, section: state.section.rawValue, isRunning: state.isRunning,
+                    dropQueued: state.dropQueued,
+                    envelopes: [
+                        state.kick, state.snare, state.hat, state.glitch, state.laser, state.impact, state.flash,
+                        state.shake, state.chroma,
+                    ],
+                    motion: [
+                        state.energy, state.wild, state.dropAmount, state.beatPulse, state.phraseProgress,
+                        state.wobblePhase, state.wobbleCutoff, state.shakeOffset.x, state.shakeOffset.y,
+                    ],
+                    clock: [state.beats, state.travel], palette: flat(state.palette)))
+        }
+        return out
     }
 
     static func analysis() -> [AnalysisFrame] {
@@ -206,7 +324,7 @@ import Testing
         if ProcessInfo.processInfo.environment["NARDUK_WRITE_WEB_FIXTURES"] == "1" {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(contract).write(to: Self.fixtureURL)
+            try encoder.encode(try Self.forWriting(contract)).write(to: Self.fixtureURL)
         }
         let fixture = try JSONDecoder().decode(Contract.self, from: Data(contentsOf: Self.fixtureURL))
         #expect(fixture.version == contract.version)
@@ -253,9 +371,62 @@ import Testing
             Self.expectClose(expected.palette, actual.palette, 1e-4, label)
         }
 
+        Self.checkMusic(fixture.music, contract.music)
+
         Self.expectClose(fixture.flashLimiter, contract.flashLimiter, 1e-6, "flash limiter")
         Self.expectClose(fixture.lumaWatchdog, contract.lumaWatchdog, 1e-5, "luma watchdog")
         Self.expectClose(fixture.flashColors.flatMap { $0 }, contract.flashColors.flatMap { $0 }, 1e-6, "flash colors")
+    }
+
+    /// The contract as it is written to the fixture. The fixture's analysis section is the Linux numbers (the portable
+    /// window, see the check below), so a run on Apple keeps the existing one instead of overwriting it with Apple's
+    /// hotter bands. Everything else is platform independent.
+    static func forWriting(_ contract: Contract) throws -> Contract {
+        #if canImport(Accelerate)
+            struct Existing: Codable { var analysis: [AnalysisFrame] }
+            let existing = try JSONDecoder().decode(Existing.self, from: Data(contentsOf: fixtureURL))
+            var out = contract
+            out.analysis = existing.analysis
+            return out
+        #else
+            return contract
+        #endif
+    }
+
+    /// Events (which frame a lane fired on, where the tempo locked, where the section changed) are compared exactly:
+    /// they are the contract, and a Float that rounds differently on the two sides only matters if it flips one.
+    /// The running values are compared with a tolerance.
+    static func checkMusic(_ expected: MusicContract, _ actual: MusicContract) {
+        #expect(expected.frames == actual.frames)
+        #expect(expected.kickFrames == actual.kickFrames, "kick frames")
+        #expect(expected.snareFrames == actual.snareFrames, "snare frames")
+        #expect(expected.hatFrames == actual.hatFrames, "hat frames")
+        #expect(expected.impactFrames == actual.impactFrames, "impact frames")
+        #expect(expected.lockSequence == actual.lockSequence, "tempo lock frame")
+        #expect(expected.sectionChanges == actual.sectionChanges, "section changes")
+
+        #expect(expected.inference.count == actual.inference.count)
+        for (e, a) in zip(expected.inference, actual.inference) {
+            let label = "inference at frame \(a.sequence)"
+            #expect(e.sequence == a.sequence)
+            #expect(e.hits == a.hits && e.step == a.step && e.section == a.section, "\(label)")
+            #expect(e.isRunning == a.isRunning && e.dropQueued == a.dropQueued, "\(label)")
+            expectClose(
+                [e.energy, e.wobblePhase, e.wobbleCutoff, e.phraseProgress, Float(e.secondsPerStep)],
+                [a.energy, a.wobblePhase, a.wobbleCutoff, a.phraseProgress, Float(a.secondsPerStep)], 2e-3, label)
+            #expect(abs(e.tempoBPM - a.tempoBPM) < 0.05, "\(label): tempo \(a.tempoBPM) against \(e.tempoBPM)")
+        }
+
+        #expect(expected.state.count == actual.state.count)
+        for (e, a) in zip(expected.state, actual.state) {
+            let label = "music state at frame \(a.sequence)"
+            #expect(e.sequence == a.sequence)
+            #expect(e.section == a.section && e.isRunning == a.isRunning && e.dropQueued == a.dropQueued, "\(label)")
+            expectClose(e.envelopes, a.envelopes, 2e-3, "\(label) envelopes")
+            expectClose(e.motion, a.motion, 2e-3, "\(label) motion")
+            expectClose(e.clock.map { Float($0) }, a.clock.map { Float($0) }, 2e-3, "\(label) clock")
+            expectClose(e.palette, a.palette, 2e-3, "\(label) palette")
+        }
     }
 
     static func expectClose(_ expected: [Float], _ actual: [Float], _ tolerance: Float, _ label: String) {

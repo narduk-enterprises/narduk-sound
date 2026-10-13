@@ -3,6 +3,7 @@ import { AudioTap, type SampleSource, type SoundSourceInput } from "./audio.js";
 import { FrameGovernor } from "./budget.js";
 import { Canvas2DRenderer } from "./canvas2d.js";
 import { emptyFrame } from "./frame.js";
+import { SoundMusicInference } from "./inference.js";
 import { isStatic, watchReducedMotion, type MotionPreference } from "./motion.js";
 import type { SoundPaletteProvider } from "./palette.js";
 import type { SoundRenderer } from "./renderer.js";
@@ -60,6 +61,8 @@ export class SoundVisualizer {
   private _renderer: SoundRenderer;
   private source: SampleSource | null = null;
   private analyzer: SoundAnalyzer | null = null;
+  /** One per source: hears the hits, tempo and sections in the analyzer's frames (reset when the source changes). */
+  private readonly music = new SoundMusicInference();
   private readonly frame = emptyFrame();
   private readonly inputs = new ShaderInputs();
   private readonly watchdog = new LumaWatchdog();
@@ -153,6 +156,8 @@ export class SoundVisualizer {
     const source = isSampleSource(input) ? input : new AudioTap(input);
     this.source = source;
     this.analyzer = new SoundAnalyzer(source.sampleRate);
+    this.music.reset();
+    this.state.resetMusic();
     const element = source.element;
     if (element) {
       const onPlaying = () => this.onPlaying();
@@ -341,7 +346,7 @@ export class SoundVisualizer {
   private step(now: number): void {
     if (!this.source || !this.analyzer) return;
     const frame = this.analyzer.analyze(this.source.read(), now, this.frame);
-    this.state.update(frame, now);
+    this.state.update(frame, now, {}, this.music.update(frame));
     this.watchSilence(now);
     const luma = this._renderer.takeLuma();
     const gain = luma === null ? this.watchdog.gain : this.watchdog.observe(luma, now);
