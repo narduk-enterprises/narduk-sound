@@ -7,6 +7,8 @@ export type { DeviceHints, GovernorDecision, SoundThermalState } from "./budget.
 export { Canvas2DRenderer } from "./canvas2d.js";
 export { SoundFrameLayout, emptyFrame } from "./frame.js";
 export type { SoundFrame } from "./frame.js";
+export { HIT_LANE_COUNT, Instrument, SoundMusicInference, emptyMusicContext } from "./inference.js";
+export type { MusicContext } from "./inference.js";
 export { isStatic, watchReducedMotion } from "./motion.js";
 export type { MotionPreference } from "./motion.js";
 export {
