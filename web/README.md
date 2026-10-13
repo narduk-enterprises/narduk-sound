@@ -15,6 +15,13 @@ ported to WebGL2, with a Canvas2D fallback. Live demo: <https://visualizers.nard
 | `blackHole` | `Intense/Promoted/BlackHoleShader.swift`             |
 | `geometricChaos` | `Intense/Promoted/GeometricChaosShader.swift`   |
 | `audioTerrain` | `Intense/AudioTerrainMetal/AudioTerrainMetalShader.swift` |
+| `sun` | `Intense/Sun/SunShader.swift` |
+| `flameSun` | `Intense/Promoted/FlameSunShader.swift` |
+| `jellyfish` | `Intense/Jellyfish/JellyfishShader.swift` |
+| `flower` | `Intense/Flower/FlowerShader.swift` |
+| `liquidSplash` | `Intense/LiquidSplash/LiquidSplashShader.swift` |
+| `bioluminescentSea` | `Intense/Promoted/BioluminescentSeaShader.swift` |
+| `mirror` | `Intense/MirrorMetal/MirrorMetalShader.swift` |
 
 ## Use
 
