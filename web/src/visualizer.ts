@@ -10,6 +10,7 @@ import type { SoundRenderer } from "./renderer.js";
 import { LumaWatchdog } from "./safety.js";
 import type { VisualizerId } from "./shaders/index.js";
 import { SoundVisualState } from "./state.js";
+import { StreamSource, UnsupportedStreamError } from "./stream.js";
 import { ShaderInputs } from "./uniforms.js";
 import { WebGLRenderer } from "./webgl.js";
 
@@ -153,7 +154,10 @@ export class SoundVisualizer {
   async start(input: SoundSourceInput | SampleSource): Promise<void> {
     await this.stopSource();
     this.setStatus("loading");
-    const source = isSampleSource(input) ? input : new AudioTap(input);
+    // An http(s) URL is fetched and decoded (StreamSource): WebKit's media-element path reads a live stream as
+    // silence. A blob: URL, an element or a MediaStream goes through the AudioTap.
+    const streamed = typeof input === "string" && /^https?:/i.test(input) && StreamSource.isSupported();
+    const source = isSampleSource(input) ? input : streamed ? new StreamSource(input) : new AudioTap(input);
     this.source = source;
     this.analyzer = new SoundAnalyzer(source.sampleRate);
     this.music.reset();
@@ -180,6 +184,12 @@ export class SoundVisualizer {
     try {
       await source.start();
     } catch (error) {
+      // Neither MP3 nor AAC: hand the URL to a media element instead.
+      if (error instanceof UnsupportedStreamError && typeof input === "string" && this.source === source) {
+        await source.close().catch(() => {});
+        this.source = null;
+        return this.start(new AudioTap(input));
+      }
       this.setStatus("error", error instanceof Error ? error.message : String(error));
       throw error;
     }
@@ -365,7 +375,7 @@ export class SoundVisualizer {
     else if (this._status === "playing" && now - this.silentSince > SILENT_AFTER) {
       this.setStatus(
         "silent",
-        "The sound is playing but no samples reach the visualizer. A cross-origin stream needs CORS headers (Access-Control-Allow-Origin).",
+        "The sound is playing but no samples reach the visualizer: the stream may be silent, or a cross-origin source lacks CORS headers (Access-Control-Allow-Origin).",
       );
     }
   }
