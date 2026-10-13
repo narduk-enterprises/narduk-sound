@@ -46,6 +46,7 @@
         </form>
       </div>
       <div id="player"></div>
+      <p class="hint" id="timeline-note" aria-live="polite"></p>
       <div class="options">
         <label><input type="checkbox" id="cycle" /> Change look every 30 s</label>
         <label><input type="checkbox" id="still" /> Still picture (reduced motion)</label>
@@ -53,6 +54,10 @@
       </div>
       <p class="hint">
         Keys: <kbd>←</kbd> <kbd>→</kbd> change the look, <kbd>F</kbd> full screen, <kbd>Space</kbd> pause.
+      </p>
+      <p class="hint">
+        Without audio: <code>?timeline=&lt;url&gt;</code> draws from a recorded NSTL timeline and a playhead
+        (<code>?timeline=fixture</code> is a short built-in one), <code>?ambient</code> the quiet ambient drift.
       </p>
       <p class="hint">
         A URL plays only if its server sends <code>Access-Control-Allow-Origin</code>; without it the sound plays but the

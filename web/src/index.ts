@@ -39,9 +39,20 @@ export {
 export type { CustomVisualizer, VisualizerId, VisualizerPort } from "./shaders/index.js";
 export { SoundVisualState, wirewatcherConfiguration } from "./state.js";
 export type { SoundVisualConfiguration, SoundVisualOptions } from "./state.js";
+export { AmbientDrift } from "./ambient.js";
+export { AmbientFeed, TimelineFeed } from "./feed.js";
+export type { InputFeed } from "./feed.js";
+export {
+  SoundTimelineError,
+  SoundTimelinePlayer,
+  STEP_UNIT,
+  TIMELINE_FORMAT_VERSION,
+  decodeSoundTimeline,
+} from "./timeline.js";
+export type { SoundTimeline, SoundTimelineErrorReason, SoundTimelineHeader, SoundVisualInput } from "./timeline.js";
 export { Aux, DATA_ROWS, DATA_WIDTH, DataRow, ShaderInputs, UNIFORM_NAMES, scopeTrigger } from "./uniforms.js";
 export { SoundVisualizer } from "./visualizer.js";
-export type { SoundVisualizerOptions, VisualizerStatus } from "./visualizer.js";
+export type { SoundVisualizerOptions, VisualizerDriver, VisualizerStatus } from "./visualizer.js";
 export { WebGLRenderer, WebGLUnavailableError } from "./webgl.js";
 export { SyntheticSource } from "./synthetic.js";
 export { FrameSplitter, StreamSource, UnsupportedStreamError, frameHeader } from "./stream.js";
