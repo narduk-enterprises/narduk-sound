@@ -39,7 +39,8 @@ Not ported yet (the web state behaves as Swift does with no `MusicContext`, so t
 ## Porting one Metal visualizer
 
 1. **Pick a look** whose Metal file needs only the uniforms, the spectrum, the waveform and the aux scalars or history
-   (its `auxMask` in `IntenseKind` has no roll or particles bit).
+   (its `auxMask` in `IntenseKind` has no roll or particles bit, and its fragment binds no `motion` buffer 3: the
+   fractal dive and the synthwave flyover wait for `IntenseMotion` to be ported).
 2. **Add `web/src/shaders/<id>.ts`** exporting a `VisualizerPort`: `id`, `title`, `metalSource` (the repo path of the
    Swift file), `metalSha256` (`sha256sum` of that file) and `glsl` (the fragment body, after `FRAGMENT_PRELUDE`).
    Copy the Metal functions and its fragment function, then translate them with the table below. Keep the names,
