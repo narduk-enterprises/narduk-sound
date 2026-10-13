@@ -49,6 +49,9 @@ float historyAt(int i) {
     return texelFetch(uData, ivec2(k % 512, 3 + k / 512), 0).r;
 }
 
+// Metal's fmod: the remainder takes the sign of x. GLSL mod() floors, so it differs below zero.
+float mslFmod(float x, float y) { return x - y * trunc(x / y); }
+
 // pow(x, 2.0) is undefined for x < 0 in GLSL (and in Metal fast math); a port squares explicitly.
 float sq(float x) { return x * x; }
 

@@ -74,6 +74,8 @@ describe("the GLSL ports", () => {
       ["present.frag", PRESENT_SHADER],
       ...VISUALIZERS.map((v) => [`${v.id}.frag`, FRAGMENT_PRELUDE + v.glsl] as [string, string]),
     ];
+    // Report every shader that fails, not only the first.
+    const failures: string[] = [];
     for (const [name, source] of sources) {
       const path = join(dir, name);
       writeFileSync(path, source);
@@ -81,8 +83,9 @@ describe("the GLSL ports", () => {
         execFileSync(glslang, [path], { encoding: "utf8" });
       } catch (error) {
         const out = (error as { stdout?: string }).stdout ?? String(error);
-        throw new Error(`${name} does not compile:\n${out}`);
+        failures.push(`${name} does not compile:\n${out}`);
       }
     }
+    expect(failures, failures.join("\n")).toEqual([]);
   });
 });

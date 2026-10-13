@@ -9,6 +9,12 @@ ported to WebGL2, with a Canvas2D fallback. Live demo: <https://visualizers.nard
 | `spectrum` | `Intense/SpectrumMetal/SpectrumMetalShader.swift`     |
 | `scope`    | `Intense/ScopeMetal/ScopeMetalShader.swift`           |
 | `halo`     | `Intense/HaloMetal/HaloMetalShader.swift`             |
+| `vortex`   | `Intense/VortexMetal/VortexMetalShader.swift`         |
+| `hyperspaceLasers` | `Intense/Hyperspace/HyperspaceShader.swift`   |
+| `kaleidoscope` | `Intense/KaleidoscopeMetal/KaleidoscopeMetalShader.swift` |
+| `blackHole` | `Intense/Promoted/BlackHoleShader.swift`             |
+| `geometricChaos` | `Intense/Promoted/GeometricChaosShader.swift`   |
+| `audioTerrain` | `Intense/AudioTerrainMetal/AudioTerrainMetalShader.swift` |
 
 ## Use
 

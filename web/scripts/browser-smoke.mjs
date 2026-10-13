@@ -90,8 +90,17 @@ const status = (page) => page.locator(".nsw-status").textContent();
 const same = (a, b) => Buffer.compare(a, b) === 0;
 
 try {
+  // Every registered port (VISUALIZERS), read from the player's picker so a new port is smoke-tested without an edit here.
+  const ids = await (async () => {
+    const { page, context } = await open("visual=spectrum&renderer=canvas2d");
+    const found = await page.$$eval('select[aria-label="Visualizer"] option', (options) => options.map((o) => o.value));
+    await context.close();
+    return found;
+  })();
+  check(ids.length >= 9 && ids.includes("halo"), `the picker lists ${ids.length} visualizers: ${ids.join(", ")}`);
+
   for (const renderer of ["auto", "canvas2d"]) {
-    for (const visual of ["spectrum", "scope", "halo"]) {
+    for (const visual of ids) {
       const label = `${visual} (${renderer})`;
       const { page, context, errors } = await open(`visual=${visual}&renderer=${renderer}`);
       await page.waitForTimeout(1500);
@@ -110,8 +119,13 @@ try {
           return { status: v.status, decision: v.governor.decision, canvas: [c.width, c.height], rms: v.state?.rms, hidden: document.hidden };
         }))}`);
       }
-      await page.waitForTimeout(250);
-      check(!same(a, await shot(page)), `${label}: animates`);
+      // Software WebGL can be slow on the heavy looks: give it a few frames' worth of time before calling it still.
+      let animated = false;
+      for (let attempt = 0; attempt < 4 && !animated; attempt++) {
+        await page.waitForTimeout(250 * (attempt + 1));
+        animated = !same(a, await shot(page));
+      }
+      check(animated, `${label}: animates`);
 
       if (visual === "halo") {
         await page.click(".nsw-controls button");
@@ -128,6 +142,18 @@ try {
       check(errors.length === 0, `${label}: no page errors ${errors.join("; ")}`);
       await context.close();
     }
+  }
+
+  // An id with no port or drawing of its own still draws the sound on Canvas2D (it borrows the nearest drawing).
+  {
+    const { page, context, errors } = await open("visual=halo&renderer=canvas2d");
+    await page.waitForTimeout(500);
+    await page.evaluate(() => globalThis.soundDemo.viz.setVisual("someFutureLook"));
+    await page.waitForTimeout(1000);
+    const s = await stats(page, await shot(page));
+    check(s.mean > 0.02 && s.lit > 0.01, `unknown id (canvas2d): draws a fallback picture (mean ${s.mean.toFixed(3)}, lit ${s.lit.toFixed(3)})`);
+    check(errors.length === 0, `unknown id (canvas2d): no page errors ${errors.join("; ")}`);
+    await context.close();
   }
 
   // A local file through the file input: decoded by the element, read by Web Audio, drawn.

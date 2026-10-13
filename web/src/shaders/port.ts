@@ -1,7 +1,7 @@
 /** One Metal visualizer ported to GLSL ES 3.00 (docs/web-port.md). */
 export interface VisualizerPort {
-  /** Stable id, matching the Swift `IntenseKind` look it ports. */
-  readonly id: "spectrum" | "scope" | "halo";
+  /** Stable id, matching the Swift `IntenseKind` id of the look it ports (IntenseKind.swift), e.g. `"halo"`. */
+  readonly id: string;
   readonly title: string;
   /** The Swift file holding the MSL this port was made from, relative to the repository root. */
   readonly metalSource: string;
