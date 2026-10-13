@@ -26,8 +26,16 @@ export type { SoundPlayer, SoundPlayerOptions } from "./player.js";
 export type { SoundRenderer } from "./renderer.js";
 export { FlashLimiter, LumaWatchdog, calmIntensity, intenseDrive } from "./safety.js";
 export type { IntenseDrive } from "./safety.js";
-export { FRAGMENT_PRELUDE, PRESENT_SHADER, VERTEX_SHADER, VISUALIZERS, visualizer } from "./shaders/index.js";
-export type { VisualizerId, VisualizerPort } from "./shaders/index.js";
+export {
+  FRAGMENT_PRELUDE,
+  PRESENT_SHADER,
+  registerVisualizer,
+  VERTEX_SHADER,
+  VISUALIZERS,
+  visualizer,
+  visualizers,
+} from "./shaders/index.js";
+export type { CustomVisualizer, VisualizerId, VisualizerPort } from "./shaders/index.js";
 export { SoundVisualState, wirewatcherConfiguration } from "./state.js";
 export type { SoundVisualConfiguration, SoundVisualOptions } from "./state.js";
 export { Aux, DATA_ROWS, DATA_WIDTH, DataRow, ShaderInputs, UNIFORM_NAMES, scopeTrigger } from "./uniforms.js";

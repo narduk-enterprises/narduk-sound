@@ -1,7 +1,7 @@
 import type { SampleSource } from "./audio.js";
 import type { MotionPreference } from "./motion.js";
 import type { SoundPaletteProvider } from "./palette.js";
-import { VISUALIZERS, type VisualizerId } from "./shaders/index.js";
+import { visualizers, type VisualizerId } from "./shaders/index.js";
 import { SoundVisualizer, type VisualizerStatus } from "./visualizer.js";
 
 export interface SoundPlayerOptions {
@@ -26,7 +26,7 @@ export interface SoundPlayer {
   play(src: string | HTMLMediaElement | SampleSource): Promise<void>;
   /** Shows another visual and keeps the picker in step. */
   setVisual(id: VisualizerId): void;
-  /** Steps through `VISUALIZERS` (wrapping): +1 is the next, -1 the previous. */
+  /** Steps through `visualizers()` (wrapping): +1 is the next, -1 the previous. */
   stepVisual(by: number): VisualizerId;
   /** Enters or leaves full screen (the Fullscreen API, or a fixed full-window stage where it is missing, as on iPhone). */
   toggleFullscreen(): void;
@@ -107,7 +107,7 @@ export function mountSoundPlayer(container: HTMLElement, options: SoundPlayerOpt
   full.setAttribute("aria-pressed", "false");
   const picker = document.createElement("select");
   picker.setAttribute("aria-label", "Visualizer");
-  for (const port of VISUALIZERS) picker.append(new Option(port.title, port.id));
+  for (const port of visualizers()) picker.append(new Option(port.title, port.id));
   picker.value = options.visual ?? "spectrum";
   const status = el("span", "nsw-status");
   status.setAttribute("role", "status");
@@ -155,9 +155,10 @@ export function mountSoundPlayer(container: HTMLElement, options: SoundPlayerOpt
     options.onVisualChange?.(id);
   };
   const stepVisual = (by: number): VisualizerId => {
-    const at = VISUALIZERS.findIndex((port) => port.id === picker.value);
-    const n = VISUALIZERS.length;
-    const id = VISUALIZERS[(((at + by) % n) + n) % n].id;
+    const looks = visualizers();
+    const at = looks.findIndex((port) => port.id === picker.value);
+    const n = looks.length;
+    const id = looks[(((at + by) % n) + n) % n].id;
     setVisual(id);
     return id;
   };
