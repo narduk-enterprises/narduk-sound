@@ -1,4 +1,5 @@
-export { Loudness, PortableFFT, SoundAnalyzer, SpectrumAnalyzer } from "./analysis.js";
+export { Loudness, PortableFFT, SoundAnalyzer, SpectrumAnalyzer, WINDOW_GAIN } from "./analysis.js";
+export type { SpectrumWindow } from "./analysis.js";
 export { AudioTap, audioContextClass, createStreamElement } from "./audio.js";
 export type { SampleSource, SoundSourceInput } from "./audio.js";
 export { FrameGovernor, RENDER_SCALES, SoundRenderBudget, isLowEndDevice } from "./budget.js";

@@ -26,6 +26,12 @@ NARDUK_WRITE_WEB_FIXTURES=1 swift test --filter WebContractFixtureTests   # rewr
 cd web && npm test                                                         # now fails until the TypeScript follows
 ```
 
+One known platform difference: Swift's `SpectrumAnalyzer` window is `vDSP_HANN_NORM`, 0.8165 (1 - cos), on Apple and
+0.5 (1 - cos) on Linux, so Apple's bands read 4.26 dB hotter (#67). The fixture is written on Linux, so the web's
+`SoundAnalyzer(rate, 1 / 60, "portable")` matches it; the web's default, `"apple"`, matches what the visualizers draw on
+Apple, and `contract.test.ts` pins the difference against the macOS run. The Swift test compares spectrum and chroma
+only on the portable path.
+
 Not ported yet (the web state behaves as Swift does with no `MusicContext`, so these stay at rest):
 `SoundMusicInference`, the `MusicContext` paths (hits, sections, drops), the particle pool, and the musical state
 (pitch classes, key, piano roll). A visualizer that needs them waits for that port.

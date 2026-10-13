@@ -72,8 +72,9 @@ describe("the Swift contract fixture", () => {
     expect(contract.version).toBe(1);
   });
 
+  // The fixture is written on Linux, where SpectrumAnalyzer's window is 0.5 (1 - cos): analyze with that one.
   it("analyzes samples into the same frames as SoundAnalyzer", () => {
-    const analyzer = new SoundAnalyzer(48_000);
+    const analyzer = new SoundAnalyzer(48_000, 1 / 60, "portable");
     const samples = new Float32Array(SoundAnalyzer.windowSize);
     contract.analysis.forEach((expected: any, frame: number) => {
       for (let i = 0; i < samples.length; i++) samples[i] = signal(frame, i);
@@ -84,6 +85,24 @@ describe("the Swift contract fixture", () => {
       expectClose([out.peakDB, out.rmsDB], [expected.peakDB, expected.rmsDB], 1e-3, `dB ${frame}`);
       expectClose(out.waveform.slice(0, 4), expected.waveformHead, 1e-7, "waveform head");
       expectClose(out.waveform.slice(-4), expected.waveformTail, 1e-7, "waveform tail");
+    });
+  });
+
+  // On Apple, vDSP_HANN_NORM is 0.8165 (1 - cos). The macOS Swift run of this fixture (narduk-sound#66, CI run
+  // 38324435057) measured the worst spectrum differences below against the Linux numbers; the web's default
+  // "apple" window reproduces them.
+  it("reads Apple's hotter window the way vDSP does", () => {
+    const portable = new SoundAnalyzer(48_000, 1 / 60, "portable");
+    const apple = new SoundAnalyzer(48_000);
+    const samples = new Float32Array(SoundAnalyzer.windowSize);
+    // Sequences 1, 2 and 3 (frames 0, 1 and 2).
+    const measuredOnMacOS = [0.0385, 0.0519, 0.0566];
+    measuredOnMacOS.forEach((worst, frame) => {
+      for (let j = 0; j < samples.length; j++) samples[j] = signal(frame, j);
+      const a = apple.analyze(samples, frame / 60).spectrum;
+      const p = portable.analyze(samples, frame / 60).spectrum;
+      const diff = Math.max(...a.map((v, k) => Math.abs(v - p[k])));
+      expect(diff, `frame ${frame}`).toBeCloseTo(worst, 3);
     });
   });
 

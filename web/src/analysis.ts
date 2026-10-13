@@ -92,6 +92,14 @@ export class PortableFFT {
   }
 }
 
+/**
+ * The Hann window's gain. Swift builds it with `vDSP_hann_window(..., vDSP_HANN_NORM)` on Apple, which is
+ * 0.8165 (1 - cos), and with 0.5 (1 - cos) on Linux (PortableFFT), so Apple reads every band 4.26 dB hotter. The
+ * visualizers draw on Apple, so the web matches Apple by default; `portable` reproduces the Linux numbers.
+ */
+export type SpectrumWindow = "apple" | "portable";
+export const WINDOW_GAIN: Record<SpectrumWindow, number> = { apple: 0.8165, portable: 0.5 };
+
 /** 2048-point Hann-windowed FFT folded into 64 log-spaced bands, dB-normalized to 0 ... 1 and smoothed. */
 export class SpectrumAnalyzer {
   static readonly fftSize = 2048;
@@ -120,12 +128,12 @@ export class SpectrumAnalyzer {
   private readonly chromaLastBin: number;
   private readonly chromaSums = new Float32Array(SoundFrameLayout.chromaCount);
 
-  constructor(sampleRate: number) {
+  constructor(sampleRate: number, window: SpectrumWindow = "apple") {
     this.sampleRate = sampleRate;
     const n = SpectrumAnalyzer.fftSize;
     const half = n / 2;
-    // vDSP_HANN_NORM: 0.5 * (1 - cos(2 pi i / N)).
-    for (let i = 0; i < n; i++) this.window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / n));
+    const gain = WINDOW_GAIN[window];
+    for (let i = 0; i < n; i++) this.window[i] = gain * (1 - Math.cos((2 * Math.PI * i) / n));
     const binHz = sampleRate / n;
     const ratio = SpectrumAnalyzer.highFrequency / SpectrumAnalyzer.lowFrequency;
     for (let i = 0; i < SpectrumAnalyzer.bandCount; i++) {
@@ -232,10 +240,10 @@ export class SoundAnalyzer {
   private _sequence = 0;
   private readonly spectrumAnalyzer: SpectrumAnalyzer;
 
-  constructor(sampleRate: number, loudnessSeconds = 1 / 60) {
+  constructor(sampleRate: number, loudnessSeconds = 1 / 60, window: SpectrumWindow = "apple") {
     this.sampleRate = sampleRate;
     this.loudnessWindow = Math.min(Math.max(Math.trunc(sampleRate * loudnessSeconds), 1), SoundAnalyzer.windowSize);
-    this.spectrumAnalyzer = new SpectrumAnalyzer(sampleRate);
+    this.spectrumAnalyzer = new SpectrumAnalyzer(sampleRate, window);
   }
 
   get sequence(): number {
