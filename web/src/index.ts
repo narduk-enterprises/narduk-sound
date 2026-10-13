@@ -35,3 +35,5 @@ export { SoundVisualizer } from "./visualizer.js";
 export type { SoundVisualizerOptions, VisualizerStatus } from "./visualizer.js";
 export { WebGLRenderer, WebGLUnavailableError } from "./webgl.js";
 export { SyntheticSource } from "./synthetic.js";
+export { FrameSplitter, StreamSource, UnsupportedStreamError, frameHeader } from "./stream.js";
+export type { AudioFrame } from "./stream.js";

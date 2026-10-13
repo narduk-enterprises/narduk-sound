@@ -65,9 +65,13 @@ matches what the Apple apps hear and what the inference was tuned on.
 - **iOS Safari:** audio starts only from a tap, so `start()` must run inside the click handler (the player's start
   button does this). The page asks for the `playback` audio session where the browser supports it, so the ring/silent
   switch does not mute the stream.
-- **CORS:** Web Audio reads samples only from a cross-origin stream that sends `Access-Control-Allow-Origin`. The
-  element is created with `crossOrigin = "anonymous"`. Without the header the audio plays but the analyser reads
-  zeros; after 4 s of silence the status turns `silent` and says so.
+- **Streams (`StreamSource`):** an http(s) URL is fetched and decoded, not played through an `<audio>` element. WebKit
+  (Safari, and every iOS browser) gives `createMediaElementSource` silence for a live, chunked stream such as an
+  Icecast station even when CORS is right. So the bytes are split into MP3 or ADTS AAC frames, decoded with WebCodecs'
+  `AudioDecoder` and scheduled gaplessly through the analyser. Other formats, and browsers without `AudioDecoder`, fall
+  back to a media element. The server must still send `Access-Control-Allow-Origin`, since `fetch` needs it.
+- **CORS:** without that header the stream cannot be read at all; an element fallback then plays it but the analyser
+  reads zeros, and after 4 s of silence the status turns `silent` and says so.
 - **Flashing:** every flash goes through the same limiter and luma watchdog as the Swift renderer (3 flashes a
   second at most, WCAG 2.1 AA 2.3.1).
 - **Reduced motion:** with `prefers-reduced-motion: reduce` (or `motion: "static"`) the visualizer shows one still
