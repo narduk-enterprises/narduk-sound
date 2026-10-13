@@ -1,5 +1,5 @@
-import { SoundAnalyzer } from "./analysis.js";
-import { audioContextClass, type SampleSource } from "./audio.js";
+import { SoundAnalyzer } from './analysis.js';
+import { audioContextClass, type SampleSource } from './audio.js';
 
 /**
  * Plays an http(s) MP3 or AAC (ADTS) stream by fetching it and decoding it with WebCodecs, never through a media
@@ -31,24 +31,42 @@ export class StreamSource implements SampleSource {
   /** True where this path can work: WebCodecs audio decoding, fetch streams and Web Audio. */
   static isSupported(): boolean {
     return (
-      typeof AudioDecoder === "function" &&
-      typeof EncodedAudioChunk === "function" &&
-      typeof ReadableStream === "function" &&
+      typeof AudioDecoder === 'function' &&
+      typeof EncodedAudioChunk === 'function' &&
+      typeof ReadableStream === 'function' &&
       audioContextClass() !== undefined
     );
   }
 
+  private readonly ownsContext: boolean;
+  private readonly output: AudioNode;
+
+  /**
+   * `options.context` shares a page's AudioContext (it is then never closed or suspended here); `options.muted`
+   * analyses without playing, for a page whose own `<audio>` element is what the listener hears (the element keeps
+   * iOS lock-screen playback; this feed only drives the picture).
+   */
   constructor(
     readonly url: string,
-    context?: AudioContext,
+    options: AudioContext | { context?: AudioContext; muted?: boolean } = {}
   ) {
+    const shared = typeof BaseAudioContext === 'function' && options instanceof BaseAudioContext;
+    const { context, muted = false } = shared
+      ? { context: options as AudioContext }
+      : (options as { context?: AudioContext; muted?: boolean });
     const Context = audioContextClass();
-    if (!context && !Context) throw new Error("Web Audio is not available in this browser");
-    this.context = context ?? new Context!({ latencyHint: "playback" });
+    if (!context && !Context) throw new Error('Web Audio is not available in this browser');
+    this.ownsContext = !context;
+    this.context = context ?? new Context!({ latencyHint: 'playback' });
     this.analyser = this.context.createAnalyser();
     this.analyser.fftSize = SoundAnalyzer.windowSize;
     this.analyser.smoothingTimeConstant = 0;
-    this.analyser.connect(this.context.destination);
+    // Muted, the analyser still feeds the destination (through a silent gain) so the graph keeps pulling samples.
+    const gain = this.context.createGain();
+    gain.gain.value = muted ? 0 : 1;
+    this.analyser.connect(gain);
+    gain.connect(this.context.destination);
+    this.output = gain;
   }
 
   get sampleRate(): number {
@@ -64,16 +82,16 @@ export class StreamSource implements SampleSource {
     const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
     if (session) {
       try {
-        session.type = "playback";
+        session.type = 'playback';
       } catch {
         /* not settable here; harmless */
       }
     }
-    const resumed = this.context.state === "running" ? Promise.resolve() : this.context.resume();
+    const resumed = this.context.state === 'running' ? Promise.resolve() : this.context.resume();
     if (!this.paused) return resumed;
     this.paused = false;
     // A held file continues where the suspended context stopped; a live stream (or a first start) fetches.
-    if (this.decoder && !this.live) return resumed;
+    if (this.decoder && !this.live && this.ownsContext) return resumed;
     await Promise.all([resumed, this.pump()]);
   }
 
@@ -81,7 +99,8 @@ export class StreamSource implements SampleSource {
     if (this.paused) return;
     this.paused = true;
     if (this.live) this.stopFetch();
-    await this.context.suspend();
+    if (this.ownsContext) await this.context.suspend();
+    else if (!this.live) this.stopFetch(); // a shared context keeps running, so a held file restarts on resume
   }
 
   async resume(): Promise<void> {
@@ -98,13 +117,14 @@ export class StreamSource implements SampleSource {
     this.paused = true;
     this.stopFetch();
     this.analyser.disconnect();
-    if (this.context.state !== "closed") await this.context.close();
+    this.output.disconnect();
+    if (this.ownsContext && this.context.state !== 'closed') await this.context.close();
   }
 
   private stopFetch(): void {
     this.abort?.abort();
     this.abort = null;
-    if (this.decoder && this.decoder.state !== "closed") this.decoder.close();
+    if (this.decoder && this.decoder.state !== 'closed') this.decoder.close();
     this.decoder = null;
     for (const node of this.playing) {
       node.onended = null;
@@ -142,19 +162,23 @@ export class StreamSource implements SampleSource {
         }
       };
       this.run(abort, ready).then(
-        () => fail(new Error("The stream ended before any audio arrived")),
+        () => fail(new Error('The stream ended before any audio arrived')),
         (error: unknown) => {
           if (abort.signal.aborted && settled) return;
-          fail(abort.signal.aborted ? new Error("Stopped") : error);
-        },
+          fail(abort.signal.aborted ? new Error('Stopped') : error);
+        }
       );
     });
   }
 
   private async run(abort: AbortController, ready: () => void): Promise<void> {
-    const response = await fetch(this.url, { signal: abort.signal, mode: "cors", cache: "no-store" });
+    const response = await fetch(this.url, {
+      signal: abort.signal,
+      mode: 'cors',
+      cache: 'no-store',
+    });
     if (!response.ok || !response.body) throw new Error(`The stream answered ${response.status}`);
-    this.live = !response.headers.get("content-length");
+    this.live = !response.headers.get('content-length');
     const reader = response.body.getReader();
     const framer = new FrameSplitter();
     let timestamp = 0;
@@ -165,14 +189,16 @@ export class StreamSource implements SampleSource {
       framer.push(value);
       for (let frame = framer.next(); frame; frame = framer.next()) {
         if (!this.decoder) {
-          if (!AudioDecoder.isConfigSupported) throw new UnsupportedStreamError("This browser cannot decode audio");
+          if (!AudioDecoder.isConfigSupported)
+            throw new UnsupportedStreamError('This browser cannot decode audio');
           const config: AudioDecoderConfig = {
             codec: frame.codec,
             sampleRate: frame.sampleRate,
             numberOfChannels: frame.channels,
           };
           const support = await AudioDecoder.isConfigSupported(config);
-          if (!support.supported) throw new UnsupportedStreamError(`This browser cannot decode ${frame.codec}`);
+          if (!support.supported)
+            throw new UnsupportedStreamError(`This browser cannot decode ${frame.codec}`);
           if (abort.signal.aborted) return;
           this.decoder = new AudioDecoder({
             output: (data) => {
@@ -186,18 +212,19 @@ export class StreamSource implements SampleSource {
           this.decoder.configure(config);
         }
         if (decodeError) throw decodeError;
-        this.decoder.decode(new EncodedAudioChunk({ type: "key", timestamp, data: frame.data }));
+        this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp, data: frame.data }));
         timestamp += (frame.samples / frame.sampleRate) * 1e6;
       }
-      if (framer.failed) throw new UnsupportedStreamError("The stream is neither MP3 nor AAC (ADTS)");
+      if (framer.failed)
+        throw new UnsupportedStreamError('The stream is neither MP3 nor AAC (ADTS)');
     }
-    if (this.decoder && this.decoder.state === "configured") await this.decoder.flush();
+    if (this.decoder && this.decoder.state === 'configured') await this.decoder.flush();
     reader.cancel().catch(() => {});
   }
 
   /** Plays one decoded block right after the last one; returns whether it was scheduled. */
   private schedule(data: AudioData): boolean {
-    if (this.closed || this.context.state === "closed") {
+    if (this.closed || this.context.state === 'closed') {
       data.close();
       return false;
     }
@@ -225,33 +252,37 @@ export class StreamSource implements SampleSource {
 
 /** The bytes were not a stream this path decodes: fall back to a media element. */
 export class UnsupportedStreamError extends Error {
-  override name = "UnsupportedStreamError";
+  override name = 'UnsupportedStreamError';
 }
 
 /** Copies `data` into `buffer`, one plane a channel, from whatever sample format the decoder chose. */
 function copyPlanes(data: AudioData, buffer: AudioBuffer): void {
   const frames = data.numberOfFrames;
   const channels = data.numberOfChannels;
-  const format = data.format ?? "f32-planar";
-  if (format === "f32-planar") {
+  const format = data.format ?? 'f32-planar';
+  if (format === 'f32-planar') {
     for (let c = 0; c < channels; c++) data.copyTo(buffer.getChannelData(c), { planeIndex: c });
     return;
   }
-  const planar = format.endsWith("-planar");
+  const planar = format.endsWith('-planar');
   const interleaved = planar ? 1 : channels;
-  const scale = format.startsWith("s16") ? 1 / 32768 : format.startsWith("s32") ? 1 / 2147483648 : 1;
+  const scale = format.startsWith('s16')
+    ? 1 / 32768
+    : format.startsWith('s32')
+      ? 1 / 2147483648
+      : 1;
   for (let c = 0; c < (planar ? channels : 1); c++) {
     const size = data.allocationSize({ planeIndex: c });
     const raw = new ArrayBuffer(size);
     data.copyTo(raw, { planeIndex: c });
-    const view: ArrayLike<number> = format.startsWith("f32")
+    const view: ArrayLike<number> = format.startsWith('f32')
       ? new Float32Array(raw)
-      : format.startsWith("s16")
+      : format.startsWith('s16')
         ? new Int16Array(raw)
-        : format.startsWith("s32")
+        : format.startsWith('s32')
           ? new Int32Array(raw)
           : Uint8Array.from(new Uint8Array(raw), (v) => v - 128);
-    const u8 = format.startsWith("u8") ? 1 / 128 : scale;
+    const u8 = format.startsWith('u8') ? 1 / 128 : scale;
     for (let ch = 0; ch < interleaved; ch++) {
       const out = buffer.getChannelData(planar ? c : ch);
       for (let i = 0; i < frames; i++) out[i] = view[i * interleaved + ch] * u8;
@@ -271,10 +302,15 @@ export interface AudioFrame {
 const MPEG1_L3_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
 const MPEG2_L3_KBPS = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
 const MPEG1_RATES = [44100, 48000, 32000];
-const ADTS_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+const ADTS_RATES = [
+  96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350,
+];
 
 /** Reads one MP3 (MPEG audio Layer III) or ADTS AAC frame header at `i`; null when there is none. */
-export function frameHeader(b: Uint8Array, i: number): Omit<AudioFrame, "data"> & { length: number } | null {
+export function frameHeader(
+  b: Uint8Array,
+  i: number
+): (Omit<AudioFrame, 'data'> & { length: number }) | null {
   if (i + 7 > b.length || b[i] !== 0xff || (b[i + 1] & 0xe0) !== 0xe0) return null;
   const layer = (b[i + 1] >> 1) & 3;
   if (layer === 0) {
@@ -299,7 +335,7 @@ export function frameHeader(b: Uint8Array, i: number): Omit<AudioFrame, "data"> 
   const padding = (b[i + 2] >> 1) & 1;
   const length = Math.floor(((mpeg1 ? 144000 : 72000) * kbps) / sampleRate) + padding;
   const channels = b[i + 3] >> 6 === 3 ? 1 : 2;
-  return { codec: "mp3", sampleRate, channels, samples: mpeg1 ? 1152 : 576, length };
+  return { codec: 'mp3', sampleRate, channels, samples: mpeg1 ? 1152 : 576, length };
 }
 
 /**
@@ -339,7 +375,13 @@ export class FrameSplitter {
         const data = b.slice(i, i + h.length);
         this.buffer = b.subarray(i + h.length);
         this.scanned = 0;
-        return { codec: h.codec, sampleRate: h.sampleRate, channels: h.channels, samples: h.samples, data };
+        return {
+          codec: h.codec,
+          sampleRate: h.sampleRate,
+          channels: h.channels,
+          samples: h.samples,
+          data,
+        };
       }
       this.locked = false;
       i++;
