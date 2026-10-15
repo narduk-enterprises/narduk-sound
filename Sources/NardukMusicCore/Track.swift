@@ -159,6 +159,8 @@ struct Track: Sendable, Hashable {
     var kickTune = 0.5
     var snareTune = 0.5
     var hatTune = 0.5
+    /// House: the open hats play on a tambourine (`GenreArrangement.percussion`).
+    var tambourine = false
     /// 0 ... 0.4 of a step the off-16ths sound late.
     var swing = 0.0
     var ghostDensity = 0.5
@@ -318,8 +320,11 @@ enum TrackGenerator {
             bigBase + BassPatches.count
             * ((variant + 1 + pick(BassPatches.variantCount - 1)) % BassPatches.variantCount)
         t.keysVoice = Self.keysVoice(genre)
-        // Tropical house's kick sits a little lower: softer and rounder than house's.
+        // Tropical house's kick sits a little lower: softer and rounder than house's. House's sits higher, settling
+        // near 57 Hz rather than 45 once variety folds it back from the top (median tune 0.83): at 45 Hz its boom
+        // alone put most of the drop under 60 Hz (record-loop, 2026-10-08).
         if genre == .tropicalHouse { t.kickTune = 0.4 }
+        if genre == .house { t.kickTune = 0.95 }
         let ladder = Banks.rateLadder(genre)
         let rung = min(
             ladder.count - 1, max(0, Self.rateRung(genre, character, ladder: ladder) + (chance(0.3) ? 1 : 0)))
@@ -442,7 +447,11 @@ enum TrackGenerator {
         // Major or bright: mostly major, a mixolydian or lydian lift, dorian as the one minor colour.
         case (.tropicalHouse, _):
             character == .chaos ? [.dorian, .mixolydian] : [.ionian, .ionian, .mixolydian, .lydian, .dorian]
-        case (.house, _), (.chill, _): character == .chaos ? [.aeolian, .phrygian] : [.dorian, .dorian, .aeolian]
+        case (.house, _):
+            // Minor sevenths mostly, and the major side deep and soulful house also live on: every house track sat in
+            // one harmonic cluster with only dorian and aeolian (samey, 2026-10-08).
+            character == .chaos ? [.aeolian, .phrygian] : [.dorian, .dorian, .aeolian, .ionian, .mixolydian]
+        case (.chill, _): character == .chaos ? [.aeolian, .phrygian] : [.dorian, .dorian, .aeolian]
         case (_, .chaos): [.phrygian, .harmonicMinor]
         case (_, .surge): [.phrygian, .aeolian]
         case (_, .idle): [.dorian, .aeolian]

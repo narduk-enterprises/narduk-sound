@@ -466,6 +466,15 @@ public struct DropConductor: Sendable {
             if track.genre == .tropicalHouse {
                 for i in first..<notes.count {
                     notes[i].params = GenreArrangement.percussion(track.genre, notes[i].instrument, notes[i].params)
+                }
+            }
+            if track.tambourine {
+                for i in first..<notes.count where notes[i].instrument == .openHat && notes[i].params.voice == nil {
+                    notes[i].params.voice = PercussionVoice.tambourine
+                }
+            }
+            if track.genre == .tropicalHouse || track.genre == .house {
+                for i in first..<notes.count {
                     notes[i].velocity *= GenreArrangement.balance(track.genre, notes[i].instrument)
                 }
             }
