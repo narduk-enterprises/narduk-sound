@@ -29,8 +29,10 @@ from record_loop import features
 
 # Reported, never coloured: lufs and clipping are set by a level decision rather than the sound (the engine's -17.5
 # LUFS trim, Logan 2026-10-07), and sections_per_min reads about 1.25 for any 48 s window (the novelty peak picker
-# always finds a few peaks), so it cannot tell a sectioned track from a flat one.
-INFO_ONLY = {"lufs", "clipped_ratio", "sections_per_min"}
+# always finds a few peaks), so it cannot tell a sectioned track from a flat one. pump_depth_db reads the 300-3000 Hz
+# envelope over each beat, and a kick-only render reads 48-80 dB there from the kick's own click: on a full mix it
+# measures the kick, not a sidechain, until it is measured on a separated non-drum stem.
+INFO_ONLY = {"lufs", "clipped_ratio", "sections_per_min", "pump_depth_db"}
 
 
 def _window(path: str, window: str | None) -> tuple[float, float | None]:
@@ -97,7 +99,19 @@ def _measure(job: tuple[str, str | None, str | None]) -> dict[str, float]:
     return measure(*job)
 
 
+def _warm_numba() -> None:
+    # librosa compiles its beat tracker with numba's on-disk cache. Workers that compile it at the same time can
+    # leave a corrupt cache entry that segfaults every later run, so compile once here before any worker starts.
+    import librosa
+    import numpy as np
+
+    clicks = np.zeros(22050 * 4)
+    clicks[:: 22050 // 2] = 1
+    librosa.beat.beat_track(y=clicks, sr=22050)
+
+
 def _profile(paths: list[str], jobs: int, window: str | None = None, codec: str | None = None) -> dict:
+    _warm_numba()
     with ProcessPoolExecutor(max_workers=jobs) as pool:
         return dict(zip(paths, pool.map(_measure, [(p, window, codec) for p in paths])))
 
@@ -312,18 +326,24 @@ def _clip(job: tuple[str, str, str | None, float, float]) -> None:
     os.remove(wav)
 
 
-def _window_wav(job: tuple[str, str, str | None, str | None]) -> None:
+def _window_wav(job: tuple[str, str, str | None, str | None, float | None]) -> None:
+    import pyloudnorm
     import soundfile as sf
 
-    source, out, window, codec = job
+    source, out, window, codec, lufs = job
     stereo, sr = _load(_encoded(source, codec), window)
-    sf.write(out, stereo, sr)
+    if lufs is not None:
+        stereo = pyloudnorm.normalize.loudness(stereo, pyloudnorm.Meter(sr).integrated_loudness(stereo), lufs)
+    # Float, so a clip gained up past full scale is not clipped on the way to the embedder.
+    sf.write(out, stereo, sr, subtype="FLOAT")
 
 
 def cmd_fad(args: argparse.Namespace) -> int:
     """Frechet Audio Distance (fadtk, VGGish) between two file sets, each cut to its gap-table window first.
 
     FAD is biased at small n, so compare it run to run on identical sets and sizes, never as an absolute.
+    Every clip is matched to one loudness first: VGGish's log-mel input is not level-invariant, so without it a
+    change that only moved the limiter drive reads as a change in sound.
     """
     work = Path(args.work)
     sets = {"ref": (args.ref, args.ref_window, None), "eval": (args.eval, args.eval_window, args.codec or None)}
@@ -332,7 +352,7 @@ def cmd_fad(args: argparse.Namespace) -> int:
         # fadtk caches embeddings by file name under the set folder; clips reuse names, so start clean.
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
-        jobs = [(p, str(d / f"{i:03d}.wav"), window, codec) for i, p in enumerate(sorted(paths))]
+        jobs = [(p, str(d / f"{i:03d}.wav"), window, codec, args.lufs) for i, p in enumerate(sorted(paths))]
         with ProcessPoolExecutor(max_workers=args.jobs) as pool:
             list(pool.map(_window_wav, jobs))
     run = subprocess.run(
@@ -351,7 +371,13 @@ def cmd_listen(args: argparse.Namespace) -> int:
     """A blind kit: shuffled, loudness-matched clips with hidden sources, a scoresheet, a page and a sealed key."""
     import random
 
-    groups = {"engine": (args.engine, args.engine_window), "model": (args.model, "35%"), "anchor": (args.anchor, "35%")}
+    # `before` is an earlier engine build for a before/after kit: cut at the engine's window, like `engine`.
+    groups = {
+        "engine": (args.engine, args.engine_window),
+        "before": (args.before, args.engine_window),
+        "model": (args.model, "35%"),
+        "anchor": (args.anchor, "35%"),
+    }
     items = [(group, path, window) for group, (paths, window) in groups.items() for path in paths or []]
     random.Random(args.seed).shuffle(items)
     out = Path(args.out)
@@ -438,11 +464,13 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--eval-window", default="136:48")
     a.add_argument("--codec", default="320k")
     a.add_argument("--model", default="vggish")
+    a.add_argument("--lufs", type=float, default=-14.0, help="loudness every clip is matched to before embedding")
     a.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     a.set_defaults(fn=cmd_fad)
     a = sub.add_parser("listen")
     a.add_argument("--out", required=True)
     a.add_argument("--engine", nargs="*")
+    a.add_argument("--before", nargs="*", help="an earlier engine build's renders, for a before/after kit")
     a.add_argument("--model", nargs="*")
     a.add_argument("--anchor", nargs="*")
     # Inside the song plan's second drop, like the gap window.
