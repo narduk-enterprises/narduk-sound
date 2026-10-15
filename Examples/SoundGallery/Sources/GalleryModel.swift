@@ -28,11 +28,31 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     private(set) var repaintHold = false
     @ObservationIgnored private var repaintTask: Task<Void, Never>?
     private(set) var status = "Pick a source and press Play."
+    #if os(macOS)
+        /// The device the microphone source taps; nil is the system default input. A loopback device (BlackHole)
+        /// here draws whatever the Mac plays, with no change to the system's own input setting.
+        var inputDevice: AudioInputDevice?
+        private(set) var inputDevices: [AudioInputDevice] = []
+
+        /// Re-lists the inputs (a device can come and go); a selection that vanished falls back to the default.
+        func refreshInputDevices() {
+            inputDevices = AudioInputDevices.list()
+            if let inputDevice, !inputDevices.contains(inputDevice) { self.inputDevice = nil }
+        }
+    #endif
 
     @ObservationIgnored private var source: (any SoundFrameSource)?
     @ObservationIgnored private var latest = SoundFrame()
     @ObservationIgnored private let drop = DropEngine()
-    @ObservationIgnored private let engine = AVAudioEngine()
+    /// Hears a beat, hits, energy and sections in the microphone and file sources, which have no conductor.
+    @ObservationIgnored private let inference = SoundMusicInference()
+    @ObservationIgnored private var inferred: MusicContext?
+    /// The tempo the inference locked for a microphone or file source, whole BPM; nil for the demo song or before a lock.
+    /// Observed, so the strip's readout updates when it changes and not every frame.
+    private(set) var heardTempo: Int?
+    /// A new engine per start: once an engine has played through its output, its I/O unit (shared by the input
+    /// node) refuses an input device (-10851), so File then Microphone would fail on the one engine.
+    @ObservationIgnored private var engine = AVAudioEngine()
     @ObservationIgnored private var player: AVAudioPlayerNode?
     @ObservationIgnored private var tap: AudioTapSource?
     @ObservationIgnored private var fileAccess: URL?
@@ -41,9 +61,12 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     /// The frame the last `poll` returned, for a view that draws on its own clock (the Metal tunnel).
     var latestFrame: SoundFrame { latest }
 
-    /// The engine's `MusicContext` while the demo song plays (hit counters, section, beat clock); nil for a
-    /// microphone or file, which have no conductor. The visualizers treat nil as "not music".
-    var latestMusic: MusicContext? { isRunning && input == .demo ? drop.latestMusic : nil }
+    /// The engine's `MusicContext` while the demo song plays (hit counters, section, beat clock); for a microphone or
+    /// file, which have no conductor, the context `SoundMusicInference` hears in their frames. Nil while stopped.
+    var latestMusic: MusicContext? {
+        guard isRunning else { return nil }
+        return input == .demo ? drop.latestMusic : inferred
+    }
 
     /// The frame and, for the demo song, its music: what every visualizer polls.
     var latestInput: SoundVisualInput { SoundVisualInput(frame: latest, music: latestMusic) }
@@ -114,13 +137,18 @@ enum GalleryInput: String, CaseIterable, Identifiable {
     }
 
     /// The latest frame at `date`; silence while nothing plays. Also advances `visualState` (with the demo song's
-    /// `MusicContext`; other sources drive the visualizers from their frames alone, as the contract allows).
+    /// `MusicContext`, or the one inferred from a microphone or file).
     func poll(at date: Date) -> SoundFrame {
         let now = date.timeIntervalSinceReferenceDate
         if isPaused {
             // Hold the last frame; the state still advances below so a color change eases in.
         } else if let source {
             latest = source.poll(time: now - clockOrigin)
+            if input != .demo {
+                inferred = inference.update(latest)
+                let tempo = inference.tempoBPM.map { Int($0.rounded()) }
+                if tempo != heardTempo { heardTempo = tempo }
+            }
         } else {
             latest = SoundFrame()
         }
@@ -159,9 +187,13 @@ enum GalleryInput: String, CaseIterable, Identifiable {
             engine.detach(player)
             self.player = nil
         }
+        engine = AVAudioEngine()
         fileAccess?.stopAccessingSecurityScopedResource()
         fileAccess = nil
         source = nil
+        inference.reset()
+        inferred = nil
+        heardTempo = nil
         isRunning = false
     }
 
@@ -199,13 +231,18 @@ enum GalleryInput: String, CaseIterable, Identifiable {
         #if os(iOS)
             try AudioSessionConfiguration.configureForMicrophone()
         #endif
+        var heard = "the microphone"
+        #if os(macOS)
+            try AudioInputDevices.select(inputDevice, on: engine.inputNode)
+            if let inputDevice { heard = inputDevice.name }
+        #endif
         let tap = try AudioTapSource.microphone(of: engine)
         engine.prepare()
         try engine.start()
         try tap.start()
         self.tap = tap
         source = tap
-        status = "Listening to the microphone."
+        status = "Listening to \(heard)."
     }
 
     private func startFile(_ url: URL) throws {

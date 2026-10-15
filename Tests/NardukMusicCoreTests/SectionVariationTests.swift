@@ -134,7 +134,8 @@ import Testing
     /// Each genre arrives at its drops in its own one of a few forms, not one riser, roll and impact for all.
     @Test func dropsArriveInTheGenresOwnForm() {
         let forms: [(Genre, GenreArrangement.DropEntry)] = [
-            (.dubstep, .slam), (.house, .filterOpen), (.synthwave, .pickup), (.funk, .bandFill), (.tropicalHouse, .filterOpen),
+            (.dubstep, .slam), (.house, .filterOpen), (.synthwave, .pickup), (.funk, .bandFill),
+            (.tropicalHouse, .filterOpen),
         ]
         for (genre, form) in forms {
             #expect(GenreArrangement.dropEntry(genre) == form)
@@ -144,7 +145,8 @@ import Testing
             var arrivals = 0
             for seed in Self.seeds.prefix(5) {
                 let bars = Self.play(genre, seed: seed)
-                for index in bars.indices.dropFirst() where bars[index].section.isDrop && !bars[index - 1].section.isDrop {
+                for index in bars.indices.dropFirst()
+                where bars[index].section.isDrop && !bars[index - 1].section.isDrop {
                     arrivals += 1
                     risers += bars[index - 1].notes.filter { $0.instrument == .riser }.count
                     impacts += bars[index].notes.filter { $0.instrument == .impact && $0.step % 16 == 0 }.count
@@ -153,9 +155,12 @@ import Testing
             }
             #expect(arrivals >= 5, "\(genre): \(arrivals) drop arrivals")
             switch form {
-            case .slam: #expect(risers >= arrivals && impacts >= arrivals, "\(genre): \(risers) risers, \(impacts) impacts")
-            case .pickup: #expect(risers >= arrivals && impacts >= arrivals, "\(genre): \(risers) risers, \(impacts) impacts")
-            case .filterOpen, .none: #expect(risers == 0 && impacts == 0, "\(genre): \(risers) risers, \(impacts) impacts")
+            case .slam:
+                #expect(risers >= arrivals && impacts >= arrivals, "\(genre): \(risers) risers, \(impacts) impacts")
+            case .pickup:
+                #expect(risers >= arrivals && impacts >= arrivals, "\(genre): \(risers) risers, \(impacts) impacts")
+            case .filterOpen, .none:
+                #expect(risers == 0 && impacts == 0, "\(genre): \(risers) risers, \(impacts) impacts")
             case .bandFill:
                 #expect(risers == 0 && impacts == 0 && crashes > 0, "\(genre): \(impacts) impacts, \(crashes) crashes")
             }

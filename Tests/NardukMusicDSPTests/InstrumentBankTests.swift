@@ -28,7 +28,10 @@ struct InstrumentBankTests {
 
     /// The CC BY piano has its attribution where an app can show it.
     @Test func theCreditsNameThePiano() {
-        #expect(InstrumentBank.credits.contains { $0.contains("Salamander Grand Piano") && $0.contains("Alexander Holm") && $0.contains("CC BY 3.0") })
+        #expect(
+            InstrumentBank.credits.contains {
+                $0.contains("Salamander Grand Piano") && $0.contains("Alexander Holm") && $0.contains("CC BY 3.0")
+            })
         #expect(InstrumentBank.credits.count == 6)
     }
 
@@ -36,7 +39,9 @@ struct InstrumentBankTests {
         #expect(InstrumentBank(data: Data()) == nil)
         #expect(InstrumentBank(data: Data("NVS1xxxxyyyy".utf8)) == nil)
         var bytes = Data("NVS2".utf8)
-        let manifest = Data(#"{"sampleRate":32000,"instruments":[],"clips":[{"instrument":"piano","root":60,"layer":0,"offset":0,"count":100,"loopStart":0,"loopEnd":0,"index":0}]}"#.utf8)
+        let manifest = Data(
+            #"{"sampleRate":32000,"instruments":[],"clips":[{"instrument":"piano","root":60,"layer":0,"offset":0,"count":100,"loopStart":0,"loopEnd":0,"index":0}]}"#
+                .utf8)
         withUnsafeBytes(of: UInt32(manifest.count).littleEndian) { bytes.append(contentsOf: $0) }
         bytes.append(manifest)
         // The clip claims 100 samples; the body holds 10.
@@ -193,9 +198,11 @@ struct InstrumentBankTests {
             let core = DropSynthCore(sampleRate: 48_000, bpm: 120, stepsPerBar: 16, instrumentBank: bank)
             core.schedule(
                 ScheduledNote(
-                    step: 0, instrument: .keys, velocity: 0.8, params: NoteParams(pitch: 64, lengthSteps: 4, voice: voice)))
+                    step: 0, instrument: .keys, velocity: 0.8,
+                    params: NoteParams(pitch: 64, lengthSteps: 4, voice: voice)))
             core.schedule(
-                ScheduledNote(step: 0, instrument: .hat, velocity: 0.8, params: NoteParams(voice: PercussionVoice.shaker)))
+                ScheduledNote(
+                    step: 0, instrument: .hat, velocity: 0.8, params: NoteParams(voice: PercussionVoice.shaker)))
             let frames = 24_000
             let left = UnsafeMutablePointer<Float>.allocate(capacity: frames)
             let right = UnsafeMutablePointer<Float>.allocate(capacity: frames)

@@ -142,19 +142,22 @@ public enum ABTest {
         let signals = scenario.timeline()
         var signalIndex = 0
         var level: Double?
-        let audio = OfflineRenderer.render(scenario, seconds: seconds, observe: { renderer in
-            if let track = renderer.snapshot.track, tracks.last?.number != track.number { tracks.append(track) }
-            while signalIndex < signals.count, signals[signalIndex].time < renderer.time {
-                if let value = signals[signalIndex].level { level = value }
-                signalIndex += 1
-            }
-            if renderer.tick % Int(OfflineRenderer.tickRate) == 0 {
-                energy.append(
-                    Fixture.Energy(
-                        time: renderer.time, level: level, energy: (renderer.snapshot.energy * 1_000).rounded() / 1_000,
-                        section: renderer.snapshot.section))
-            }
-        })
+        let audio = OfflineRenderer.render(
+            scenario, seconds: seconds,
+            observe: { renderer in
+                if let track = renderer.snapshot.track, tracks.last?.number != track.number { tracks.append(track) }
+                while signalIndex < signals.count, signals[signalIndex].time < renderer.time {
+                    if let value = signals[signalIndex].level { level = value }
+                    signalIndex += 1
+                }
+                if renderer.tick % Int(OfflineRenderer.tickRate) == 0 {
+                    energy.append(
+                        Fixture.Energy(
+                            time: renderer.time, level: level,
+                            energy: (renderer.snapshot.energy * 1_000).rounded() / 1_000,
+                            section: renderer.snapshot.section))
+                }
+            })
         let settings = scenario.settings()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -378,7 +381,8 @@ public enum ABTest {
             case nil: score.moreRealSame += 1
             }
             score.perTrial.append([
-                "clip": trial.id, "seed": String(trial.seed), "excerpt": trial.excerpt?.rawValue ?? "whole", "preferred": prefer?.rawValue ?? "same",
+                "clip": trial.id, "seed": String(trial.seed), "excerpt": trial.excerpt?.rawValue ?? "whole",
+                "preferred": prefer?.rawValue ?? "same",
                 "moreReal": real?.rawValue ?? "same",
             ])
         }

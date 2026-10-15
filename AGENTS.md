@@ -10,4 +10,9 @@ Read `README.md` for the products and `docs/sound-contract.md` for the contract 
 - Apps that use this package live in their own repositories (beat-blaster, data-beats, wirewatcher, buildbeat). An app
   change never lands here; `Examples/SoundGallery` is the package's own test bench.
 
+- `web/` is `@narduk-enterprises/sound-web`, the TypeScript/WebGL2 port of a few visualizers. Its gate is
+  `cd web && npm run check && npm run test:browser`; how it stays in sync with the Swift (a shared fixture, the Metal
+  files' hashes) and how to port another look is `docs/web-port.md`. A Swift change that moves the fixture regenerates
+  it (`NARDUK_WRITE_WEB_FIXTURES=1`).
+
 Issue labels: `bug`, `enhancement`, `documentation`; `P0-critical` to `P3-low`.

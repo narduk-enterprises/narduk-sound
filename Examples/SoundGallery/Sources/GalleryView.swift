@@ -64,6 +64,7 @@ struct GalleryView: View {
             plugins.start()
             // `-autoplay demo|microphone` or `-autofile <path>` starts a source at launch, for smoke runs and screenshots;
             // `-song <style id>` (genre-techno, guitars, ...) picks the demo song and `-fullscreen <tile id>` opens a tile.
+            // On macOS `-audiodevice <name>` (exact or a prefix, any case) picks the microphone source's input device.
             let defaults = UserDefaults.standard
             if let styleID = defaults.string(forKey: "song"),
                 let style = GallerySongStyle.all.first(where: { $0.id == styleID })
@@ -80,6 +81,12 @@ struct GalleryView: View {
             }
             if defaults.object(forKey: "hue") != nil { model.look.hueShift = Float(defaults.double(forKey: "hue")) }
             if let tileID = defaults.string(forKey: "fullscreen") { open(tileID) }
+            #if os(macOS)
+                if let name = defaults.string(forKey: "audiodevice") {
+                    model.refreshInputDevices()
+                    model.inputDevice = AudioInputDevices.match(name, in: model.inputDevices)
+                }
+            #endif
             if let path = defaults.string(forKey: "autofile") {
                 model.input = .file
                 await model.start(file: URL(fileURLWithPath: path))

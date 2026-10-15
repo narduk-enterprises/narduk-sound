@@ -51,8 +51,16 @@ public enum SampledInstrument: Int, CaseIterable, Sendable {
         }
     }
 
-    /// Level against the synth voices it replaces.
-    var trim: Float {
+    /// A power of two, so the voice-to-bus scaling is exact: a voice plays at `mixTrim / busGain` (its own output
+    /// stays inside ±1 with headroom, whatever the mix wants) and the synth core multiplies each voice by `busGain`
+    /// as it joins the bus. The mix is the one it was before the split, bit for bit.
+    static let busGain: Float = 4
+
+    /// What the voice multiplies its recording by.
+    var trim: Float { mixTrim / Self.busGain }
+
+    /// Level on the bus against the synth voices it replaces.
+    var mixTrim: Float {
         // Tropical house is the only genre that plays these, and it is a melody track: the melody sits on top of the
         // kick and the bass (`GenreArrangement.balance`), so the trims run well above the synth voices'.
         switch self {

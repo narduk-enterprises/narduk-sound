@@ -317,7 +317,11 @@ import Testing
         for track in p.distinctTracks {
             #expect(track.genre == genre && range.contains(track.bpm), "\(track.genre) at \(track.bpm)")
             let pluck = [KeysVoice.sampledSteelDrum, KeysVoice.sampledFlute].contains(track.keysVoice)
-            #expect(pluck && track.hookDescription.hasSuffix(track.keysVoice == KeysVoice.sampledFlute ? "flute hook" : "steel drum hook"))
+            #expect(
+                pluck
+                    && track.hookDescription.hasSuffix(
+                        track.keysVoice == KeysVoice.sampledFlute ? "flute hook" : "steel drum hook")
+            )
             #expect([.ionian, .lydian, .mixolydian, .dorian].contains(track.mode), "\(track.mode)")
         }
         // The drop is the pluck over the full groove: the recorded hook, the kick on every beat, piano chords over
@@ -370,7 +374,9 @@ import Testing
         let sampled = p.notes.filter { $0.instrument == .vocalSample }
         #expect(sampled.allSatisfy { SampleKind(voice: $0.params.voice ?? 0) == .chop }, "seed \(seed) sings a line")
         // The drum kit's top is hand percussion: shaker, tambourine and finger snap.
-        let tops: [Instrument: Int] = [.hat: PercussionVoice.shaker, .openHat: PercussionVoice.tambourine, .snare: PercussionVoice.snap]
+        let tops: [Instrument: Int] = [
+            .hat: PercussionVoice.shaker, .openHat: PercussionVoice.tambourine, .snare: PercussionVoice.snap,
+        ]
         let synthTops = p.notes.filter { note in tops[note.instrument].map { note.params.voice != $0 } ?? false }
         #expect(synthTops.isEmpty, "seed \(seed): \(synthTops.count) synth hats or snares")
         // The sub never glides: no glide amount, and each note ends before the next begins, so it starts fresh.

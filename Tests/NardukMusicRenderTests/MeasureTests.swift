@@ -5,7 +5,8 @@ import Testing
 
 /// The measuring tools (narduk-sound#36): loudness matching, the blind A/B key and the samey metric.
 @Suite struct MeasureTests {
-    static func sine(_ hz: Double, amplitude: Float, seconds: Double = 3, sampleRate: Double = 48_000) -> RenderedAudio {
+    static func sine(_ hz: Double, amplitude: Float, seconds: Double = 3, sampleRate: Double = 48_000) -> RenderedAudio
+    {
         let samples = (0..<Int(seconds * sampleRate)).map {
             amplitude * Float(sin(2 * Double.pi * hz * Double($0) / sampleRate))
         }

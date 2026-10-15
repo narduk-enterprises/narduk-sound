@@ -4,6 +4,9 @@ The NardukSound Swift package: the NardukMusic engine plus sound analysis,
 sonification and Metal visualizers. It moved here, with its history, from
 narduk-libs (`packages/modules/narduk-music/swift`) after v0.4.1.
 
+`web/` holds `@narduk-enterprises/sound-web`, the visualizers in a browser (WebGL2, Canvas2D fallback) driven by Web
+Audio; see `web/README.md` and `docs/web-port.md`.
+
 ## NardukMusic
 
 A generative music engine: a conductor that writes a song from whatever your app
@@ -17,7 +20,7 @@ cues), and the conductor builds, drops and changes tracks to match.
 | --------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NardukMusicCore`     | macOS, iOS, Linux | `DropConductor`, the song model and the `MusicSignal` input. Pure and clock-free.                                                                                                                                                 |
 | `NardukMusicDSP`      | macOS, iOS, Linux | `DropSynthCore`, the instruments and the limiter (`SpectrumAnalyzer` and `SPSCRing` forward to NardukSoundAnalysis).                                                                                                              |
-| `NardukSoundAnalysis` | macOS, iOS, Linux | Any audio to a `SoundFrame` (spectrum, waveform, loudness): `SoundAnalyzer`, `SPSCRing`, `SampleRing`, ring and recent-sample sources, and (Apple only) `AudioTapSource` for a mic, mixer or file through `AVAudioEngine`. No UI. |
+| `NardukSoundAnalysis` | macOS, iOS, Linux | Any audio to a `SoundFrame` (spectrum, waveform, loudness): `SoundAnalyzer`, `SPSCRing`, `SampleRing`, ring and recent-sample sources, and (Apple only) `AudioTapSource` for a mic, mixer or file through `AVAudioEngine`, and (macOS 14.2+) `ProcessTapSource`, a muted Core Audio process tap that hears one app, such as Music.app, without making a sound. No UI. |
 | `NardukSonify`        | macOS, iOS, Linux | `StreamSonifier`: a stream of numbers to the `MusicSignal`s the conductor plays, online and in bounded memory.                                                                                                                    |
 | `NardukSoundVisuals`  | macOS, iOS, Linux | `SoundVisualState`, the render budget and the palette contract: what a visualizer reads each frame, from a `SoundFrame` and an optional `MusicContext`. No drawing.                                                               |
 | `NardukMusicRender`   | macOS, iOS, Linux | `OfflineRenderer`, JSON scenarios and WAV / M4A writing.                                                                                                                                                                          |
@@ -37,7 +40,10 @@ it needs no credential.
 `Examples/SoundGallery` is a SwiftUI app for macOS, iPad and iPhone that plays the
 demo song, the microphone or an audio file through `NardukSoundAnalysis` into
 every Metal visualizer side by side (`xcodegen generate`, then build the
-`SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch).
+`SoundGallery` scheme; `-autoplay demo|microphone` starts a source at launch, and on
+macOS `-audiodevice <name>` picks the microphone source's input device, so
+`-autoplay microphone -audiodevice "BlackHole 2ch"` draws what the Mac is playing,
+with the beat, hits, energy and sections `SoundMusicInference` hears in it).
 It is unsigned and local only; CI builds it for macOS and the iOS simulator.
 
 ## Reading the engine
