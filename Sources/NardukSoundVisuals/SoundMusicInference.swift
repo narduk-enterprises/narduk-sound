@@ -33,6 +33,8 @@ public final class SoundMusicInference {
     public static let defaultBPM = 140.0
     /// How often the tempo is re-estimated.
     static let tempoInterval = 0.5
+    /// The share of the heard `loudness` published as the context's `energy` (see `update`).
+    public static let contextEnergyScale: Float = 0.45
     static let minLag = Int(gridRate * 60 / maxBPM)  // 15
     static let maxLag = Int(gridRate * 60 / minBPM)  // 50
     /// The shortest lag correlated: a quadruple-time subdivision of the fastest tempo.
@@ -229,11 +231,14 @@ public final class SoundMusicInference {
         let running = heard && !resting
         let secondsPerStep = 60 / bpm / 4
         let phase = Float(stepPosition / 4 - (stepPosition / 4).rounded(.down))
-        // `energy` in the context is a conductor's, which the engine's own songs leave at 0 and the visualizers are
-        // tuned for: feeding loudness there makes a tile thrash twice as hard as it does for the demo song. The
-        // loudness stays internal (sections, `dropQueued`) and public as `loudness` for a caller that wants it.
+        // `energy` is the conductor's slot in the context. Published as 0 it left every visualizer that reads it dark
+        // or still on a real song (Fireworks gates its whole show on it); published as the full `loudness` it makes
+        // the shaders that light by it (the plasma, the warp grid) about twice as busy as the tuning for the
+        // engine's songs. `contextEnergyScale` is the share of the heard loudness that goes in: the largest one
+        // that keeps the plasma off the strobe limit, which is also enough to light the Fireworks (see
+        // docs/visual-scorecard.md). The loudness itself stays public as `loudness` and drives the sections.
         latest = MusicContext(
-            hitCounts: counts, step: lastStep, section: section, energy: 0,
+            hitCounts: counts, step: lastStep, section: section, energy: energy * Self.contextEnergyScale,
             wobblePhase: (phase * 2).truncatingRemainder(dividingBy: 1), wobbleCutoff: midLevel, isRunning: running,
             secondsPerStep: secondsPerStep, stepsPerBar: 16, stepsPerPhrase: 128,
             phraseProgress: Float(lastStep % 128) / 128, buildThreshold: 0.55, dropThreshold: 0.4,

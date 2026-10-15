@@ -1,0 +1,414 @@
+import { SoundAnalyzer } from "./analysis.js";
+import { AudioTap, type SampleSource, type SoundSourceInput } from "./audio.js";
+import { FrameGovernor } from "./budget.js";
+import { Canvas2DRenderer } from "./canvas2d.js";
+import { emptyFrame } from "./frame.js";
+import { isStatic, watchReducedMotion, type MotionPreference } from "./motion.js";
+import type { SoundPaletteProvider } from "./palette.js";
+import type { SoundRenderer } from "./renderer.js";
+import { LumaWatchdog } from "./safety.js";
+import type { VisualizerId } from "./shaders/index.js";
+import { SoundVisualState } from "./state.js";
+import { ShaderInputs } from "./uniforms.js";
+import { WebGLRenderer } from "./webgl.js";
+
+export type VisualizerStatus =
+  /** Built, waiting for `start` (show a tap-to-start control). */
+  | "idle"
+  /** Starting or buffering. */
+  | "loading"
+  | "playing"
+  | "paused"
+  /** Reduced motion: the sound plays and a still picture of it is shown. */
+  | "still"
+  /** Playing, but every sample is zero: usually a cross-origin stream without CORS headers. */
+  | "silent"
+  | "error";
+
+export interface SoundVisualizerOptions {
+  visual?: VisualizerId;
+  /** "auto" tries WebGL2 and falls back to Canvas2D. */
+  renderer?: "auto" | "webgl2" | "canvas2d";
+  /** "auto" follows `prefers-reduced-motion`. */
+  motion?: MotionPreference;
+  palettes?: SoundPaletteProvider;
+  /** Caps the backing store's pixels per CSS pixel (default 2, or 1.5 on a low-end device). */
+  maxDevicePixelRatio?: number;
+  onStatus?: (status: VisualizerStatus, detail?: string) => void;
+}
+
+/** Seconds of all-zero samples while playing before the status turns "silent". */
+const SILENT_AFTER = 4;
+/** Seconds after playback starts before the reduced-motion still is taken. */
+const STILL_AFTER = 1.5;
+
+/**
+ * Plays a sound source through a ported visualizer on a canvas: the analysis, the shared state, the renderer, the
+ * flash rules and the frame budget in one object.
+ *
+ * - `start(source)` must run inside a user gesture (iOS Safari starts audio only from one). Build a tap-to-start
+ *   control around it, or use `mountSoundPlayer`, which does.
+ * - `pause()` stops the sound and holds the last frame (WCAG 2.2.2); `resume()` continues.
+ * - With `prefers-reduced-motion: reduce` (or `motion: "static"`) nothing animates: one still of the current sound
+ *   is drawn, in calm mode, and redrawn only on a visual change or a resize.
+ * - Hidden tabs and off-screen canvases draw nothing; the governor holds the frame budget on slow devices.
+ */
+export class SoundVisualizer {
+  readonly state: SoundVisualState;
+  readonly governor: FrameGovernor;
+  private _canvas: HTMLCanvasElement;
+  private _renderer: SoundRenderer;
+  private source: SampleSource | null = null;
+  private analyzer: SoundAnalyzer | null = null;
+  private readonly frame = emptyFrame();
+  private readonly inputs = new ShaderInputs();
+  private readonly watchdog = new LumaWatchdog();
+  private visual: VisualizerId;
+  private motion: MotionPreference;
+  private prefersReduced: boolean;
+  private readonly stopMotionWatch: () => void;
+  private readonly onStatus?: (status: VisualizerStatus, detail?: string) => void;
+  private _status: VisualizerStatus = "idle";
+  private raf = 0;
+  private lastDraw = -Infinity;
+  private pageVisible = true;
+  private onScreen = true;
+  private silentSince = -1;
+  private stillTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly resizeObserver?: ResizeObserver;
+  private readonly intersectionObserver?: IntersectionObserver;
+  private readonly cleanups: (() => void)[] = [];
+  private sourceCleanups: (() => void)[] = [];
+
+  constructor(canvas: HTMLCanvasElement, options: SoundVisualizerOptions = {}) {
+    this._canvas = canvas;
+    this.visual = options.visual ?? "spectrum";
+    this.motion = options.motion ?? "auto";
+    this.onStatus = options.onStatus;
+    this.state = new SoundVisualState(undefined, options.palettes);
+    const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+    this.governor = new FrameGovernor(
+      {
+        devicePixelRatio: globalThis.devicePixelRatio ?? 1,
+        hardwareConcurrency: nav.hardwareConcurrency,
+        deviceMemory: nav.deviceMemory,
+        saveData: nav.connection?.saveData,
+      },
+      { maxDevicePixelRatio: options.maxDevicePixelRatio },
+    );
+    this._renderer = this.makeRenderer(options.renderer ?? "auto");
+    this._renderer.setVisual(this.visual);
+
+    const motion = watchReducedMotion((reduce) => {
+      this.prefersReduced = reduce;
+      this.applyMotion();
+    });
+    this.prefersReduced = motion.reduce;
+    this.stopMotionWatch = motion.stop;
+
+    const onVisibility = () => {
+      this.pageVisible = document.visibilityState !== "hidden";
+      this.updateVisibility();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    this.cleanups.push(() => document.removeEventListener("visibilitychange", onVisibility));
+    if (typeof ResizeObserver === "function") {
+      this.resizeObserver = new ResizeObserver(() => this.applySize());
+      this.resizeObserver.observe(canvas);
+    }
+    if (typeof IntersectionObserver === "function") {
+      this.intersectionObserver = new IntersectionObserver((entries) => {
+        this.onScreen = entries.some((e) => e.isIntersecting);
+        this.updateVisibility();
+      });
+      this.intersectionObserver.observe(canvas);
+    }
+    this.applySize();
+  }
+
+  /** The canvas drawn into (a fresh one replaces the original if WebGL2 failed after taking it). */
+  get canvas(): HTMLCanvasElement {
+    return this._canvas;
+  }
+  get renderer(): SoundRenderer {
+    return this._renderer;
+  }
+  get status(): VisualizerStatus {
+    return this._status;
+  }
+  get isStatic(): boolean {
+    return isStatic(this.motion, this.prefersReduced);
+  }
+  get currentVisual(): VisualizerId {
+    return this.visual;
+  }
+
+  /**
+   * Starts `input` (an element, a stream URL, a MediaStream or a ready `SampleSource`). Call it from a user gesture.
+   * A second call replaces the source.
+   */
+  async start(input: SoundSourceInput | SampleSource): Promise<void> {
+    await this.stopSource();
+    this.setStatus("loading");
+    const source = isSampleSource(input) ? input : new AudioTap(input);
+    this.source = source;
+    this.analyzer = new SoundAnalyzer(source.sampleRate);
+    const element = source.element;
+    if (element) {
+      const onPlaying = () => this.onPlaying();
+      const onWaiting = () => this._status === "playing" && this.setStatus("loading");
+      const onPause = () => {
+        if (this._status !== "paused") this.enterPaused();
+      };
+      const onError = () => this.setStatus("error", describeMediaError(element));
+      element.addEventListener("playing", onPlaying);
+      element.addEventListener("waiting", onWaiting);
+      element.addEventListener("pause", onPause);
+      element.addEventListener("error", onError);
+      this.sourceCleanups.push(() => {
+        element.removeEventListener("playing", onPlaying);
+        element.removeEventListener("waiting", onWaiting);
+        element.removeEventListener("pause", onPause);
+        element.removeEventListener("error", onError);
+      });
+    }
+    try {
+      await source.start();
+    } catch (error) {
+      this.setStatus("error", error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+    if (!element) this.onPlaying();
+  }
+
+  async pause(): Promise<void> {
+    if (!this.source) return;
+    this.enterPaused();
+    await this.source.pause();
+  }
+
+  async resume(): Promise<void> {
+    if (!this.source) return;
+    this.setStatus("loading");
+    await this.source.resume();
+    if (!this.source.element) this.onPlaying();
+  }
+
+  async togglePause(): Promise<void> {
+    if (this._status === "paused") await this.resume();
+    else await this.pause();
+  }
+
+  setVisual(id: VisualizerId): void {
+    this.visual = id;
+    this._renderer.setVisual(id);
+    if (this.isStatic && this.source) this.drawStill();
+  }
+
+  setMotion(preference: MotionPreference): void {
+    this.motion = preference;
+    this.applyMotion();
+  }
+
+  async destroy(): Promise<void> {
+    this.stopLoop();
+    clearTimeout(this.stillTimer);
+    await this.stopSource();
+    this.stopMotionWatch();
+    this.resizeObserver?.disconnect();
+    this.intersectionObserver?.disconnect();
+    for (const cleanup of this.cleanups.splice(0)) cleanup();
+    this._renderer.destroy();
+  }
+
+  // MARK: Internals
+
+  private makeRenderer(kind: "auto" | "webgl2" | "canvas2d"): SoundRenderer {
+    if (kind === "canvas2d") return new Canvas2DRenderer(this._canvas);
+    try {
+      const renderer = new WebGLRenderer(this._canvas);
+      const onLost = (event: Event) => {
+        event.preventDefault();
+        this.stopLoop();
+      };
+      const onRestored = () => {
+        this._renderer = new WebGLRenderer(this._canvas);
+        this._renderer.setVisual(this.visual);
+        this.applySize();
+        this.applyMotion();
+      };
+      this._canvas.addEventListener("webglcontextlost", onLost);
+      this._canvas.addEventListener("webglcontextrestored", onRestored);
+      this.cleanups.push(() => {
+        this._canvas.removeEventListener("webglcontextlost", onLost);
+        this._canvas.removeEventListener("webglcontextrestored", onRestored);
+      });
+      return renderer;
+    } catch (error) {
+      if (kind === "webgl2") throw error;
+      // A canvas that handed out a WebGL context can never give a 2D one: swap in a fresh element.
+      if (this._canvas.getContext("2d") === null) {
+        const fresh = this._canvas.cloneNode(false) as HTMLCanvasElement;
+        this._canvas.replaceWith(fresh);
+        this._canvas = fresh;
+      }
+      return new Canvas2DRenderer(this._canvas);
+    }
+  }
+
+  private onPlaying(): void {
+    this.silentSince = -1;
+    if (this.isStatic) {
+      this.setStatus("still");
+      clearTimeout(this.stillTimer);
+      this.stillTimer = setTimeout(() => this.drawStill(), STILL_AFTER * 1000);
+    } else {
+      this.setStatus("playing");
+      this.startLoop();
+    }
+  }
+
+  private enterPaused(): void {
+    this.stopLoop();
+    clearTimeout(this.stillTimer);
+    this.setStatus("paused");
+  }
+
+  private applyMotion(): void {
+    if (!this.source || this._status === "paused" || this._status === "idle" || this._status === "error") return;
+    if (this.isStatic) {
+      this.stopLoop();
+      this.setStatus("still");
+      this.drawStill();
+    } else {
+      this.setStatus("playing");
+      this.startLoop();
+    }
+  }
+
+  private applySize(): void {
+    const rect = this._canvas.getBoundingClientRect();
+    const cssWidth = rect.width || this._canvas.clientWidth || 300;
+    const cssHeight = rect.height || this._canvas.clientHeight || 150;
+    const { width, height } = this.governor.backingSize(cssWidth, cssHeight);
+    this._renderer.resize(width, height);
+    // A resize clears the canvas: redraw a held picture once.
+    if (this.source && (this._status === "paused" || this._status === "still")) this.drawHeld();
+  }
+
+  private updateVisibility(): void {
+    const visible = this.pageVisible && this.onScreen;
+    this.governor.setVisible(visible);
+    if (!visible) this.stopLoop();
+    else if (this._status === "playing" || this._status === "silent" || this._status === "loading") this.startLoop();
+  }
+
+  private startLoop(): void {
+    if (this.raf || !this.source || this.isStatic) return;
+    if (!(this.pageVisible && this.onScreen)) return;
+    this.lastDraw = -Infinity;
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  private stopLoop(): void {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+  }
+
+  private readonly tick = (ms: number) => {
+    this.raf = requestAnimationFrame(this.tick);
+    if (!this.governor.shouldDraw(ms, this.lastDraw)) return;
+    const interval = this.lastDraw === -Infinity ? 1000 / this.governor.decision.fps : ms - this.lastDraw;
+    this.lastDraw = ms;
+    const t0 = performance.now();
+    this.step(ms / 1000);
+    const work = performance.now() - t0;
+    if (this.governor.record(ms, work, interval)) {
+      // A resize clears the canvas: draw the same frame again at the new size, so no blank frame shows.
+      this.applySize();
+      this.redraw();
+    }
+  };
+
+  /** Draws the last frame again at the canvas's new size, without advancing the state or the flash limiter. */
+  private redraw(): void {
+    this.inputs.uniforms[0] = this._canvas.width;
+    this.inputs.uniforms[1] = this._canvas.height;
+    this._renderer.draw(this.inputs, this.state, this.watchdog.gain);
+  }
+
+  /** One animated frame at `now` seconds. */
+  private step(now: number): void {
+    if (!this.source || !this.analyzer) return;
+    const frame = this.analyzer.analyze(this.source.read(), now, this.frame);
+    this.state.update(frame, now);
+    this.watchSilence(now);
+    const luma = this._renderer.takeLuma();
+    const gain = luma === null ? this.watchdog.gain : this.watchdog.observe(luma, now);
+    this.inputs.fill(this.state, this._canvas.width, this._canvas.height);
+    this._renderer.draw(this.inputs, this.state, gain);
+  }
+
+  private watchSilence(now: number): void {
+    const silent = this.frame.peakDB <= -120;
+    if (!silent) {
+      this.silentSince = -1;
+      if (this._status === "silent" || this._status === "loading") this.setStatus("playing");
+      return;
+    }
+    if (this.silentSince < 0) this.silentSince = now;
+    else if (this._status === "playing" && now - this.silentSince > SILENT_AFTER) {
+      this.setStatus(
+        "silent",
+        "The sound is playing but no samples reach the visualizer. A cross-origin stream needs CORS headers (Access-Control-Allow-Origin).",
+      );
+    }
+  }
+
+  /**
+   * The reduced-motion still: settles the state on the current sound in calm mode (the smoothing needs a few
+   * frames to reach it) and draws once.
+   */
+  private drawStill(): void {
+    if (!this.source || !this.analyzer || !this.isStatic) return;
+    const base = performance.now() / 1000;
+    for (let i = 0; i < 24; i++) {
+      const frame = this.analyzer.analyze(this.source.read(), base + i / 60, this.frame);
+      this.state.update(frame, base + i / 60, { calm: true });
+    }
+    this.drawHeld();
+  }
+
+  /** Draws the state as it stands, without advancing it. */
+  private drawHeld(): void {
+    this.inputs.fill(this.state, this._canvas.width, this._canvas.height);
+    this._renderer.draw(this.inputs, this.state, 1);
+  }
+
+  private async stopSource(): Promise<void> {
+    this.stopLoop();
+    const source = this.source;
+    this.source = null;
+    for (const cleanup of this.sourceCleanups.splice(0)) cleanup();
+    this.analyzer = null;
+    if (source) await source.close().catch(() => {});
+  }
+
+  private setStatus(status: VisualizerStatus, detail?: string): void {
+    if (status === this._status && detail === undefined) return;
+    this._status = status;
+    this.onStatus?.(status, detail);
+  }
+}
+
+function isSampleSource(input: unknown): input is SampleSource {
+  return typeof input === "object" && input !== null && typeof (input as SampleSource).read === "function";
+}
+
+function describeMediaError(element: HTMLMediaElement): string {
+  const code = element.error?.code;
+  if (code === 2) return "A network error stopped the stream.";
+  if (code === 3) return "The stream could not be decoded.";
+  if (code === 4) return "The stream URL is not supported, unreachable, or blocked by CORS.";
+  return "The sound could not be played.";
+}

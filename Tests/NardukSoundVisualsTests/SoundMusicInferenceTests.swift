@@ -118,6 +118,22 @@ struct DrumFrames {
         #expect(inference.latest.energy < 0.4)
     }
 
+    @Test func theContextCarriesTheHeardLoudnessAsEnergy() {
+        let inference = SoundMusicInference()
+        var loudest: Float = 0
+        for frame in DrumFrames(bpm: 128, rmsDB: -12).frames(seconds: 8) {
+            let music = inference.update(frame)
+            #expect(music.energy == inference.loudness * SoundMusicInference.contextEnergyScale)
+            loudest = max(loudest, music.energy)
+        }
+        #expect(loudest > 0.25, "loud drums only reached energy \(loudest)")
+        let quiet = DrumFrames(bpm: 128, rmsDB: -34, bed: 0.1, kicks: false, snares: false, hats: false)
+            .frames(seconds: 6, from: 481, startTime: 8)
+        var music = MusicContext()
+        for frame in quiet { music = inference.update(frame) }
+        #expect(music.energy < loudest / 2, "the quiet after them still read \(music.energy)")
+    }
+
     @Test func aFrameAlreadyHeardChangesNothing() {
         let inference = SoundMusicInference()
         let frames = DrumFrames().frames(seconds: 3)

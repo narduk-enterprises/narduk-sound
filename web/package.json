@@ -1,0 +1,47 @@
+{
+  "name": "@narduk-enterprises/sound-web",
+  "version": "0.1.0",
+  "description": "The NardukSound visualizers on the web: WebGL2 ports of the Metal shaders (Canvas2D fallback), driven by a Web Audio AnalyserNode.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/narduk-enterprises/narduk-sound.git",
+    "directory": "web"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "demo": "vite demo",
+    "demo:build": "vite build demo --outDir ../dist-demo --emptyOutDir",
+    "check": "npm run typecheck && npm run test && npm run build && npm run demo:build",
+    "prepublishOnly": "npm run check",
+    "deploy": "npm run demo:build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "playwright": "1.63.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.1",
+    "vitest": "5.0.2",
+    "wrangler": "4.144.0"
+  }
+}
