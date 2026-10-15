@@ -1,5 +1,13 @@
 import { SoundFrameLayout, type SoundFrame } from "./frame.js";
-import { DefaultSoundPaletteProvider, saturated, type SoundPalette, type SoundPaletteProvider } from "./palette.js";
+import { HIT_LANE_COUNT, Instrument, type MusicContext } from "./inference.js";
+import {
+  DefaultSoundPaletteProvider,
+  mixed,
+  saturated,
+  type SongSection,
+  type SoundPalette,
+  type SoundPaletteProvider,
+} from "./palette.js";
 
 /**
  * The constants of `SoundVisualConfiguration` (Sources/NardukSoundVisuals/SoundVisualConfiguration.swift) the web
@@ -19,6 +27,20 @@ export interface SoundVisualConfiguration {
   meterHoldTime: number;
   meterHoldFall: number;
 }
+
+/** Whether lane `lane` of `hits` moved since `last` (counters wrap, so the difference is an unsigned 32-bit one). */
+function struck(hits: Uint32Array, last: Uint32Array, lane: number): boolean {
+  return ((hits[lane] - last[lane]) >>> 0) > 0;
+}
+
+/** `SongSection.historyCode`: stable small codes for the section history ring (never renumbered). */
+const SECTION_CODES: Readonly<Record<SongSection, number>> = {
+  intro: 0,
+  build: 1,
+  drop: 2,
+  breakdown: 3,
+  drop2: 4,
+};
 
 export const wirewatcherConfiguration: Readonly<SoundVisualConfiguration> = Object.freeze({
   spectrumAttack: 34,
@@ -45,12 +67,16 @@ export interface SoundVisualOptions {
 
 /**
  * The per-render-frame state every visualizer draws from: the web port of `SoundVisualState`
- * (Sources/NardukSoundVisuals/SoundVisualState.swift) for a source with no `MusicContext`, which is every web source
- * (an `<audio>` element or a stream). It keeps the Swift rules exactly: the clock at the default tempo, the smoothed
- * spectrum with peak caps, the waveform history ring, the meters, the low-band kick onset, energy and "wild" from the
- * level, the palette from the smoothed spectral centroid (saturated by wild), and travel. Hit counters, sections,
- * particles and the musical (pitch / key) state need a `MusicContext` or `SoundMusicInference` and are not ported;
- * their envelopes stay 0, as they do in Swift for a source without music.
+ * (Sources/NardukSoundVisuals/SoundVisualState.swift). It keeps the Swift rules exactly: the beat clock, the smoothed
+ * spectrum with peak caps, the waveform history ring, the meters, the low-band kick onset, energy and "wild", the
+ * palette (from the smoothed spectral centroid, or the section's with a blend), and travel.
+ *
+ * Without a `MusicContext` (the `music` argument of `update` omitted) the clock runs on wall time at the last known
+ * tempo and only `kick` (the low-band onset) fires, as in Swift. With one (from `SoundMusicInference`, which hears a
+ * stream the way the Swift side hears a recording) the clock follows its step, its hit counters fire the `kick`,
+ * `snare`, `hat`, `glitch`, `laser` and `impact` envelopes with their flash, shake and chroma triggers, and its
+ * sections switch the palette and the tunnel speed. Not ported: the particle pool and its pads (no web renderer draws
+ * them) and the musical state (pitch classes, key, piano roll).
  *
  * `update` is idempotent per display frame (a second call within 2 ms returns). Every buffer is allocated in the
  * constructor; a frame allocates only the three palette colors. All time comes in as `now`, never from a clock, so
@@ -60,6 +86,7 @@ export class SoundVisualState {
   static readonly bandCount = SoundFrameLayout.spectrumCount;
   static readonly sampleCount = SoundFrameLayout.waveformCount;
   static readonly historyDepth = 10;
+  static readonly energyHistoryCount = 128;
 
   readonly configuration: SoundVisualConfiguration;
   private readonly palettes: SoundPaletteProvider;
@@ -94,6 +121,7 @@ export class SoundVisualState {
   snare = 0;
   hat = 0;
   glitch = 0;
+  laser = 0;
   impact = 0;
   flash = 0;
   shake = 0;
@@ -106,18 +134,39 @@ export class SoundVisualState {
   level = 0;
   dropAmount = 0;
   travel = 0;
+  section: SongSection = "intro";
+  phraseProgress = 0;
+  buildThreshold = 0;
+  dropThreshold = 0;
+  dropQueued = false;
+  /** Conductor energy at each step, newest at `energyHead - 1`. */
+  readonly energyHistory = new Float32Array(SoundVisualState.energyHistoryCount);
+  /** `SongSection` history codes (intro 0, build 1, drop 2, breakdown 3, drop2 4) parallel to `energyHistory`. */
+  readonly sectionHistory = new Uint8Array(SoundVisualState.energyHistoryCount);
+  energyHead = 0;
   driveLevel = 0;
   wild = 0;
   calm = false;
   /** The palette after the drive-driven saturation. */
   palette: SoundPalette;
   private basePalette: SoundPalette;
+  private paletteFrom: SoundPalette;
+  private paletteTo: SoundPalette;
+  private paletteT = 1;
+  private paletteDuration = 1;
   private centroid = 0;
 
   private lastUpdate = 0;
   private started = false;
   private lastSequence = 0;
   private lowBandPrevious = 0;
+  private lastStep = -Infinity;
+  private lastStepTime = 0;
+  private lastFlashTime = -10;
+  private lastChromaTime = -10;
+  private lastEnergyStep = -Infinity;
+  private readonly lastHits = new Uint32Array(HIT_LANE_COUNT);
+  private haveHits = false;
 
   constructor(
     configuration: SoundVisualConfiguration = wirewatcherConfiguration,
@@ -128,6 +177,8 @@ export class SoundVisualState {
     const initial = palettes.palette({ section: "intro" });
     this.palette = initial;
     this.basePalette = initial;
+    this.paletteFrom = initial;
+    this.paletteTo = initial;
   }
 
   get beats(): number {
@@ -145,39 +196,85 @@ export class SoundVisualState {
     return this.isRunning ? Math.exp(-this.beatPhase * 5) : 0;
   }
 
-  /** Advances the state to `now` (seconds on any monotonic clock) from the latest `frame`. */
-  update(frame: SoundFrame, now: number, options: SoundVisualOptions = {}): void {
+  /**
+   * Advances the state to `now` (seconds on any monotonic clock) from the latest `frame`, and `music` when the source
+   * is music (`SoundMusicInference.update`'s result; omit it for a source that is not).
+   */
+  update(frame: SoundFrame, now: number, options: SoundVisualOptions = {}, music?: MusicContext): void {
     const elapsed = now - this.lastUpdate;
     if (this.started && elapsed < 0.002) return;
     // Swift keeps dt as a Float; rounding it the same way keeps hold timers on the same frame.
     const dt = Math.fround(this.started ? Math.min(Math.max(elapsed, 0), 0.1) : 1 / 60);
     if (this.started && elapsed > 0) this.fps += (1 / elapsed - this.fps) * 0.05;
+    // First frame, or back after the view was hidden: don't replay a backlog of hits.
+    const stale = !this.started || elapsed > 0.5;
     this.started = true;
     this.lastUpdate = now;
     this.time = now;
     this.calm = options.calm ?? false;
 
     const previousStepPosition = this.stepPosition;
-    // No music: the beat clock runs on wall time at the last known tempo; `beatPulse` stays 0.
-    this.isRunning = false;
-    this.stepPosition += dt / Math.max(this.secondsPerStep, 0.01);
+    this.advanceClock(music, now, dt);
     const deltaBeats = Math.max(0, this.stepPosition - previousStepPosition) / 4;
 
     this.decayEnvelopes(dt);
     const isNewFrame = frame.sequence !== this.lastSequence || this.lastSequence === 0;
     if (isNewFrame) {
       this.lastSequence = frame.sequence;
-      this.ingest(frame);
+      this.ingest(frame, music, now, stale);
     }
+    if (music) this.energyStep(music);
     this.smoothSpectrum(frame.spectrum, dt);
     this.updateMeters(frame, dt);
     this.updateDrive(options.drive, dt);
-    // No section: the palette follows the signal's spectral centroid instead.
-    this.basePalette = this.palettes.palette({ scalar: this.centroid });
-    this.updateMotion(dt, deltaBeats);
+    this.updateSection(music, now);
+    this.updateMotion(dt, deltaBeats, music);
   }
 
-  private ingest(frame: SoundFrame): void {
+  /**
+   * Forgets the hit counters and the step the last `MusicContext` carried. Call it when the inference is reset (a new
+   * source): its counters start again at 0, which against the old ones would read as a wrapped burst of hits.
+   */
+  resetMusic(): void {
+    this.haveHits = false;
+    this.lastStep = -Infinity;
+    this.lastEnergyStep = -Infinity;
+  }
+
+  private advanceClock(music: MusicContext | undefined, now: number, dt: number): void {
+    if (!music) {
+      // No music: the beat clock runs on wall time at the last known tempo; `beatPulse` stays 0.
+      this.isRunning = false;
+      this.stepPosition += dt / Math.max(this.secondsPerStep, 0.01);
+      return;
+    }
+    this.isRunning = music.isRunning;
+    this.secondsPerStep = music.secondsPerStep;
+    this.stepsPerBar = Math.max(music.stepsPerBar, 1);
+    this.phraseProgress = music.phraseProgress;
+    this.buildThreshold = music.buildThreshold;
+    this.dropThreshold = music.dropThreshold;
+    this.dropQueued = music.dropQueued;
+    if (music.step !== this.lastStep) {
+      if (this.lastStep === -Infinity || music.step < this.lastStep || music.step > this.lastStep + 8) {
+        this.stepPosition = music.step; // first frame, a reset, or a seek
+      }
+      this.lastStep = music.step;
+      this.lastStepTime = now;
+    }
+    const fraction = this.isRunning ? Math.min((now - this.lastStepTime) / Math.max(this.secondsPerStep, 0.01), 0.97) : 0;
+    this.stepPosition = Math.max(this.stepPosition, music.step + fraction);
+  }
+
+  private energyStep(music: MusicContext): void {
+    if (music.step === this.lastEnergyStep) return;
+    this.lastEnergyStep = music.step;
+    this.energyHistory[this.energyHead] = music.energy;
+    this.sectionHistory[this.energyHead] = SECTION_CODES[music.section];
+    this.energyHead = (this.energyHead + 1) % SoundVisualState.energyHistoryCount;
+  }
+
+  private ingest(frame: SoundFrame, music: MusicContext | undefined, now: number, stale: boolean): void {
     const count = Math.min(frame.waveform.length, SoundVisualState.sampleCount);
     for (let i = 0; i < count; i++) this.waveform[i] = frame.waveform[i];
     this.historyHead = (this.historyHead + 1) % SoundVisualState.historyDepth;
@@ -190,16 +287,61 @@ export class SoundVisualState {
     let best = 0;
     for (let i = 0; i < frame.spectrum.length; i++) if (frame.spectrum[i] > best) best = frame.spectrum[i];
     this.isSilent = frame.rmsDB < -100 && best <= 0.002;
-    this.wobbleCutoff = 0;
-    this.wobblePhase = 0;
+    let sawKick = false;
+    if (music) {
+      this.wobbleCutoff = music.wobbleCutoff;
+      this.wobblePhase = music.wobblePhase;
+      if (!this.haveHits || stale) {
+        // Nothing to diff against yet, or back after a long gap: adopt the counters without firing.
+        this.lastHits.set(music.hitCounts);
+        this.haveHits = true;
+      } else {
+        sawKick = this.fire(music.hitCounts, now);
+      }
+    } else {
+      this.wobbleCutoff = 0;
+      this.wobblePhase = 0;
+    }
 
-    // Onset fallback on the low bands, for sources without hit counters.
+    // Onset fallback on the low bands, for sources whose hit counters are sparse or absent.
     let low = 0;
     const n = Math.min(6, frame.spectrum.length);
     for (let i = 0; i < n; i++) low += frame.spectrum[i];
     if (n > 0) low /= n;
-    if (low - this.lowBandPrevious > 0.28 && this.kick < 0.3) this.kick = 0.8;
+    if (!sawKick && low - this.lowBandPrevious > 0.28 && this.kick < 0.3) this.kick = 0.8;
     this.lowBandPrevious = low;
+  }
+
+  /**
+   * Reacts to the hits since the last frame (`hits` against the counters seen then) and remembers `hits`; returns
+   * whether a kick fired. Counters wrap, so each difference is taken as an unsigned 32-bit subtraction.
+   */
+  private fire(hits: Uint32Array, now: number): boolean {
+    const last = this.lastHits;
+    let sawKick = false;
+    if (struck(hits, last, Instrument.kick)) {
+      this.kick = 1;
+      sawKick = true;
+      // A busy stage shakes the camera on every kick.
+      if (!this.calm && this.wild > 0.6) this.shake = Math.max(this.shake, (this.wild - 0.6) * 0.9);
+    }
+    if (struck(hits, last, Instrument.snare)) {
+      this.snare = 1;
+      if (!this.calm && now - this.lastChromaTime > 0.34) {
+        this.chroma = 1;
+        this.lastChromaTime = now;
+      }
+    }
+    const open = struck(hits, last, Instrument.openHat);
+    if (open || struck(hits, last, Instrument.hat)) this.hat = Math.max(this.hat, open ? 1 : 0.6);
+    if (struck(hits, last, Instrument.glitch) || struck(hits, last, Instrument.scratch)) this.glitch = 1;
+    if (struck(hits, last, Instrument.laser)) this.laser = 1;
+    if (struck(hits, last, Instrument.impact)) {
+      this.impact = 1;
+      if (!this.calm) this.shake = Math.max(this.shake, 0.7);
+    }
+    last.set(hits);
+    return sawKick;
   }
 
   private smoothSpectrum(target: Float32Array, dt: number): void {
@@ -265,6 +407,7 @@ export class SoundVisualState {
     this.snare *= Math.exp(-dt / 0.2);
     this.hat *= Math.exp(-dt / 0.07);
     this.glitch *= Math.exp(-dt / 0.14);
+    this.laser *= Math.exp(-dt / 0.3);
     this.impact *= Math.exp(-dt / 0.6);
     this.flash *= Math.exp(-dt / 0.16);
     this.shake *= Math.exp(-dt / 0.32);
@@ -277,14 +420,62 @@ export class SoundVisualState {
     }
   }
 
-  private updateMotion(dt: number, deltaBeats: number): void {
-    // Energy: the signal's level (a conductor's energy when there is music, which the web never has).
-    this.energy += (this.level - this.energy) * Math.min(1, dt * (this.calm ? 1 : 3));
-    this.dropAmount += (0 - this.dropAmount) * Math.min(1, dt * (this.calm ? 1 : 4));
+  private updateSection(music: MusicContext | undefined, now: number): void {
+    if (!music) {
+      // No section: the palette follows the signal's spectral centroid instead.
+      this.section = "intro";
+      this.basePalette = this.palettes.palette({ scalar: this.centroid });
+      this.paletteT = 1;
+      return;
+    }
+    const next = music.section;
+    if (next === this.section) return;
+    this.paletteFrom = this.basePalette;
+    this.paletteTo = this.palettes.palette({ section: next });
+    this.paletteT = 0;
+    const isDrop = next === "drop" || next === "drop2";
+    this.paletteDuration = isDrop && !this.calm ? 0.12 : 1.4;
+    if (isDrop && !this.calm && now - this.lastFlashTime > 0.4) {
+      this.flash = 0.9;
+      this.shake = 1;
+      this.lastFlashTime = now;
+    }
+    this.section = next;
+  }
+
+  private updateMotion(dt: number, deltaBeats: number, music: MusicContext | undefined): void {
+    // Energy: the conductor's when there is one, else the signal's level.
+    const target = music ? music.energy : this.level;
+    this.energy += (target - this.energy) * Math.min(1, dt * (this.calm ? 1 : 3));
+    const isDrop = music !== undefined && (this.section === "drop" || this.section === "drop2");
+    this.dropAmount += ((isDrop ? 1 : 0) - this.dropAmount) * Math.min(1, dt * (this.calm ? 1 : 4));
+
+    if (this.paletteT < 1) {
+      this.paletteT = Math.min(1, this.paletteT + dt / this.paletteDuration);
+      const s = this.paletteT * this.paletteT * (3 - 2 * this.paletteT);
+      this.basePalette = mixed(this.paletteFrom, this.paletteTo, s);
+    }
     this.palette = saturated(this.basePalette, 0.45 + 0.62 * this.wild);
 
-    // Tunnel travel at the intro's speed; a kick pushes forward.
-    const speed = 0.35;
+    // Tunnel travel: one ring per beat at speed 1, a kick pushes forward.
+    let speed: number;
+    switch (this.section) {
+      case "intro":
+        speed = 0.35;
+        break;
+      case "build":
+        speed = 0.5 + 0.7 * this.phraseProgress;
+        break;
+      case "drop":
+        speed = 1.0;
+        break;
+      case "breakdown":
+        speed = 0.22;
+        break;
+      case "drop2":
+        speed = 1.25;
+        break;
+    }
     const calmScale = this.calm ? 0.4 : 1;
     this.travel += deltaBeats * speed * calmScale * (0.55 + 0.9 * this.wild) + (this.calm ? 0 : this.kick * dt * 0.9);
     if (!this.isRunning) this.travel += dt * 0.04;

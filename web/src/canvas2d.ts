@@ -4,6 +4,35 @@ import type { VisualizerId } from "./shaders/index.js";
 import type { SoundVisualState } from "./state.js";
 import { Aux, DATA_WIDTH, DataRow, type ShaderInputs } from "./uniforms.js";
 
+/** The three Canvas2D drawings; a look with no drawing of its own borrows the one nearest its character. */
+type CanvasStyle = "spectrum" | "scope" | "halo";
+
+/**
+ * Which drawing stands in for a look: floors, terrains and bar fields borrow the spectrum, traces and horizons the
+ * scope, and anything radial (tunnels, galaxies, discs, folds) or unknown the halo, so a new port or an id this build
+ * does not know draws the sound instead of nothing.
+ */
+const CANVAS_STYLES: Readonly<Record<string, CanvasStyle>> = {
+  spectrum: "spectrum",
+  scope: "scope",
+  halo: "halo",
+  audioTerrain: "spectrum",
+  synthwaveFlyover: "spectrum",
+  mirror: "spectrum",
+  bioluminescentSea: "scope",
+  liquidSplash: "scope",
+  phosphor: "scope",
+  vortex: "halo",
+  hyperspaceLasers: "halo",
+  kaleidoscope: "halo",
+  blackHole: "halo",
+  geometricChaos: "halo",
+};
+
+function canvasStyle(id: VisualizerId): CanvasStyle {
+  return Object.prototype.hasOwnProperty.call(CANVAS_STYLES, id) ? CANVAS_STYLES[id] : "halo";
+}
+
 /**
  * The Canvas2D fallback, for browsers without WebGL2 (or with it blocklisted): a lighter drawing of each look from the
  * same state, palette and safety rules. Strokes and fills only (no `shadowBlur`, no filters), so it holds the frame
@@ -13,7 +42,7 @@ export class Canvas2DRenderer implements SoundRenderer {
   readonly kind = "canvas2d" as const;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly probe: CanvasRenderingContext2D | null;
-  private visual: VisualizerId = "spectrum";
+  private visual: CanvasStyle = "spectrum";
   private frame = 0;
   private luma: number | null = null;
 
@@ -28,7 +57,7 @@ export class Canvas2DRenderer implements SoundRenderer {
   }
 
   setVisual(id: VisualizerId): void {
-    this.visual = id;
+    this.visual = canvasStyle(id);
   }
 
   resize(width: number, height: number): void {

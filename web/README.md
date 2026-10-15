@@ -9,6 +9,19 @@ ported to WebGL2, with a Canvas2D fallback. Live demo: <https://visualizers.nard
 | `spectrum` | `Intense/SpectrumMetal/SpectrumMetalShader.swift`     |
 | `scope`    | `Intense/ScopeMetal/ScopeMetalShader.swift`           |
 | `halo`     | `Intense/HaloMetal/HaloMetalShader.swift`             |
+| `vortex`   | `Intense/VortexMetal/VortexMetalShader.swift`         |
+| `hyperspaceLasers` | `Intense/Hyperspace/HyperspaceShader.swift`   |
+| `kaleidoscope` | `Intense/KaleidoscopeMetal/KaleidoscopeMetalShader.swift` |
+| `blackHole` | `Intense/Promoted/BlackHoleShader.swift`             |
+| `geometricChaos` | `Intense/Promoted/GeometricChaosShader.swift`   |
+| `audioTerrain` | `Intense/AudioTerrainMetal/AudioTerrainMetalShader.swift` |
+| `sun` | `Intense/Sun/SunShader.swift` |
+| `flameSun` | `Intense/Promoted/FlameSunShader.swift` |
+| `jellyfish` | `Intense/Jellyfish/JellyfishShader.swift` |
+| `flower` | `Intense/Flower/FlowerShader.swift` |
+| `liquidSplash` | `Intense/LiquidSplash/LiquidSplashShader.swift` |
+| `bioluminescentSea` | `Intense/Promoted/BioluminescentSeaShader.swift` |
+| `mirror` | `Intense/MirrorMetal/MirrorMetalShader.swift` |
 
 ## Use
 
@@ -35,18 +48,67 @@ viz.setVisual("scope");
 viz.destroy();
 ```
 
+Your own look (a station logo, say) is GLSL compiled after the shared prelude, with an optional image it samples as
+`uImage` (premultiplied alpha, top row at `vUv.y = 0`). It comes first in the picker:
+
+```ts
+import { registerVisualizer } from "@narduk-enterprises/sound-web";
+
+registerVisualizer({ id: "station", title: "Station", image: "/logo.png", glsl: `
+uniform sampler2D uImage;
+void main() { fragColor = vec4(texture(uImage, vUv).rgb * (0.5 + u.env.x), 1.0); }
+` });
+```
+
+The Canvas2D fallback draws `halo` for a registered look.
+
 Options: `renderer` `"auto" | "webgl2" | "canvas2d"`, `motion` `"auto" | "full" | "static"`, `palettes` (a
 `SoundPaletteProvider`), `maxDevicePixelRatio`. Statuses: `idle`, `loading`, `playing`, `paused`, `still`, `silent`,
 `error`.
+
+## Draw from a recorded timeline (no audio)
+
+When the sound cannot be read (Apple Music's DRM audio, a track playing elsewhere), draw from what a Mac recorded of it:
+a `SoundTimeline` (`NSTL` v1, written by `SoundTimelineRecorder` in the Swift package) and the track's playhead.
+
+```ts
+import { SoundVisualizer, decodeSoundTimeline } from "@narduk-enterprises/sound-web";
+
+const timeline = decodeSoundTimeline(await (await fetch(url)).arrayBuffer()); // throws SoundTimelineError on a bad container
+const viz = new SoundVisualizer(canvas, { visual: "halo" });
+viz.setTimeline(timeline, () => musicKit.currentPlaybackTime ?? null); // polled every frame: seconds, or null
+viz.setAmbient(true); // with no timeline (and no audio): the quiet ambient drift
+```
+
+No tap or gesture is needed (nothing plays); the status is `playing` (or `still` under reduced motion). `playhead` is
+seconds into the track, or `null` while paused or unknown: the last picture is held with its beat clock stopped, then
+fades over about three seconds to the ambient drift (a slow breathing near 0.15 energy, no beat, no hits); a playhead at
+or past `timeline.header.duration` counts as unknown. A seek in either direction fires no hits. `setTimeline` replaces a
+playing audio source, `start()` replaces a timeline, and `setTimeline(null, ...)` returns to the ambient drift when
+`setAmbient(true)` is on, else the visualizer goes `idle`. `viz.driver` says which one draws: `"audio"`, `"timeline"`,
+`"ambient"` or `null`. A timeline URL on another origin must send `Access-Control-Allow-Origin`. The demo draws one with
+`?timeline=<url>` (`?timeline=fixture` is a short built-in; `?ambient` is the drift alone).
+
+## Music inference
+
+A stream has no conductor, so the visualizer runs a `SoundMusicInference` over the analysis frames (a port of the Swift
+class) and the state reacts to what it hears: kick, snare and hat hits, a tempo lock and beat phase, energy, sections
+and drops. `state.snare`, `hat`, `impact`, `dropAmount`, `beatPulse` and `isRunning` move on real audio. To drive your
+own state, call `state.update(frame, now, options, inference.update(frame))`. The analyzer's default `"apple"` window
+matches what the Apple apps hear and what the inference was tuned on.
 
 ## Browser rules
 
 - **iOS Safari:** audio starts only from a tap, so `start()` must run inside the click handler (the player's start
   button does this). The page asks for the `playback` audio session where the browser supports it, so the ring/silent
   switch does not mute the stream.
-- **CORS:** Web Audio reads samples only from a cross-origin stream that sends `Access-Control-Allow-Origin`. The
-  element is created with `crossOrigin = "anonymous"`. Without the header the audio plays but the analyser reads
-  zeros; after 4 s of silence the status turns `silent` and says so.
+- **Streams (`StreamSource`):** an http(s) URL is fetched and decoded, not played through an `<audio>` element. WebKit
+  (Safari, and every iOS browser) gives `createMediaElementSource` silence for a live, chunked stream such as an
+  Icecast station even when CORS is right. So the bytes are split into MP3 or ADTS AAC frames, decoded with WebCodecs'
+  `AudioDecoder` and scheduled gaplessly through the analyser. Other formats, and browsers without `AudioDecoder`, fall
+  back to a media element. The server must still send `Access-Control-Allow-Origin`, since `fetch` needs it.
+- **CORS:** without that header the stream cannot be read at all; an element fallback then plays it but the analyser
+  reads zeros, and after 4 s of silence the status turns `silent` and says so.
 - **Flashing:** every flash goes through the same limiter and luma watchdog as the Swift renderer (3 flashes a
   second at most, WCAG 2.1 AA 2.3.1).
 - **Reduced motion:** with `prefers-reduced-motion: reduce` (or `motion: "static"`) the visualizer shows one still

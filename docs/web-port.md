@@ -10,10 +10,12 @@ in sync. The Swift code is the source of truth; the web port follows it and neve
 | ----------------------------------------------- | ------------------------------ | --------------------------------------------------- |
 | `SoundFrame`, `SpectrumAnalyzer`, `Loudness`    | `frame.ts`, `analysis.ts`      | `web/fixtures/sound-contract.json` (analysis)       |
 | `SoundPalette`, `DefaultSoundPaletteProvider`   | `palette.ts`                   | the fixture (palettes)                              |
-| `SoundVisualState` (the no-music path)          | `state.ts`                     | the fixture (12 state checkpoints)                  |
+| `SoundVisualState` (with and without music)     | `state.ts`                     | the fixture (12 state + 33 music checkpoints)       |
+| `SoundMusicInference`, the `MusicContext` it makes | `inference.ts`              | the fixture (hit, lock and section events, checkpoints) |
 | `IntenseFlashLimiter`, `IntenseLumaWatchdog`    | `safety.ts`                    | the fixture (limiter, watchdog, flash colours)      |
 | `SoundRenderBudget`                             | `budget.ts`                    | the fixture (budget, rates)                         |
 | `IntenseUniforms`, `IntenseAux`                 | `uniforms.ts`                  | `web/test/shaders.test.ts` reads the Swift sources  |
+| `SoundTimeline` (NSTL v1), `SoundTimelinePlayer` | `timeline.ts`                  | `web/fixtures/sound-timeline.json` (bytes and player states) |
 | each `*MetalShader.swift`                       | `src/shaders/<id>.ts`          | the recorded `metalSha256` of the Metal file        |
 
 `Tests/NardukSoundVisualsTests/WebContractFixtureTests.swift` runs scripted signals through the Swift types and
@@ -32,14 +34,90 @@ One known platform difference: Swift's `SpectrumAnalyzer` window is `vDSP_HANN_N
 Apple, and `contract.test.ts` pins the difference against the macOS run. The Swift test compares spectrum and chroma
 only on the portable path.
 
-Not ported yet (the web state behaves as Swift does with no `MusicContext`, so these stay at rest):
-`SoundMusicInference`, the `MusicContext` paths (hits, sections, drops), the particle pool, and the musical state
-(pitch classes, key, piano roll). A visualizer that needs them waits for that port.
+## Music: hits, tempo, sections
+
+A web source has no conductor, so `SoundVisualizer` runs one `SoundMusicInference` per source over the analyzer's frames
+(reset when the source changes) and hands the `MusicContext` to `SoundVisualState.update(frame, now, options, music)`,
+which is what Swift does for a file or a loopback device. `inference.ts` is a line-for-line port: spectral-flux onsets in
+three band ranges (kick, snare, hat), the 50 Hz onset grid and autocorrelation tempo with its lock and switch rules, the
+kick phase pull, energy, sections and drops, and silence. `state.ts` has the `MusicContext` branches of the Swift state:
+the clock follows `step`, the hit counters fire the `kick`, `snare`, `hat`, `glitch`, `laser` and `impact` envelopes
+with the flash, shake and chroma triggers, sections blend the palette and set the tunnel speed, and the energy and
+section history rings fill. A frame with no `music` argument keeps the old no-music path exactly.
+
+What the fixture pins (`music` in `sound-contract.json`): a scripted drum machine fed as `SoundFrame`s (bands that rise
+on each hit; `DrumFrames` in `SoundMusicInferenceTests.swift`): eight loud seconds at 128 BPM, a quiet breakdown,
+silence, drums again. The frame each kick, snare, hat and impact fired on, the frame the tempo locked on and each
+section change are **events and compared exactly**; the rest (step, energy, tempo, the state's envelopes, palette and
+clock) at checkpoints every 40 frames, to 2e-3 (Swift accumulates in Float, the TypeScript rounds the same accumulators
+with `Math.fround`). The script is frames, not audio, so it does not depend on the window below and runs on every
+platform; `test/inference.test.ts` runs audio through the analyzer instead (kick, snare, hat, a 120 BPM lock, the
+synthetic source) with both windows.
+
+Inference's onset floors are in band units, so it must read the same window as the Swift side that tuned them: the web's
+default `SoundAnalyzer(rate)` is the `"apple"` window (4.26 dB hotter than Linux, #67), which is what the Apple apps
+hear, and the demo keeps it. Regenerating the fixture on a Mac keeps the Linux `analysis` section (the writer reads it
+back instead of overwriting it with Apple's bands).
+
+## Timelines: `SoundTimeline`, `SoundTimelinePlayer`, `setTimeline`
+
+A page that cannot hear a track (Apple Music is DRM audio) draws it from a timeline a Mac recorded with
+`SoundTimelineRecorder`. `timeline.ts` is a port of `SoundTimeline.swift` (the NSTL v1 container: `decodeSoundTimeline`,
+planar little-endian blocks read through a `DataView`, the same four decoding errors as `SoundTimelineError.reason`) and
+of `SoundTimelinePlayer.swift` (interpolated spectrum, chroma and levels; nearest-sample waveform restored from 32 points
+to 512 with the same Catmull-Rom; the beat clock between samples; hit counters that only go up and add nothing across a
+seek; the end held and stopped). Arithmetic rounds to `Float` where Swift's does, so the two agree to under 1e-6.
+
+`Tests/NardukSoundVisualsTests/WebTimelineFixtureTests.swift` records a timeline from a scripted drum machine (frames,
+not audio, so Linux and macOS record the same) and writes `web/fixtures/sound-timeline.json`: the NSTL bytes and what the
+Swift player returns for a script of 533 playback times (an off-grid 144 Hz run, a repeated time, a forward jump, a
+backward seek, the end and past it, a negative time and NaN). `web/test/timeline.test.ts` decodes the same bytes and
+replays the same times: hit counters, step, section and flags exactly, frames and contexts to 2e-6. Regenerate after a
+deliberate Swift change:
+
+```sh
+NARDUK_WRITE_WEB_FIXTURES=1 swift test --filter WebTimelineFixtureTests   # rewrites web/fixtures/sound-timeline.json
+cd web && npm test
+```
+
+`SoundVisualizer.setTimeline(timeline, playhead)` feeds the player's frame and `MusicContext` through the same
+`SoundVisualState.update` and `ShaderInputs.fill` as live audio (`TimelineFeed` in `feed.ts`); `setAmbient(true)` draws
+`AmbientDrift` (`ambient.ts`, the sound-tv drift: energy 0.15 plus or minus 0.035, no beat, no hits). Behaviour with no
+playhead, precedence between audio, timeline and ambient, and reduced motion are in `web/README.md`. The state's `now` is
+the animation clock; the playhead only indexes the player, so a seek never looks like time running backwards. A new feed
+calls `state.resetMusic()` so the state adopts its hit counters without firing, and the silence watch is off (a recorded
+intro can be silent).
+
+LiveDrive applies to timelines. A recorded timeline is the same compressed signal a stream is: on four stored Apple
+Music tracks (3 to 5 minutes, 60 Hz, played through `SoundVisualState` and `ShaderInputs.fill` at 60 fps) the state's
+energy sat in 0.41 ... 0.44 (swing p98 - p5 0.03 ... 0.11), where LiveDrive widens it to 0.37 ... 0.44 swing. Bands that
+already move (a kick band, p98 - p5 0.7) stay the same, bands that sit near a level gain 2 ... 3 times the swing. The
+only timeline-specific rule is `LiveDrive.apply(..., amount)`: the feed passes 1 while the timeline plays, falls to 0
+with the fade to the ambient drift, and is 0 for the ambient feed, so the quiet breathing is never stretched. sound-tv
+instead stretches each song with a `ContrastMap` (per-song percentiles, needs the whole timeline in hand); that is not
+ported.
+
+## Live drive: `LiveDrive` (web only, not in the contract)
+
+Broadcast audio is compressed, so the state's `energy`, `wild` and band levels barely move on a live stream (KZFR:
+`u.wobble.z` stayed within 0.27 ... 0.33). The state is the Swift contract, so the web does not change it. `live.ts`
+(`LiveDrive`) runs after `ShaderInputs.fill` in `SoundVisualizer.step` and rewrites only the drive channels the shaders
+already read: `u.env` kick, snare and hat (a sharper kick and snare curve, the hat lifted to full scale), `u.wobble.z`
+energy and `u.misc.x` wild (read against their own running mean and deviation, plus a short lift on a hit), and the
+spectrum row and `Aux.peaks` (each band's deviation from its running mean scaled up to a target, never down). It never
+touches the flash path (`u.fx`, `u.extra`), passes silence and calm through, and is a no-op on a source that already
+moves. A consumer that calls `ShaderInputs.fill` itself, not through `SoundVisualizer`, calls `LiveDrive.apply` after
+it. `node scripts/measure-reactivity.mjs` (live stream or `--synthetic`) logs the state's value ("before") beside the
+drawn one ("after") from the same run, plus the photosensitivity watchdog's dimming share.
+
+Not ported (no web renderer draws them): the particle pool and the pads, and the musical state (pitch classes, key,
+piano roll). A visualizer that needs them waits for that port.
 
 ## Porting one Metal visualizer
 
 1. **Pick a look** whose Metal file needs only the uniforms, the spectrum, the waveform and the aux scalars or history
-   (its `auxMask` in `IntenseKind` has no roll or particles bit).
+   (its `auxMask` in `IntenseKind` has no roll or particles bit, and its fragment binds no `motion` buffer 3: the
+   fractal dive and the synthwave flyover wait for `IntenseMotion` to be ported).
 2. **Add `web/src/shaders/<id>.ts`** exporting a `VisualizerPort`: `id`, `title`, `metalSource` (the repo path of the
    Swift file), `metalSha256` (`sha256sum` of that file) and `glsl` (the fragment body, after `FRAGMENT_PRELUDE`).
    Copy the Metal functions and its fragment function, then translate them with the table below. Keep the names,

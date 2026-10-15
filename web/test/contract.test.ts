@@ -5,8 +5,10 @@ import {
   FlashLimiter,
   LumaWatchdog,
   SoundAnalyzer,
+  SoundMusicInference,
   SoundRenderBudget,
   SoundVisualState,
+  Instrument,
   emptyFrame,
   intenseDrive,
   mixedPerceptually,
@@ -37,6 +39,69 @@ function expectClose(actual: ArrayLike<number>, expected: ArrayLike<number>, tol
     }
   }
   expect(worst, `${label}: off by ${worst} at ${at}`).toBeLessThanOrEqual(tolerance);
+}
+
+const f32 = Math.fround;
+
+interface DrumOptions {
+  bpm?: number;
+  rmsDB?: number;
+  bed?: number;
+  kicks?: boolean;
+  snares?: boolean;
+  hats?: boolean;
+}
+
+/** `DrumFrames.frames` of SoundMusicInferenceTests.swift: bands that rise on each hit and relax at 0.65 / 0.12 a frame. */
+function drumFrames(o: DrumOptions, seconds: number, from: number, startTime: number): SoundFrame[] {
+  const { bpm = 128, rmsDB = -18, bed = 0.25, kicks = true, snares = true, hats = true } = o;
+  const bands = new Float32Array(64).fill(f32(bed));
+  const out: SoundFrame[] = [];
+  const beat = 60 / bpm;
+  for (let i = 0; i < Math.trunc(seconds * 60); i++) {
+    const time = i / 60;
+    const position = time / beat;
+    const beatIndex = Math.floor(position);
+    const sinceBeat = (position - beatIndex) * beat;
+    const sinceHalf = ((position * 2 - Math.floor(position * 2)) * beat) / 2;
+    const kick = kicks && sinceBeat < 0.04;
+    const snare = snares && beatIndex % 2 === 1 && sinceBeat < 0.04;
+    const hat = hats && sinceHalf < 0.02;
+    for (let b = 0; b < 64; b++) {
+      let target = f32(bed);
+      if (kick && b >= 4 && b < 22) target = f32(0.9);
+      if (snare && b >= 22 && b < 44) target = Math.max(target, f32(0.8));
+      if (hat && b >= 46) target = Math.max(target, f32(0.7));
+      bands[b] = f32(bands[b] + f32(f32(target - bands[b]) * f32(target > bands[b] ? 0.65 : 0.12)));
+    }
+    const frame = emptyFrame();
+    frame.sequence = from + i;
+    frame.time = startTime + time;
+    frame.spectrum.set(bands);
+    frame.rmsDB = f32(rmsDB);
+    frame.peakDB = f32(f32(rmsDB) + 6);
+    out.push(frame);
+  }
+  return out;
+}
+
+function silenceFrames(seconds: number, from: number, startTime: number): SoundFrame[] {
+  return Array.from({ length: Math.trunc(seconds * 60) }, (_, i) => {
+    const frame = emptyFrame();
+    frame.sequence = from + i;
+    frame.time = startTime + i / 60;
+    return frame;
+  });
+}
+
+/** `WebContractFixtureTests.drumScript`: eight loud seconds at 128 BPM, a quiet breakdown, silence, drums again. */
+function drumScript(): SoundFrame[] {
+  return [
+    ...drumFrames({ bpm: 128, rmsDB: -12 }, 8, 1, 0),
+    ...drumFrames({ bpm: 128, rmsDB: -34, bed: 0.1, kicks: false, snares: false, hats: false }, 5, 481, 8),
+    ...silenceFrames(3, 781, 13),
+    ...drumFrames({ bpm: 128, rmsDB: -18 }, 6, 961, 16),
+  ];
 }
 
 const flat = (p: SoundPalette) => [...p.c0, ...p.c1, ...p.c2];
@@ -150,6 +215,89 @@ describe("the Swift contract fixture", () => {
       now += k % 5 === 4 ? 1 / 30 : 1 / 60;
     }
     expect(next).toBe(checkpoints.length);
+  });
+
+  // Events (the frame a lane fired on, the tempo lock, each section change) are compared exactly; the running values
+  // with the Float-versus-double tolerance of the other checkpoints.
+  it("hears the scripted drum machine the way SoundMusicInference does, and the state follows", () => {
+    const m = contract.music;
+    const inference = new SoundMusicInference();
+    const state = new SoundVisualState();
+    const kicks: number[] = [];
+    const snares: number[] = [];
+    const hats: number[] = [];
+    const impacts: number[] = [];
+    const sections: { sequence: number; section: string }[] = [];
+    let lock = 0;
+    let section = "intro";
+    let last = [0, 0, 0, 0];
+    let next = 0;
+    const frames = drumScript();
+    expect(frames.length).toBe(m.frames);
+    for (const frame of frames) {
+      const music = inference.update(frame);
+      const hits = [Instrument.kick, Instrument.snare, Instrument.hat, Instrument.impact].map((lane) => music.hitCounts[lane]);
+      if (hits[0] !== last[0]) kicks.push(frame.sequence);
+      if (hits[1] !== last[1]) snares.push(frame.sequence);
+      if (hits[2] !== last[2]) hats.push(frame.sequence);
+      if (hits[3] !== last[3]) impacts.push(frame.sequence);
+      last = hits;
+      if (lock === 0 && inference.isLocked) lock = frame.sequence;
+      if (music.section !== section) {
+        section = music.section;
+        sections.push({ sequence: frame.sequence, section });
+      }
+      state.update(frame, frame.time + 1, { calm: frame.sequence >= 1000 && frame.sequence < 1100 }, music);
+      if (frame.sequence % 40 !== 20) continue;
+      const i = m.inference[next];
+      const e = m.state[next];
+      const label = `frame ${frame.sequence}`;
+      expect(frame.sequence, label).toBe(i.sequence);
+      expect(hits, label).toEqual(i.hits);
+      expect([music.step, music.section, music.isRunning, music.dropQueued], label).toEqual([i.step, i.section, i.isRunning, i.dropQueued]);
+      expectClose(
+        [music.energy, music.wobblePhase, music.wobbleCutoff, music.phraseProgress, music.secondsPerStep],
+        [i.energy, i.wobblePhase, i.wobbleCutoff, i.phraseProgress, i.secondsPerStep],
+        2e-3,
+        `${label} inference`,
+      );
+      expect(Math.abs((inference.tempoBPM ?? 0) - i.tempoBPM), `${label} tempo`).toBeLessThan(0.05);
+
+      expect(frame.sequence, label).toBe(e.sequence);
+      expect([state.section, state.isRunning, state.dropQueued], label).toEqual([e.section, e.isRunning, e.dropQueued]);
+      expectClose(
+        [state.kick, state.snare, state.hat, state.glitch, state.laser, state.impact, state.flash, state.shake, state.chroma],
+        e.envelopes,
+        2e-3,
+        `${label} envelopes`,
+      );
+      expectClose(
+        [
+          state.energy,
+          state.wild,
+          state.dropAmount,
+          state.beatPulse,
+          state.phraseProgress,
+          state.wobblePhase,
+          state.wobbleCutoff,
+          state.shakeOffset[0],
+          state.shakeOffset[1],
+        ],
+        e.motion,
+        2e-3,
+        `${label} motion`,
+      );
+      expectClose([state.beats, state.travel], e.clock, 2e-3, `${label} clock`);
+      expectClose(flat(state.palette), e.palette, 2e-3, `${label} palette`);
+      next += 1;
+    }
+    expect(next).toBe(m.inference.length);
+    expect(kicks, "kick frames").toEqual(m.kickFrames);
+    expect(snares, "snare frames").toEqual(m.snareFrames);
+    expect(hats, "hat frames").toEqual(m.hatFrames);
+    expect(impacts, "impact frames").toEqual(m.impactFrames);
+    expect(lock, "tempo lock frame").toBe(m.lockSequence);
+    expect(sections, "section changes").toEqual(m.sectionChanges);
   });
 
   it("rations flashes the same way", () => {

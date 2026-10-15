@@ -58,6 +58,17 @@ async function open(query, { reducedMotion = "no-preference" } = {}) {
   return { page, context, errors };
 }
 
+/** The demo in timeline mode: no audio source and no tap to start (the start control is hidden). */
+async function openTimeline(query, { reducedMotion = "no-preference" } = {}) {
+  const context = await browser.newContext({ viewport: { width: 960, height: 720 }, reducedMotion, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  await page.goto(`${base}?${query}`);
+  return { page, context, errors };
+}
+
 /** Four seconds of a 120 BPM kick and a chord, 16-bit mono WAV. */
 function beatWav() {
   const rate = 22050;
@@ -90,8 +101,17 @@ const status = (page) => page.locator(".nsw-status").textContent();
 const same = (a, b) => Buffer.compare(a, b) === 0;
 
 try {
+  // Every registered port (VISUALIZERS), read from the player's picker so a new port is smoke-tested without an edit here.
+  const ids = await (async () => {
+    const { page, context } = await open("visual=spectrum&renderer=canvas2d");
+    const found = await page.$$eval('select[aria-label="Visualizer"] option', (options) => options.map((o) => o.value));
+    await context.close();
+    return found;
+  })();
+  check(ids.length >= 9 && ids.includes("halo"), `the picker lists ${ids.length} visualizers: ${ids.join(", ")}`);
+
   for (const renderer of ["auto", "canvas2d"]) {
-    for (const visual of ["spectrum", "scope", "halo"]) {
+    for (const visual of ids) {
       const label = `${visual} (${renderer})`;
       const { page, context, errors } = await open(`visual=${visual}&renderer=${renderer}`);
       await page.waitForTimeout(1500);
@@ -110,8 +130,13 @@ try {
           return { status: v.status, decision: v.governor.decision, canvas: [c.width, c.height], rms: v.state?.rms, hidden: document.hidden };
         }))}`);
       }
-      await page.waitForTimeout(250);
-      check(!same(a, await shot(page)), `${label}: animates`);
+      // Software WebGL can be slow on the heavy looks: give it a few frames' worth of time before calling it still.
+      let animated = false;
+      for (let attempt = 0; attempt < 4 && !animated; attempt++) {
+        await page.waitForTimeout(250 * (attempt + 1));
+        animated = !same(a, await shot(page));
+      }
+      check(animated, `${label}: animates`);
 
       if (visual === "halo") {
         await page.click(".nsw-controls button");
@@ -130,6 +155,18 @@ try {
     }
   }
 
+  // An id with no port or drawing of its own still draws the sound on Canvas2D (it borrows the nearest drawing).
+  {
+    const { page, context, errors } = await open("visual=halo&renderer=canvas2d");
+    await page.waitForTimeout(500);
+    await page.evaluate(() => globalThis.soundDemo.viz.setVisual("someFutureLook"));
+    await page.waitForTimeout(1000);
+    const s = await stats(page, await shot(page));
+    check(s.mean > 0.02 && s.lit > 0.01, `unknown id (canvas2d): draws a fallback picture (mean ${s.mean.toFixed(3)}, lit ${s.lit.toFixed(3)})`);
+    check(errors.length === 0, `unknown id (canvas2d): no page errors ${errors.join("; ")}`);
+    await context.close();
+  }
+
   // A local file through the file input: decoded by the element, read by Web Audio, drawn.
   {
     const { page, context, errors } = await open("visual=spectrum");
@@ -141,6 +178,93 @@ try {
     const s = await stats(page, await shot(page));
     check(s.lit > 0.01, `file input: draws the file's sound (lit ${s.lit.toFixed(3)})`);
     check(errors.length === 0, `file input: no page errors ${errors.join("; ")}`);
+    await context.close();
+  }
+
+  // A recorded timeline and a playhead, no audio: draws, animates, runs the beat clock, pauses and resumes.
+  {
+    const { page, context, errors } = await openTimeline("timeline=fixture&visual=halo");
+    await page.waitForFunction(() => globalThis.soundDemo.viz.driver === "timeline", null, { timeout: 15000 });
+    await page.waitForTimeout(1500);
+    const info = await page.evaluate(() => {
+      const v = globalThis.soundDemo.viz;
+      return { driver: v.driver, source: v.source, status: v.status, running: v.state.isRunning, beats: v.state.beats };
+    });
+    check(info.driver === "timeline" && info.source === null, "timeline: drawn from the timeline with no audio source");
+    check(info.status === "playing" && info.running, `timeline: playing with the recorded beat clock (status ${info.status}, beats ${info.beats.toFixed(1)})`);
+    const a = await shot(page);
+    writeFileSync(`${outDir}/halo-timeline.png`, a);
+    const st = await stats(page, a);
+    check(st.mean > 0.02 && st.spread > 0.02 && st.lit > 0.01, `timeline: draws a picture (mean ${st.mean.toFixed(3)}, lit ${st.lit.toFixed(3)})`);
+    let animated = false;
+    for (let attempt = 0; attempt < 4 && !animated; attempt++) {
+      await page.waitForTimeout(250 * (attempt + 1));
+      animated = !same(a, await shot(page));
+    }
+    check(animated, "timeline: animates");
+    check((await page.locator("#timeline-note").textContent())?.includes("web-fixture-1"), "timeline: the demo names the track");
+    await page.click(".nsw-controls button");
+    await page.waitForTimeout(300);
+    const p1 = await shot(page);
+    await page.waitForTimeout(600);
+    check((await status(page)) === "Paused" && same(p1, await shot(page)), "timeline: pause holds the last frame");
+    await page.click(".nsw-controls button");
+    await page.waitForTimeout(400);
+    check((await status(page))?.startsWith("Playing"), "timeline: resumes");
+    // The playhead going away stops the beat clock at once and fades the picture to the ambient drift; it comes back.
+    await page.evaluate(() => (globalThis.soundDemo.demo.hold = true));
+    await page.waitForTimeout(600);
+    check(await page.evaluate(() => !globalThis.soundDemo.viz.state.isRunning), "timeline: a null playhead stops the beat clock");
+    await page.waitForTimeout(5500);
+    const faded = await page.evaluate(() => ({ driver: globalThis.soundDemo.viz.driver, energy: globalThis.soundDemo.viz.state.energy }));
+    check(faded.driver === "timeline" && faded.energy < 0.3, `timeline: a null playhead fades to the ambient drift (energy ${faded.energy.toFixed(3)})`);
+    const quiet = await stats(page, await shot(page));
+    check(quiet.mean > 0.003, `timeline: the ambient drift still draws (mean ${quiet.mean.toFixed(3)})`);
+    await page.evaluate(() => (globalThis.soundDemo.demo.hold = false));
+    await page.waitForTimeout(1500);
+    check(await page.evaluate(() => globalThis.soundDemo.viz.state.isRunning), "timeline: plays again when the playhead returns");
+    check(errors.length === 0, `timeline: no page errors ${errors.join("; ")}`);
+    await context.close();
+  }
+
+  // The ambient drift alone: draws and breathes.
+  {
+    const { page, context, errors } = await openTimeline("ambient&visual=halo");
+    await page.waitForFunction(() => globalThis.soundDemo.viz.driver === "ambient", null, { timeout: 15000 });
+    await page.waitForTimeout(1200);
+    const running = await page.evaluate(() => globalThis.soundDemo.viz.state.isRunning);
+    const a = await shot(page);
+    writeFileSync(`${outDir}/halo-ambient.png`, a);
+    const st = await stats(page, a);
+    check(!running && st.lit > 0.0 && st.mean > 0.003, `ambient: draws a quiet picture with no beat clock (mean ${st.mean.toFixed(3)}, lit ${st.lit.toFixed(3)})`);
+    let animated = false;
+    for (let attempt = 0; attempt < 4 && !animated; attempt++) {
+      await page.waitForTimeout(250 * (attempt + 1));
+      animated = !same(a, await shot(page));
+    }
+    check(animated, "ambient: breathes");
+    check(errors.length === 0, `ambient: no page errors ${errors.join("; ")}`);
+    await context.close();
+  }
+
+  // A timeline URL that is not a timeline: the error is shown and the ambient drift keeps drawing.
+  {
+    const { page, context, errors } = await openTimeline("timeline=/not-a-timeline&visual=halo");
+    await page.waitForFunction(() => document.getElementById("timeline-note").textContent.startsWith("Could not load"), null, { timeout: 15000 });
+    check((await page.evaluate(() => globalThis.soundDemo.viz.driver)) === "ambient", "bad timeline: falls back to the ambient drift");
+    check(errors.length === 0, `bad timeline: no page errors ${errors.join("; ")}`);
+    await context.close();
+  }
+
+  // Reduced motion with a timeline: one still of the playhead.
+  {
+    const { page, context, errors } = await openTimeline("timeline=fixture&visual=halo", { reducedMotion: "reduce" });
+    await page.waitForFunction(() => globalThis.soundDemo.viz.driver === "timeline", null, { timeout: 15000 });
+    await page.waitForTimeout(1500);
+    const s1 = await shot(page);
+    await page.waitForTimeout(1000);
+    check((await status(page))?.includes("reduced motion") && same(s1, await shot(page)), "timeline, reduced motion: the picture holds still");
+    check(errors.length === 0, `timeline, reduced motion: no page errors ${errors.join("; ")}`);
     await context.close();
   }
 

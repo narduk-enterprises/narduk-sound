@@ -7,6 +7,9 @@ export type { DeviceHints, GovernorDecision, SoundThermalState } from "./budget.
 export { Canvas2DRenderer } from "./canvas2d.js";
 export { SoundFrameLayout, emptyFrame } from "./frame.js";
 export type { SoundFrame } from "./frame.js";
+export { LiveDrive } from "./live.js";
+export { HIT_LANE_COUNT, Instrument, SoundMusicInference, emptyMusicContext } from "./inference.js";
+export type { MusicContext } from "./inference.js";
 export { isStatic, watchReducedMotion } from "./motion.js";
 export type { MotionPreference } from "./motion.js";
 export {
@@ -24,12 +27,33 @@ export type { SoundPlayer, SoundPlayerOptions } from "./player.js";
 export type { SoundRenderer } from "./renderer.js";
 export { FlashLimiter, LumaWatchdog, calmIntensity, intenseDrive } from "./safety.js";
 export type { IntenseDrive } from "./safety.js";
-export { FRAGMENT_PRELUDE, PRESENT_SHADER, VERTEX_SHADER, VISUALIZERS, visualizer } from "./shaders/index.js";
-export type { VisualizerId, VisualizerPort } from "./shaders/index.js";
+export {
+  FRAGMENT_PRELUDE,
+  PRESENT_SHADER,
+  registerVisualizer,
+  VERTEX_SHADER,
+  VISUALIZERS,
+  visualizer,
+  visualizers,
+} from "./shaders/index.js";
+export type { CustomVisualizer, VisualizerId, VisualizerPort } from "./shaders/index.js";
 export { SoundVisualState, wirewatcherConfiguration } from "./state.js";
 export type { SoundVisualConfiguration, SoundVisualOptions } from "./state.js";
+export { AmbientDrift } from "./ambient.js";
+export { AmbientFeed, TimelineFeed } from "./feed.js";
+export type { InputFeed } from "./feed.js";
+export {
+  SoundTimelineError,
+  SoundTimelinePlayer,
+  STEP_UNIT,
+  TIMELINE_FORMAT_VERSION,
+  decodeSoundTimeline,
+} from "./timeline.js";
+export type { SoundTimeline, SoundTimelineErrorReason, SoundTimelineHeader, SoundVisualInput } from "./timeline.js";
 export { Aux, DATA_ROWS, DATA_WIDTH, DataRow, ShaderInputs, UNIFORM_NAMES, scopeTrigger } from "./uniforms.js";
 export { SoundVisualizer } from "./visualizer.js";
-export type { SoundVisualizerOptions, VisualizerStatus } from "./visualizer.js";
+export type { SoundVisualizerOptions, VisualizerDriver, VisualizerStatus } from "./visualizer.js";
 export { WebGLRenderer, WebGLUnavailableError } from "./webgl.js";
 export { SyntheticSource } from "./synthetic.js";
+export { FrameSplitter, StreamSource, UnsupportedStreamError, frameHeader } from "./stream.js";
+export type { AudioFrame } from "./stream.js";

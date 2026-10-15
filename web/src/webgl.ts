@@ -7,6 +7,9 @@ interface VisualProgram {
   program: WebGLProgram;
   uniforms: (WebGLUniformLocation | null)[];
   data: WebGLUniformLocation | null;
+  /** The look's `uImage`, when it has one (`CustomVisualizer.image`). */
+  image: WebGLTexture | null;
+  imageUniform: WebGLUniformLocation | null;
 }
 
 /** Thrown when the browser has no WebGL2 or a shader fails to build; the caller falls back to Canvas2D. */
@@ -38,6 +41,7 @@ export class WebGLRenderer implements SoundRenderer {
   private width = 0;
   private height = 0;
   private current: VisualizerId = "spectrum";
+  private destroyed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", {
@@ -75,13 +79,39 @@ export class WebGLRenderer implements SoundRenderer {
   setVisual(id: VisualizerId): void {
     this.current = id;
     if (this.programs.has(id)) return;
-    const program = this.link(FRAGMENT_PRELUDE + visualizer(id).glsl);
+    const look = visualizer(id);
+    const program = this.link(FRAGMENT_PRELUDE + look.glsl);
     const gl = this.gl;
     this.programs.set(id, {
       program,
       uniforms: UNIFORM_NAMES.map((name) => gl.getUniformLocation(program, `u.${name}`)),
       data: gl.getUniformLocation(program, "uData"),
+      image: look.image ? this.loadImage(look.image) : null,
+      imageUniform: gl.getUniformLocation(program, "uImage"),
     });
+  }
+
+  /** A texture that reads transparent black until `url` loads, then holds the image with mipmaps, top row at v = 0. */
+  private loadImage(url: string): WebGLTexture {
+    const gl = this.gl;
+    const texture = must(gl.createTexture());
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    setFilters(gl, gl.LINEAR, gl.LINEAR);
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.onload = () => {
+      if (this.destroyed || gl.isContextLost()) return;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      setFilters(gl, gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR);
+    };
+    image.src = url;
+    return texture;
   }
 
   resize(width: number, height: number): void {
@@ -125,6 +155,12 @@ export class WebGLRenderer implements SoundRenderer {
     gl.useProgram(visual.program);
     for (let i = 0; i < visual.uniforms.length; i++) gl.uniform4fv(visual.uniforms[i], inputs.uniforms, i * 4, 4);
     gl.uniform1i(visual.data, 0);
+    if (visual.image) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, visual.image);
+      gl.uniform1i(visual.imageUniform, 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     // Every other frame: reduce the scene to one pixel and start an asynchronous read of it.
@@ -157,8 +193,12 @@ export class WebGLRenderer implements SoundRenderer {
 
   destroy(): void {
     const gl = this.gl;
+    this.destroyed = true;
     this.dropFence();
-    for (const p of this.programs.values()) gl.deleteProgram(p.program);
+    for (const p of this.programs.values()) {
+      gl.deleteProgram(p.program);
+      if (p.image) gl.deleteTexture(p.image);
+    }
     this.programs.clear();
     gl.deleteProgram(this.present);
     gl.deleteTexture(this.dataTexture);
