@@ -4,6 +4,9 @@ The NardukSound Swift package: the NardukMusic engine plus sound analysis,
 sonification and Metal visualizers. It moved here, with its history, from
 narduk-libs (`packages/modules/narduk-music/swift`) after v0.4.1.
 
+`web/` holds `@narduk-enterprises/sound-web`, the visualizers in a browser (WebGL2, Canvas2D fallback) driven by Web
+Audio; see `web/README.md` and `docs/web-port.md`.
+
 ## NardukMusic
 
 A generative music engine: a conductor that writes a song from whatever your app
