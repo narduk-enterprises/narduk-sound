@@ -38,10 +38,11 @@ import Testing
     }
 
     /// The note stream of `record(genre)` on origin/main before part emphasis existed (voices off, as by default), on
-    /// macOS. Neutral must still write it exactly.
+    /// macOS. Neutral must still write it exactly. House was re-pinned when the house record passes landed (kick, sub,
+    /// clap and hats rewritten on purpose); every other genre is still the stream from before part emphasis.
     static let neutralGoldens: [Genre: String] = [
         .dubstep: "0x9916f4183bebb48b", .riddim: "0xc68239ac6333b951", .drumAndBass: "0xba3fabc60845827f",
-        .trap: "0xb23889a93f5b1b3b", .house: "0x38e48a6b232994e1", .chill: "0x283498fb3e5b5b23",
+        .trap: "0xb23889a93f5b1b3b", .house: "0xb85ce64f2d9779e7", .chill: "0x283498fb3e5b5b23",
         .techno: "0xb278281fd5921e9a", .ukGarage: "0x28002186d5f7e0b8", .synthwave: "0x1e41cc898db0be82",
         .lofi: "0xc82695463ad30cad", .rock: "0xebc76f311d7de20e", .folk: "0xdc75ccf704366e43",
         .funk: "0x0e7614df20854a10", .tropicalHouse: "0x809f86d081824ea9",

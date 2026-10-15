@@ -49,8 +49,14 @@ import Testing
             #expect(drops.count >= 8, "\(genre) never dropped")
             #expect(r.notes.contains { $0.instrument == .kick }, "\(genre) has no kick")
             // Tropical house's snare is a finger snap, balanced down to 0.8 (`GenreArrangement.balance`) from the
-            // 0.5 it is written at, so it hits at 0.4 by design (391ad4a); every other genre keeps a snare of 0.5+.
-            let snareFloor = genre == .tropicalHouse ? 0.4 : 0.5
+            // 0.5 it is written at, so it hits at 0.4 by design (391ad4a); house trims its clap to 0.5 of that, so 0.25;
+            // every other genre keeps a snare of 0.5+.
+            let snareFloor: Double =
+                switch genre {
+                case .tropicalHouse: 0.4
+                case .house: 0.25
+                default: 0.5
+                }
             #expect(
                 r.notes.contains { $0.instrument == .snare && $0.velocity >= snareFloor - 0.001 },
                 "\(genre) has no snare")
