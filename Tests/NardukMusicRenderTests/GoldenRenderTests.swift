@@ -59,7 +59,8 @@ import Testing
         .riddim: ["darwin-arm64": 0xbb32_056b_bc1f_5273, "linux-x86_64": 0x2703_9b89_5a68_048d],
         .drumAndBass: ["darwin-arm64": 0xad85_2179_1429_1eb4, "linux-x86_64": 0xe7bc_d1e0_16a7_aad3],
         .trap: ["darwin-arm64": 0x7a9f_d9ca_f7aa_e08c, "linux-x86_64": 0xfcc5_0deb_bc21_b8a4],
-        .house: ["darwin-arm64": 0x4bb8_7609_f5fe_c25c, "linux-x86_64": 0xffc4_6d34_2e2a_f2d6],
+        // House moved with its record passes: kick tuning, sub register, clap level (narduk-sound#53).
+        .house: ["darwin-arm64": 0x7d9b_0047_cd2e_67a3, "linux-x86_64": 0x25fb_1980_e4ed_7433],
         .chill: ["darwin-arm64": 0x98c1_6fce_ca4e_cbe4, "linux-x86_64": 0x5aa0_5c53_564e_8732],
         .techno: ["darwin-arm64": 0x8185_b361_eccd_fc28, "linux-x86_64": 0x1c9d_79e3_b0bf_d3c1],
         .ukGarage: ["darwin-arm64": 0xe9b9_f81b_e7c8_fa50, "linux-x86_64": 0x29ea_6b73_bf24_0554],
