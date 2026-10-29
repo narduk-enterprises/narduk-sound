@@ -36,21 +36,36 @@ public enum DropEngineError: LocalizedError {
 /// Plays the conductor's notes through the DSP synth (`DropSynthCore`) on an
 /// `AVAudioSourceNode`, and publishes analysis for the visualizers.
 ///
-/// Main actor side: a ~60 Hz timer asks `noteProvider` for notes ~100 ms ahead of the
-/// render position, pushes them through a lock-free ring, and publishes `latestSound` and `latestMusic`.
+/// Notes: a `ConductorDriver` (`play(_:)`) is pumped from its own thread after every rendered buffer, so the song keeps
+/// writing with the screen off; its steps never go backwards. The older `noteProvider` is asked on a ~60 Hz main-actor
+/// timer instead, and its steps restart at 0 on every `start()`. Either way notes reach the synth through a lock-free
+/// ring ~100 ms ahead of the render position.
+/// Main actor side: the timer publishes `latestSound` and `latestMusic`.
 /// Render side: the source node calls `DropSynthCore.render`, which never allocates or locks.
-/// Steps restart at 0 on every `start()`; an output change (route, device, sample rate) or a media-services reset
+/// An output change (route, device, sample rate) or a media-services reset
 /// rebuilds only the `AVAudioEngine` graph, so the synth and the step carry on.
 @MainActor @Observable public final class DropEngine {
-    /// BPM changes apply at the next bar.
+    /// BPM changes apply at the next bar. With a driver attached, the settings follow the genre and tempo the listener
+    /// hears, and a BPM set here goes to the driver.
     public var settings: SongSettings {
-        didSet { core?.setTempo(settings.bpm) }
+        didSet {
+            guard !followingDriver else { return }
+            if let driver {
+                if settings.bpm != oldValue.bpm { driver.setTempo(settings.bpm) }
+            } else {
+                core?.setTempo(settings.bpm)
+            }
+        }
     }
+    /// Set while the engine echoes the driver into `settings`, so the echo is never sent back as a tempo request (a
+    /// stale one would retarget a switch already on its way).
+    @ObservationIgnored private var followingDriver = false
 
     public private(set) var isRunning = false
     /// True between `pause()` and `resume()`; the song keeps its place and `isRunning` stays true.
     public private(set) var isPaused = false
-    /// The step currently audible (output-latency compensated).
+    /// The step currently audible (output-latency compensated). With a driver it is the song's step, which never goes
+    /// backwards; with `noteProvider` it restarts at 0 on every `start()`.
     public private(set) var currentStep = 0
     /// What the sound is doing, updated ~60 Hz on the main actor (`sequence` advances once per publish). Not
     /// observed: visualizers poll it on their own frame clock, so publishing a frame never invalidates a SwiftUI body
@@ -67,9 +82,10 @@ public enum DropEngineError: LocalizedError {
     /// Each `start()` builds a new synth whose counters begin at 0; the published counters add them to this base, so
     /// they stay monotonic across restarts and a consumer's wrapping `delta` never sees a jump back.
     @ObservationIgnored private var hitBase = HitCounters()
-    /// The pitched notes the note pump has handed the synth, tracked against the audible step position so
-    /// `latestMusic` can say which notes are sounding. Main actor only: the render thread is untouched.
-    @ObservationIgnored private var noteTracker = NoteTracker()
+    /// The synth's one producer: every push into its event ring holds this lock, which also tracks the pitched notes
+    /// handed to the synth against the audible step position, so `latestMusic` can say which notes are sounding. The
+    /// render thread never takes it.
+    @ObservationIgnored private let feed = NoteFeed()
     @ObservationIgnored private var audibleStepPosition: Double = 0
 
     /// The pre-0.4.0 frame, built from `latestSound` and `latestMusic`; its `hits` are the instruments that fired since
@@ -78,8 +94,22 @@ public enum DropEngineError: LocalizedError {
     public var latestFrame: VisualizerFrame {
         VisualizerFrame(sound: latestSound, music: latestMusic, previousHits: previousHits)
     }
-    /// Called on the main actor every ~17 ms; returns the notes for all steps up to `throughStep`.
+    /// Called on the main actor every ~17 ms; returns the notes for all steps up to `throughStep`. Superseded by
+    /// `driver`, which wins when both are set.
     @ObservationIgnored public var noteProvider: (@MainActor (_ throughStep: Int) -> [ScheduledNote])?
+    /// The live pump (narduk-sound#5): writes the song from its own thread, paced by the audio clock, and applies its
+    /// tempo switches on their bar. Set it before `start()`, or use `play(_:)`. Replacing it while playing starts the
+    /// new driver's song at the next bar line.
+    @ObservationIgnored public var driver: ConductorDriver? {
+        didSet {
+            guard driver !== oldValue, isRunning else { return }
+            startLivePump()
+            if livePump == nil { pumpNotes() }
+        }
+    }
+    /// Signalled by the render block after every buffer; the live pump waits on it.
+    @ObservationIgnored private let pumpWake = PumpWake()
+    @ObservationIgnored private var livePump: LivePump?
     /// Sweeps the master filter over the whole mix (`MasterFilter.idle` bypasses it, bit for bit). A DROP's build drives it
     /// from `DropArranger.filterSweep` each frame and sets `.idle` on the release, which snaps it open in about 60 ms.
     public func setMasterFilter(_ filter: MasterFilter) { core?.setMasterFilter(filter) }
@@ -166,7 +196,8 @@ public enum DropEngineError: LocalizedError {
         _ mode: CutMode = .stutter, division: CutDivision = .sixteenth, steps: Int = 4, amount: Double = 0.5,
         seed: Int = 0
     ) -> Bool {
-        core?.cut(mode, division: division, steps: steps, amount: amount, seed: seed) ?? false
+        guard let core else { return false }
+        return feed.produce { core.cut(mode, division: division, steps: steps, amount: amount, seed: seed) }
     }
 
     // MARK: Drop tie-in
@@ -189,15 +220,38 @@ public enum DropEngineError: LocalizedError {
 
     private func schedule(_ notes: [ScheduledNote]) -> Int {
         guard let core else { return 0 }
-        for note in notes { core.schedule(note) }
+        // Song steps (what a driver's snapshot reports) to the synth's clock.
+        let origin = driver?.origin ?? 0
+        let moved =
+            origin == 0
+            ? notes
+            : notes.map { note in
+                var note = note
+                note.step -= origin
+                return note
+            }
+        feed.push(moved, to: core, track: false)
         return notes.count
     }
 
     // MARK: Transport
 
-    /// Builds the graph at the output device's sample rate and starts playing from step 0.
+    /// Plays `driver`: attaches it, then starts the engine, or resumes it when paused.
+    public func play(_ driver: ConductorDriver) throws {
+        if self.driver !== driver { self.driver = driver }
+        if !isRunning {
+            try start()
+        } else if isPaused {
+            try resume()
+        }
+    }
+
+    /// Builds the graph at the output device's sample rate and starts playing: a driver's song carries on from its next
+    /// bar line, a `noteProvider` from step 0.
     public func start() throws {
         guard !isRunning else { return }
+        livePump?.cancel()
+        livePump = nil
         stopTask?.cancel()
         stopTask = nil
         if engine.isRunning { engine.stop() }
@@ -208,7 +262,8 @@ public enum DropEngineError: LocalizedError {
             throw DropEngineError.noOutputFormat
         }
 
-        let core = DropSynthCore(sampleRate: sampleRate, bpm: settings.bpm, stepsPerBar: settings.stepsPerBar)
+        let core = DropSynthCore(
+            sampleRate: sampleRate, bpm: driver?.startTempo ?? settings.bpm, stepsPerBar: settings.stepsPerBar)
         for channel in MixerChannel.allCases {
             core.setGain(gain(for: channel), for: channel.bus)
             core.setMuted(mutes.contains(channel), for: channel.bus)
@@ -220,12 +275,12 @@ public enum DropEngineError: LocalizedError {
         sourceNode = node
         if analyzer?.sampleRate != sampleRate { analyzer = SoundAnalyzer(sampleRate: sampleRate) }
         scheduledThrough = -1
-        currentStep = 0
         hitBase = latestMusic.hitCounts
         // Fresh synth, fresh notes; the counters carry on so a consumer's diff never sees a jump back.
-        noteTracker.reset()
+        feed.reset()
         audibleStepPosition = 0
         pumpNotes()  // fill the first look-ahead window before the first render callback
+        currentStep = max(driver?.origin ?? 0, 0)  // a driver's song carries on: the step never goes back to 0
 
         do {
             try engine.start()
@@ -238,6 +293,7 @@ public enum DropEngineError: LocalizedError {
         isRunning = true
         refreshRouteInfo()
         observeConfigurationChanges()
+        startLivePump()
         startTimer()
     }
 
@@ -261,7 +317,7 @@ public enum DropEngineError: LocalizedError {
             engine.detach(old)
             sourceNode = nil
         }
-        let node = AVAudioSourceNode(format: format, renderBlock: DropEngine.makeRenderBlock(core))
+        let node = AVAudioSourceNode(format: format, renderBlock: DropEngine.makeRenderBlock(core, wake: pumpWake))
         engine.attach(node)
         if captureMixer.engine == nil { engine.attach(captureMixer) }
         engine.connect(node, to: captureMixer, format: format)
@@ -359,7 +415,9 @@ public enum DropEngineError: LocalizedError {
         isPaused = false
         timer?.invalidate()
         timer = nil
-        noteTracker.reset()
+        livePump?.cancel()
+        livePump = nil
+        feed.reset()
         core?.beginFadeOut()
         stopTask?.cancel()
         stopTask = Task { @MainActor [weak self] in
@@ -367,7 +425,8 @@ public enum DropEngineError: LocalizedError {
             guard let self, !Task.isCancelled, !self.isRunning else { return }
             self.engine.stop()
             self.latestSound = SoundFrame(sequence: self.latestSound.sequence &+ 1, time: self.latestSound.time)
-            self.latestMusic = self.musicContext(core: nil, hitCounts: self.latestMusic.hitCounts)
+            self.latestMusic = self.musicContext(
+                core: nil, hitCounts: self.latestMusic.hitCounts, notes: (NoteSet(), self.latestMusic.noteCounts))
         }
     }
 
@@ -389,7 +448,8 @@ public enum DropEngineError: LocalizedError {
     static let offlineSliceFrames: AVAudioFrameCount = 1_024
 
     /// Renders `frames` through the whole graph (main mixer output, so `mutesHardwareOutput` applies), running the
-    /// note pump and analysis between slices as the timer would. Returns what the speaker would have received.
+    /// note pump (a driver's too: no pump thread runs offline) and analysis between slices as the timer would. Returns
+    /// what the speaker would have received.
     func renderOffline(frames: Int) throws -> AVAudioPCMBuffer {
         guard offlineFormat != nil, isRunning else { throw DropEngineError.notRunning }
         let format = engine.manualRenderingFormat
@@ -464,23 +524,49 @@ public enum DropEngineError: LocalizedError {
         let audible = max(core.renderedStepPosition - latency / secondsPerStep, 0)
         audibleStepPosition = audible
         // Never backwards: a route with a longer latency (AirPlay) would otherwise pull the step back; it holds until
-        // the sound catches up.
-        let step = max(Int(audible), currentStep)
+        // the sound catches up. A driver's origin maps the synth's steps onto the song (negative while a newly swapped-in
+        // song waits for its first bar line).
+        let step = max(max(Int(audible) + (driver?.origin ?? 0), 0), currentStep)
         if step != currentStep { currentStep = step }
-        pumpNotes()
+        if livePump == nil { pumpNotes() }
+        if let driver { follow(driver) }
         publishFrame(core: core)
     }
 
+    /// Starts the pump thread for a live (not offline) run with a driver.
+    private func startLivePump() {
+        livePump?.cancel()
+        livePump = nil
+        guard isRunning, offlineFormat == nil, let driver, let core else { return }
+        livePump = LivePump(wake: pumpWake) { [feed] in feed.pump(driver, into: core) }
+    }
+
+    /// Echoes what the listener hears into `section`, `conductor` and `settings`.
+    private func follow(_ driver: ConductorDriver) {
+        let status = driver.status
+        let heard = status.heard(atStep: currentStep)
+        if section != status.section { section = status.section }
+        conductor = status.snapshot
+        if settings.genre != heard.genre || settings.bpm != heard.bpm {
+            followingDriver = true
+            settings.genre = heard.genre
+            settings.bpm = heard.bpm
+            followingDriver = false
+        }
+    }
+
     private func pumpNotes() {
-        guard let core, let noteProvider else { return }
+        guard let core else { return }
+        if let driver {
+            feed.pump(driver, into: core)
+            return
+        }
+        guard let noteProvider else { return }
         let secondsPerStep = settings.secondsPerStep
         let through = Int(core.renderedStepPosition + DropEngine.lookaheadSeconds / secondsPerStep)
         guard through > scheduledThrough else { return }
         // The core drops anything that arrives more than a step late.
-        for note in noteProvider(through) {
-            core.schedule(note)
-            noteTracker.schedule(note)
-        }
+        feed.push(noteProvider(through), to: core)
         scheduledThrough = through
     }
 
@@ -490,14 +576,16 @@ public enum DropEngineError: LocalizedError {
         analysisScratch.withUnsafeMutableBufferPointer { core.copyRecentSamples(into: $0) }
         latestSound = analysisScratch.withUnsafeBufferPointer { analyzer.analyze($0, time: time) }
         previousHits = latestMusic.hitCounts
-        noteTracker.advance(to: audibleStepPosition)
+        let notes = feed.advance(to: audibleStepPosition)
         var counts = core.hitCounters
         counts.lanes &+= hitBase.lanes
-        latestMusic = musicContext(core: core, hitCounts: counts)
+        latestMusic = musicContext(core: core, hitCounts: counts, notes: notes)
     }
 
     /// The music's side of a frame. `core` is nil once stopped: the clock and counters hold, the wobble rests.
-    private func musicContext(core: DropSynthCore?, hitCounts: HitCounters) -> MusicContext {
+    private func musicContext(
+        core: DropSynthCore?, hitCounts: HitCounters, notes: (held: NoteSet, counters: NoteCounters)
+    ) -> MusicContext {
         let stepsPerPhrase = max(settings.stepsPerPhrase, 1)
         return MusicContext(
             hitCounts: hitCounts, step: currentStep, section: section, energy: Float(conductor.energy),
@@ -505,7 +593,7 @@ public enum DropEngineError: LocalizedError {
             secondsPerStep: settings.secondsPerStep, stepsPerBar: settings.stepsPerBar, stepsPerPhrase: stepsPerPhrase,
             phraseProgress: Float(currentStep % stepsPerPhrase) / Float(stepsPerPhrase),
             buildThreshold: Float(conductor.buildThreshold), dropThreshold: Float(conductor.dropThreshold),
-            dropQueued: conductor.dropQueued, heldNotes: noteTracker.held, noteCounts: noteTracker.counters)
+            dropQueued: conductor.dropQueued, heldNotes: notes.held, noteCounts: notes.counters)
     }
 
     // MARK: Device changes
@@ -521,10 +609,12 @@ public enum DropEngineError: LocalizedError {
 
     // MARK: Render block (built outside the main actor so it carries no actor isolation)
 
-    nonisolated private static func makeRenderBlock(_ core: DropSynthCore) -> AVAudioSourceNodeRenderBlock {
-        // The engine keeps `core` alive for as long as this node can render; unowned(unsafe)
+    /// Renders `core` and then signals `wake`, which paces the driver's pump thread.
+    nonisolated static func makeRenderBlock(_ core: DropSynthCore, wake: PumpWake) -> AVAudioSourceNodeRenderBlock {
+        // The engine keeps `core` and `wake` alive for as long as this node can render; unowned(unsafe)
         // keeps reference counting off the render thread.
         unowned(unsafe) let synth = core
+        unowned(unsafe) let alarm = wake
         return { _, _, frameCount, audioBufferList in
             let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
             guard buffers.count > 0, let left = buffers[0].mData?.assumingMemoryBound(to: Float.self) else {
@@ -532,6 +622,7 @@ public enum DropEngineError: LocalizedError {
             }
             let right = buffers.count > 1 ? buffers[1].mData?.assumingMemoryBound(to: Float.self) ?? left : left
             synth.render(frames: Int(frameCount), left: left, right: right)
+            alarm.signal()
             return noErr
         }
     }
