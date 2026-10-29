@@ -109,7 +109,8 @@ final class PumpedSynth {
         #expect(skips >= 4)
         // `written` is the last step written, so it covers the song through `written + 1`; the buffer rendered after the
         // last pump may have moved the position past `written` itself.
-        #expect(Double(written + 1) > synth.core.renderedStepPosition, "the cursor fell behind the render position")
+        let position = synth.core.renderedStepPosition
+        #expect(Double(written + 1) > position, "the cursor fell behind the render position")
         #expect(synth.core.droppedEvents == 0, "\(synth.core.droppedEvents) notes arrived too late")
         #expect(status.lastSwitch != nil)
         // Steps on the synth's clock rise with the song: none is written twice, none goes backwards.
