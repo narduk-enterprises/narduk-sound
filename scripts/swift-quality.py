@@ -48,7 +48,8 @@ def lint() -> None:
     swiftlint = shutil.which("swiftlint")
     if swiftlint:
         run(swiftlint, "lint", "--strict", "--quiet")
-    elif os.environ.get("CI") and DARWIN:
+    elif os.environ.get("CI"):
+        # Lint runs in the Linux CI job (it needs no Apple SDK); the macOS job passes --skip-lint.
         raise SystemExit("SwiftLint is required in CI")
     else:
         print("SwiftLint is not installed; skipped")
@@ -127,9 +128,10 @@ def main() -> None:
         # Resolve the tag and build the products, as an app consumer does.
         consumer()
         return
-    if sys.argv[1:]:
-        raise SystemExit("usage: swift-quality.py [--consumer-only]")
-    lint()
+    if sys.argv[1:] and sys.argv[1:] != ["--skip-lint"]:
+        raise SystemExit("usage: swift-quality.py [--consumer-only | --skip-lint]")
+    if not sys.argv[1:]:
+        lint()
     # One regex over every product of the package (Music, SoundAnalysis, Sonify, SoundVisuals).
     run("swift", "test", *BUILD_FLAGS, "--filter", "NardukMusic|NardukSound|NardukSonify")
     if DARWIN:
