@@ -66,6 +66,10 @@ jobs:
 
   swift-macos:
     name: NardukSound macOS
+    # Lint runs only in the Linux job, and only this job is a required check, so it
+    # waits for Linux and fails unless Linux succeeded: a red lint still blocks merge.
+    needs: swift-linux
+    if: ${{ !cancelled() }}
     runs-on: macos-26
     timeout-minutes: 30
     env:
@@ -73,6 +77,14 @@ jobs:
       # The last step repeats the consumer on the fleet Apple runner's Xcode 26.0.1.
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
+      - name: Require the Linux lint and test job
+        env:
+          LINUX_RESULT: ${{ needs.swift-linux.result }}
+        run: |
+          if [ "$LINUX_RESULT" != "success" ]; then
+            echo "::error::NardukSound Linux reported '$LINUX_RESULT' (must succeed)"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
