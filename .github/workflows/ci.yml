@@ -12,13 +12,20 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'non-push' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  ci-scope:
+    uses: narduk-enterprises/workflows/.github/workflows/change-scope.yml@d32ded973361038ca5e54cf726dd087403c26349 # change-scope
+    permissions:
+      contents: read
+    with:
+      ignore-paths: '["AGENTS.md","CLAUDE.md","docs/*.md",".github/ISSUE_TEMPLATE/*.md",".github/PULL_REQUEST_TEMPLATE.md"]'
+
   swift-linux:
     name: NardukSound Linux
     runs-on: ubuntu-latest
@@ -46,8 +53,10 @@ jobs:
           PY
 
   swift-macos:
+    if: "!cancelled()"
+    needs: ["ci-scope"]
     name: NardukSound macOS
-    runs-on: macos-26
+    runs-on: ${{ needs.ci-scope.outputs.run == 'false' && fromJSON(toJSON(github.event.repository.private) != 'true' && toJSON(github.event.repository.private) != 'false' && '"missing-repository-visibility-do-not-run"' || toJSON(github.event.repository.private) == 'false' && '"ubuntu-latest"' || '{"group":"linux-ci","labels":["self-hosted","Linux","X64","proxmox","linux-ci"]}') || fromJSON('"macos-26"') }}
     timeout-minutes: 30
     env:
       # Xcode 26.6 / Swift 6.3.3 is the package's declared Apple toolchain.
@@ -56,10 +65,26 @@ jobs:
       SWIFTLINT_VERSION: 0.63.3
       SWIFTLINT_SHA256: fb045e85e7cb3374f42a4840b6b85a0106302afa69035c0c6f29af4a44c810b6
     steps:
+      - name: Assert change-scope proof
+        working-directory: ${{ github.workspace }}
+        env:
+          SCOPE_RESULT: ${{ needs.ci-scope.result }}
+          RUN_LANE: ${{ needs.ci-scope.outputs.run }}
+          SCOPE_REASON: ${{ needs.ci-scope.outputs.reason }}
+        run: |
+          set -euo pipefail
+          test "$SCOPE_RESULT" = success
+          case "$RUN_LANE:$SCOPE_REASON" in
+            true:full-lane) ;;
+            false:irrelevant-only) echo "This diff cannot affect this lane; preserving its check context on Linux" ;;
+            *) echo "::error::Invalid change-scope proof"; exit 1 ;;
+          esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: "needs.ci-scope.result == 'success' && needs.ci-scope.outputs.run == 'true'"
         with:
           persist-credentials: false
       - name: Install the pinned SwiftLint release
+        if: "needs.ci-scope.result == 'success' && needs.ci-scope.outputs.run == 'true'"
         run: |
           set -euo pipefail
           directory="${RUNNER_TEMP}/swiftlint"
@@ -71,10 +96,12 @@ jobs:
           "${directory}/swiftlint" version
           echo "${directory}" >> "${GITHUB_PATH}"
       - name: Check NardukMusic, its CLI and a version-tag consumer
+        if: "needs.ci-scope.result == 'success' && needs.ci-scope.outputs.run == 'true'"
         env:
           CI: "true"
         run: python3 scripts/swift-quality.py
       - name: Build every shipped product that runs on iOS for a device
+        if: "needs.ci-scope.result == 'success' && needs.ci-scope.outputs.run == 'true'"
         # The package floor is iOS 18 (as for NardukAuthKit): prove each product compiles for a device.
         run: |
           set -euo pipefail
@@ -86,6 +113,7 @@ jobs:
             echo "::endgroup::"
           done
       - name: Build the SoundGallery app for macOS and the iOS simulator
+        if: "needs.ci-scope.result == 'success' && needs.ci-scope.outputs.run == 'true'"
         # The gallery (narduk-libs#1570) is an XcodeGen project over this package: one multiplatform SwiftUI app.
         # Unsigned builds only; no identity, profile or entitlement is involved.
         working-directory: Examples/SoundGallery
@@ -102,6 +130,7 @@ jobs:
             echo "::endgroup::"
           done
       - name: Resolve and build the consumer with the fleet Apple runner's Xcode 26.0.1 (Swift 6.2)
+        if: "needs.ci-scope.result == 'success' && needs.ci-scope.outputs.run == 'true'"
         env:
           DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
         run: python3 scripts/swift-quality.py --consumer-only
